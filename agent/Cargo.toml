@@ -4,3 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0"
+libbpf-rs = "0.25"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+nix = { version = "0.27", features = ["net"] }
+caps = "0.5"
+
+[build-dependencies]
+libbpf-cargo = "0.25"
