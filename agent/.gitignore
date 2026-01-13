@@ -2,3 +2,4 @@ debug
 target
 **/*.rs.bk
 **/mutants.out*/
+src/bpf/*.skel.rs

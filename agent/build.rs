@@ -1,0 +1,36 @@
+//! # Build Script for Aegis Agent
+//!
+//! This script is responsible for the build-time generation of the eBPF skeleton.
+//! It uses `libbpf-cargo` to:
+//! 1. Compile the C-based BPF program (`src/bpf/aegis.bpf.c`).
+//! 2. Generate the Rust skeleton bindings (`src/bpf/aegis.skel.rs`).
+//!
+//! This allows the main Rust binary to include the BPF bytecode directly and
+//! interact with it using safe Rust types.
+
+use std::env;
+use std::path::PathBuf;
+
+use libbpf_cargo::SkeletonBuilder;
+
+/// Path to the source C file containing the eBPF program logic.
+const SRC: &str = "src/bpf/aegis.bpf.c";
+
+fn main() {
+    // Determine the output path for the generated skeleton file.
+    let out = PathBuf::from(
+        env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set in build script"),
+    )
+    .join("src")
+    .join("bpf")
+    .join("aegis.skel.rs");
+
+    // Use libbpf-cargo to compile the source and generate the Rust skeleton.
+    SkeletonBuilder::new()
+        .source(SRC)
+        .build_and_generate(&out)
+        .unwrap();
+
+    // Instruct Cargo to re-run this build script only if the BPF source changes.
+    println!("cargo:rerun-if-changed={SRC}");
+}
