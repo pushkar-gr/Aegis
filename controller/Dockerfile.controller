@@ -1,0 +1,13 @@
+# Build Stage
+FROM golang:1.26-rc-alpine3.23 AS builder
+WORKDIR /app
+COPY go.mod ./
+# COPY go.sum ./
+COPY main.go .
+RUN go build -o controller main.go
+
+# Run Stage
+FROM alpine:latest
+WORKDIR /app
+COPY --from=builder /app/controller .
+CMD ["./controller"]

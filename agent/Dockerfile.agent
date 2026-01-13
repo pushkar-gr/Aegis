@@ -1,0 +1,27 @@
+# Build Stage
+FROM rust:1.92-slim-bookworm AS builder
+WORKDIR /app
+
+# Install dependencies required for eBPF (clang, llvm, libbpf)
+RUN apt-get update && apt-get install -y \
+    clang \
+    llvm \
+    libbpf-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+
+# Build the binary
+RUN cargo build --release
+
+# Run Stage
+FROM debian:bookworm-slim
+WORKDIR /app
+
+# We need libbpf at runtime too
+RUN apt-get update && apt-get install -y libbpf-dev && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/aegis-agent .
+CMD ["./aegis-agent"]
