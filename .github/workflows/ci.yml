@@ -1,0 +1,103 @@
+name: Aegis Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  # 1. GO CONTROLLER
+  controller-ci:
+    name: Go Controller CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./controller 
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Install Lint & Tools
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Lint (golangci-lint)
+        run: golangci-lint run
+
+      - name: Vulnerability Check
+        run: govulncheck ./...
+
+      - name: Test (Race Detector)
+        run: go test -v -race ./...
+
+      - name: Build Binary
+        run: go build -o bin/aegis-controller .
+
+  # 2. RUST AGENT + VERIFIER
+  agent-ci:
+    name: Rust Agent & BPF Safety
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install System Deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm libbpf-dev libelf-dev pkg-config linux-tools-generic
+          sudo ln -sf /usr/include/$(uname -m)-linux-gnu/asm /usr/include/asm
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: agent
+
+      - name: Check Formatting
+        run: cargo fmt -- --check
+
+      - name: Linting (Clippy)
+        run: cargo clippy -- -D warnings
+
+      - name: Build Agent
+        run: cargo build --verbose
+
+      - name: Verify eBPF Safety (Dry Run)
+        continue-on-error: true
+        run: |
+          echo "Compiling C source for verification..."
+          clang -g -O2 -target bpf -D__TARGET_ARCH_x86 -c src/bpf/aegis.bpf.c -o aegis_verify.o
+          
+          echo "Attempting to load into kernel to trigger Verifier..."
+          sudo bpftool prog load aegis_verify.o /sys/fs/bpf/aegis_check type xdp
+          
+          echo "Success: Kernel Verifier accepted the program!"
+          sudo rm /sys/fs/bpf/aegis_check
+
+      - name: Run Unit Tests
+        run: cargo test --verbose
+
+  # 3. INFRA CONFIGURATION
+  integration-ci:
+    name: Infra Configuration Check
+    needs: [controller-ci, agent-ci]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate Docker Compose
+        run: docker compose -f deploy/docker-compose.yml config

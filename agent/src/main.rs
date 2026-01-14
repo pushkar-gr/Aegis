@@ -14,6 +14,7 @@
 //! ```
 
 #[path = "bpf/aegis.skel.rs"]
+#[rustfmt::skip]
 mod agent_skel;
 mod config;
 
