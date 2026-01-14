@@ -4,25 +4,26 @@
 //!
 //! It is responsible for:
 //! 1. Loading the compiled BPF skeleton.
-//! 2. Attaching the XDP program to a specified network interface.
-//! 3. Managing the lifecycle of the BPF link.
+//! 2. Parsing runtime configuration (Interface, Controller IP/Port).
+//! 3. Attaching the XDP program to the network interface.
 //!
 //! ## Usage
 //!
 //! ```sh
-//! sudo ./aegis-agent <interface>
+//! sudo ./aegis-agent -i eth0 -c 192.168.1.5 -p 8080
 //! ```
 
 #[path = "bpf/aegis.skel.rs"]
 mod agent_skel;
+mod config;
 
-use crate::agent_skel::AegisSkelBuilder;
+use crate::{agent_skel::AegisSkelBuilder, config::Config};
 use anyhow::{Context, Result, anyhow};
 use caps::{CapSet, Capability};
 use libbpf_rs::skel::{OpenSkel, SkelBuilder};
 use nix::net::if_::if_nametoindex;
 use std::{env, mem::MaybeUninit, thread, time::Duration};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Required capabilities for BPF operations
 const REQUIRED_CAPS: [(Capability, &str); 2] = [
@@ -32,103 +33,117 @@ const REQUIRED_CAPS: [(Capability, &str); 2] = [
 
 /// Entry point for the Aegis Agent.
 ///
-/// This function initializes logging, parses CLI arguments for the target interface,
-/// loads the XDP BPF program, and attaches it.
-///
-/// # Arguments
-///
-/// * `[1]` - (Optional) The name of the network interface to attach to (e.g., "eth0").
-///           Defaults to "eth0" if not provided.
+/// This function initializes logging, parses CLI arguments, validates privileges,
+/// and manages the BPF lifecycle.
 fn main() -> Result<()> {
+    // 1. Initialize Logging
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    info!("🛡️ Aegis Agent: Online");
+    info!("Aegis Agent: Online");
 
-    // Check for required capabilities
+    // 2. Privilege Check
     debug!("Checking required capabilities...");
-    check_capabilities().context("Capability check failed")?;
-    info!("✓ All required capabilities present");
+    check_capabilities().with_context(|| "Capability check failed")?;
+    info!("All required capabilities present");
 
-    // Get interface
+    // 3. Configuration Loading
     let args: Vec<String> = env::args().collect();
-    let iface_name = if args.len() > 1 {
-        &args[1]
-    } else {
-        warn!("No interface specified, defaulting to 'eth0'");
-        "eth0"
-    };
-    debug!("Command line arguments: {:?}", args);
+    let config = Config::load(&args)?;
+    debug!("Config loaded: {:?}", config);
 
-    // Resolve interface index
-    let ifindex = if_nametoindex(iface_name)
-        .with_context(|| format!("Failed to find interface {}", iface_name))?
+    // 4. Interface Resolution
+    let ifindex = if_nametoindex(config.iface_name)
+        .with_context(|| format!("Failed to find interface {}", config.iface_name))?
         as i32;
 
-    info!("Targeting Interface: {} (Index: {})", iface_name, ifindex);
+    info!(
+        "Target Interface: {} (Index: {})",
+        config.iface_name, ifindex
+    );
 
-    // Build and load the BPF Skeleton
-    debug!("Building BPF skeleton...");
+    // 5. BPF Skeleton Lifecycle
+    debug!("Building and mapping BPF skeleton...");
     let skel_builder = AegisSkelBuilder::default();
     let mut open_object = MaybeUninit::uninit();
-    let open_skel = skel_builder.open(&mut open_object)?;
-    debug!("BPF skeleton opened successfully");
+    let mut open_skel = skel_builder.open(&mut open_object)?;
 
-    let skel = open_skel.load()?;
-    debug!("BPF skeleton loaded into kernel");
+    // Map global variables before loading
+    let rodata = open_skel
+        .maps
+        .rodata_data
+        .as_deref_mut()
+        .ok_or_else(|| anyhow!("`rodata` is not memory mapped"))?;
 
-    // Attach XDP program
+    rodata.CONTROLLER_PORT = config.controller_port;
+    rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
+
+    debug!("BPF skeleton configured successfully");
+
+    // Load into Kernel
+    let skel = open_skel.load().map_err(|e| {
+        error!("Failed to load BPF program into kernel: {}", e);
+        e
+    })?;
+    debug!("BPF programs loaded into kernel memory");
+
+    // 6. Attach XDP Program
     debug!("Attaching XDP program to interface index {}", ifindex);
     let _link = skel
         .progs
         .xdp_drop_prog
         .attach_xdp(ifindex)
         .context("Failed to attach XDP program")?;
-    debug!("XDP program attached successfully");
 
-    info!(
-        "BLOCKED: Incoming traffic on {} is now dropped.",
-        iface_name
+    info!("XDP Program attached successfully");
+
+    // 7. Operational Logging
+    warn!("ZERO TRUST POLICY ACTIVE on {}", config.iface_name);
+    warn!(
+        "DROPPING all incoming traffic NOT destined to Controller ({}:{})",
+        config.controller_ip, config.controller_port
     );
-    info!("OPEN: Traffic on other interfaces is unaffected.");
 
-    // Keep the process alive to maintain the BPF link
+    // 8. Keep Alive Loop
     loop {
         thread::sleep(Duration::from_secs(3600));
+        debug!("Heartbeat: Aegis Agent is still running...");
     }
 }
 
-/// Checks if the process has the required Linux capabilities to load and attach BPF programs.
+/// Checks if the process has the required Linux capabilities.
 ///
-/// # Required Capabilities
-///
-/// * `CAP_BPF` - Required to load BPF programs (Linux 5.8+).
-/// * `CAP_NET_ADMIN` - Required to attach XDP programs to network interfaces.
+/// XDP requires `CAP_BPF` and `CAP_NET_ADMIN`.
 ///
 /// # Returns
 ///
-/// Returns `Ok(())` if all required capabilities are present, else returns an error.
+/// * `Ok(())` - All capabilities are present.
+/// * `Err` - One or more capabilities are missing.
 fn check_capabilities() -> Result<()> {
     let mut missing_caps = Vec::new();
 
     for (cap, name) in &REQUIRED_CAPS {
         match caps::has_cap(None, CapSet::Effective, *cap) {
             Ok(true) => {
-                debug!("Capability check passed: {}", name);
+                debug!("Has capability: {}", name);
             }
             Ok(false) => {
+                warn!("Missing capability: {}", name);
                 missing_caps.push(*name);
             }
             Err(e) => {
-                return Err(anyhow!("Failed to check capability {}: {}", name, e));
+                return Err(anyhow!(format!(
+                    "Failed to check capability {}: {}",
+                    name, e
+                )));
             }
         }
     }
 
     if !missing_caps.is_empty() {
         return Err(anyhow!(
-            "Missing required capabilities: {}. Please run with sufficient privileges (e.g., sudo).",
+            "Missing required capabilities: {}. Please run with sudo.",
             missing_caps.join(", ")
         ));
     }

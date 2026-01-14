@@ -29,6 +29,7 @@ services:
       - net.ipv4.ip_forward=1
     volumes:
       - /sys/fs/bpf:/sys/fs/bpf
+      - /sys/kernel/debug:/sys/kernel/debug
     networks:
       public_net:
         ipv4_address: 172.20.0.10
