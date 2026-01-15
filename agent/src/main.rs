@@ -18,13 +18,35 @@
 mod agent_skel;
 mod config;
 
-use crate::{agent_skel::AegisSkelBuilder, config::Config};
+use crate::{
+    agent_skel::{
+        AegisSkel, AegisSkelBuilder,
+        types::{session_key, session_val},
+    },
+    config::Config,
+};
 use anyhow::{Context, Result, anyhow};
+use bytemuck::{Pod, Zeroable};
 use caps::{CapSet, Capability};
-use libbpf_rs::skel::{OpenSkel, SkelBuilder};
+use libbpf_rs::{
+    skel::{OpenSkel, SkelBuilder},
+    {MapCore, MapFlags},
+};
 use nix::net::if_::if_nametoindex;
-use std::{env, mem::MaybeUninit, thread, time::Duration};
+use std::{
+    env,
+    mem::MaybeUninit,
+    net::Ipv4Addr,
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tracing::{debug, error, info, warn};
+
+unsafe impl Zeroable for session_key {}
+unsafe impl Pod for session_key {}
+
+unsafe impl Zeroable for session_val {}
+unsafe impl Pod for session_val {}
 
 /// Required capabilities for BPF operations
 const REQUIRED_CAPS: [(Capability, &str); 2] = [
@@ -79,6 +101,7 @@ fn main() -> Result<()> {
 
     rodata.CONTROLLER_PORT = config.controller_port;
     rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
+    rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
 
     debug!("BPF skeleton configured successfully");
 
@@ -111,6 +134,31 @@ fn main() -> Result<()> {
         thread::sleep(Duration::from_secs(3600));
         debug!("Heartbeat: Aegis Agent is still running...");
     }
+}
+
+#[allow(dead_code)]
+fn add_rule(skel: AegisSkel, dest_ip: Ipv4Addr, src_ip: Ipv4Addr, dest_port: u16) -> Result<()> {
+    let key = session_key {
+        dest_ip: u32::from(dest_ip).to_be(),
+        src_ip: u32::from(src_ip).to_be(),
+        dest_port,
+    };
+    let val = session_val {
+        created_at_ns: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_nanos() as u64,
+        last_seen_ns: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_nanos() as u64,
+    };
+    skel.maps.session.update(
+        bytemuck::bytes_of(&key),
+        bytemuck::bytes_of(&val),
+        MapFlags::ANY,
+    )?;
+    Ok(())
 }
 
 /// Checks if the process has the required Linux capabilities.

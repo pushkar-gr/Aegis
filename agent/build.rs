@@ -8,8 +8,7 @@
 //! This allows the main Rust binary to include the BPF bytecode directly and
 //! interact with it using safe Rust types.
 
-use std::env;
-use std::path::PathBuf;
+use std::{env, ffi::OsStr, path::PathBuf};
 
 use libbpf_cargo::SkeletonBuilder;
 
@@ -28,6 +27,7 @@ fn main() {
     // Use libbpf-cargo to compile the source and generate the Rust skeleton.
     SkeletonBuilder::new()
         .source(SRC)
+        .clang_args([OsStr::new("-I"), OsStr::new("src/bpf")])
         .build_and_generate(&out)
         .unwrap();
 
