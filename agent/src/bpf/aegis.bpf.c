@@ -1,13 +1,13 @@
-#include <linux/bpf.h>
-#include <linux/if_ether.h>
-#include <linux/in.h>
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
+#include "vmlinux.h"
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
 char __license[] SEC("license") = "GPL";
+
+#define ETH_P_IP    0x0800
+#define ETH_P_ARP   0x0806
+#define IPPROTO_TCP 6
+#define IPPROTO_UDP 17
 
 /**
  * @brief Configuration Constants

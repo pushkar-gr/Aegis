@@ -2,24 +2,25 @@
 FROM rust:1.92-slim-bookworm AS builder
 WORKDIR /app
 
-# Install dependencies required for eBPF (clang, llvm, libbpf)
+# Install dependencies required for eBPF
 RUN apt-get update && apt-get install -y \
     clang \
-    llvm \
     make \
     libbpf-dev \
     libelf-dev \
     zlib1g-dev \
     pkg-config \
+    bpftool \
     && rm -rf /var/lib/apt/lists/*
-
-RUN ln -s /usr/include/$(uname -m)-linux-gnu/asm /usr/include/asm
 
 RUN rustup component add rustfmt
 
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY build.rs ./build.rs
+
+# Generate vmlinux.h
+RUN bpftool btf dump file /sys/kernel/btf/vmlinux format c > src/bpf/vmlinux.h
 
 # Build the binary
 RUN cargo build --release
@@ -28,12 +29,10 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 WORKDIR /app
 
-# We need libbpf at runtime too
 RUN apt-get update && apt-get install -y \
-    libbpf-dev \
-    libelf-dev \
-    zlib1g-dev \
-    iproute2 \
+    libbpf1 \
+    libelf1 \
+    zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/aegis-agent .
