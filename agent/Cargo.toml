@@ -10,6 +10,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 nix = { version = "0.27", features = ["net"] }
 caps = "0.5"
+bytemuck = "1.24"
 
 [build-dependencies]
 libbpf-cargo = "0.25"
