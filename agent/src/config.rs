@@ -14,6 +14,8 @@ pub struct Config<'a> {
     pub controller_ip: Ipv4Addr,
     /// The port number of the remote controller.
     pub controller_port: u16,
+    /// Time before re updating last_seen_ns in session_val (ns).
+    pub lazy_update_timeout: u64,
 }
 
 impl<'a> Default for Config<'a> {
@@ -22,6 +24,7 @@ impl<'a> Default for Config<'a> {
             iface_name: "eth0",
             controller_ip: Ipv4Addr::new(172, 21, 0, 5),
             controller_port: 443,
+            lazy_update_timeout: 1000000000, // 1s
         }
     }
 }
@@ -74,6 +77,17 @@ impl<'a> Config<'a> {
                     }
                 }
 
+                // Parse Lazy Update Time
+                "-n" | "--update-time" => {
+                    if i + 1 < args.len() {
+                        let time_str = &args[i + 1];
+                        config.lazy_update_timeout = time_str
+                            .parse::<u64>()
+                            .with_context(|| format!("Invalid update-time: {}", time_str))?;
+                        i += 1;
+                    }
+                }
+
                 // Handle unknown arguments or help
                 "-h" | "--help" => {
                     Self::print_help();
@@ -94,9 +108,10 @@ impl<'a> Config<'a> {
     fn print_help() {
         println!("Usage: program [OPTIONS]");
         println!("Options:");
-        println!("  -i, --iface <NAME>    Set interface name (default: eth0)");
-        println!("  -c, --ip <IP>         Set controller IP (default: 172.21.0.5)");
-        println!("  -p, --port <PORT>     Set controller port (default: 443)");
+        println!("  -i, --iface <NAME>      Set interface name (default: eth0)");
+        println!("  -c, --ip <IP>           Set controller IP (default: 172.21.0.5)");
+        println!("  -p, --port <PORT>       Set controller port (default: 443)");
+        println!("  -n, update-time <TIME>  Set update-time (default: 1000000000ns)");
         std::process::exit(0);
     }
 }

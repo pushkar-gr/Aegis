@@ -79,6 +79,7 @@ fn main() -> Result<()> {
 
     rodata.CONTROLLER_PORT = config.controller_port;
     rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
+    rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
 
     debug!("BPF skeleton configured successfully");
 

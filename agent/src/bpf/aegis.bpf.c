@@ -14,10 +14,12 @@ char __license[] SEC("license") = "GPL";
 /**
  * @brief Configuration Constants
  *
- * Dynamic configuration of controller ip:port
+ * Dynamic configuration of controller ip:port and lazy update timeout
  */
 volatile const __u32 CONTROLLER_IP;   // Big Endian (Network Byte Order)
 volatile const __u16 CONTROLLER_PORT; // Little Endian (Host Byte Order)
+volatile const u64
+    LAZY_UPDATE_TIMEOUT; // Minimum time delta (ns) before updating last_seen.
 
 struct session_key _session_key = {0};
 struct session_val _session_val = {0};
@@ -118,7 +120,10 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
   struct session_val *val = bpf_map_lookup_elem(&session, &key);
   if (val) {
     // MATCH: Update telemetry timestamp for the "Reaper" (Idle Timeout)
-    val->last_seen_ns = bpf_ktime_get_ns();
+    u64 now = bpf_ktime_get_ns();
+    if (now - val->last_seen_ns >= LAZY_UPDATE_TIMEOUT) {
+      val->last_seen_ns = now;
+    }
     return XDP_PASS;
   }
 
