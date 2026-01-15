@@ -59,8 +59,12 @@ jobs:
       - name: Install System Deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libbpf-dev libelf-dev pkg-config linux-tools-generic
-          sudo ln -sf /usr/include/$(uname -m)-linux-gnu/asm /usr/include/asm
+          sudo apt-get install -y clang llvm libbpf-dev libelf-dev pkg-config linux-tools-generic build-essential
+
+      - name: Generate vmlinux.h
+        run: |
+          echo "Generating vmlinux.h from CI runner kernel..."
+          bpftool btf dump file /sys/kernel/btf/vmlinux format c > src/bpf/vmlinux.h
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
