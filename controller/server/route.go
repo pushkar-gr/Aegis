@@ -32,11 +32,12 @@ func StartServer() {
 
 	mux := http.NewServeMux()
 
-	// Register handlers.
-	mux.HandleFunc("/login", Login)
-	mux.Handle("/createuser", AuthMiddleware(http.HandlerFunc(CreateUser), jwtKey))
-	mux.Handle("/welcome", AuthMiddleware(http.HandlerFunc(Welcome), jwtKey))
-	mux.Handle("/logout", AuthMiddleware(http.HandlerFunc(Logout), jwtKey))
+	// --- API Routes ---
+
+	// 1. Authentication
+	mux.HandleFunc("POST /api/auth/login", Login)
+	mux.Handle("POST /api/auth/logout", AuthMiddleware(http.HandlerFunc(Logout), jwtKey))
+	mux.Handle("POST /api/auth/password", AuthMiddleware(http.HandlerFunc(UpdatePassword), jwtKey))
 
 	log.Printf("Server initializing on port %s...", *port)
 	if err := http.ListenAndServeTLS(*port, *certFile, *keyFile, SecurityHeadersMiddleware(mux)); err != nil {
