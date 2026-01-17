@@ -6,7 +6,6 @@ import (
 	"Aegis/controller/internal/utils"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"regexp"
@@ -88,7 +87,9 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("User '%s' created successfully by admin '%s'", creatingUser.Creds.Username, username)
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, "User created successfully")
+	if _, err := w.Write([]byte("Logged out successfully")); err != nil {
+		log.Printf("Error writing response: %v", err)
+	}
 }
 
 // Login authenticates a user and issues a secure JWT cookie.
@@ -162,7 +163,9 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("User %s logged in successfully", creds.Username)
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Logged in successfully")
+	if _, err := w.Write([]byte("Logged out successfully")); err != nil {
+		log.Printf("Error writing response: %v", err)
+	}
 }
 
 // Logout clears the authentication cookie.
@@ -181,5 +184,7 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 	})
 
-	w.Write([]byte("Logged out successfully"))
+	if _, err := w.Write([]byte("Logged out successfully")); err != nil {
+		log.Printf("Error writing response: %v", err)
+	}
 }

@@ -152,3 +152,13 @@ func GetRole(username string) (string, error) {
 
 	return role, nil
 }
+
+// SetupTestStmt prepares the createUserStmt for testing purposes.
+// This should only be called from tests after setting up a test database.
+func SetupTestStmt() error {
+	var err error
+	createUserStmt, err = DB.Prepare(`
+		INSERT INTO users (username, password, role_id) 
+		VALUES (?, ?, (SELECT id FROM roles WHERE name = ?));`)
+	return err
+}

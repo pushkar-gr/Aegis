@@ -18,5 +18,7 @@ func Welcome(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "Welcome, %s! This is a protected route.", html.EscapeString(username))
+	if _, err := fmt.Fprintf(w, "Welcome, %s! This is a protected route.", html.EscapeString(username)); err != nil {
+		log.Printf("Error writing response: %v", err)
+	}
 }

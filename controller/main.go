@@ -13,8 +13,11 @@ import (
 func main() {
 	// Initialize the SQLite database connection and schema.
 	database.InitDB()
-	defer database.DB.Close()
-
+	defer func() {
+		if err := database.DB.Close(); err != nil {
+			log.Printf("Error closing database: %v", err)
+		}
+	}()
 	// Start the server in a goroutine so the main thread can listen for signals.
 	go server.StartServer()
 
