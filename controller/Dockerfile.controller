@@ -1,13 +1,17 @@
 # Build Stage
 FROM golang:1.26-rc-alpine3.23 AS builder
+RUN apk add --no-cache gcc musl-dev
 WORKDIR /app
 COPY go.mod ./
-# COPY go.sum ./
-COPY main.go .
-RUN go build -o controller main.go
+COPY go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=1 go build -o controller ./main.go
 
 # Run Stage
 FROM alpine:latest
 WORKDIR /app
+RUN apk add --no-cache openssl ca-certificates
+ENV JWT_SECRET="$(run: openssl rand -base64 32)"
 COPY --from=builder /app/controller .
 CMD ["./controller"]

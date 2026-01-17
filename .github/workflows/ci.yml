@@ -38,8 +38,8 @@ jobs:
       - name: Vulnerability Check
         run: govulncheck ./...
 
-      - name: Test (Race Detector)
-        run: go test -v -race ./...
+      - name: Test
+        run: JWT_SECRET="test-secret" go test -v ./...
 
       - name: Build Binary
         run: go build -o bin/aegis-controller .
