@@ -23,7 +23,7 @@ var (
 // Login validates credentials and checks if the user is active.
 // Input:  {"username": "jdoe", "password": "secret_password"}
 // Output: 200 OK (Set-Cookie: token=...) | 401 Unauthorized | 403 Forbidden (Inactive) | 400 Bad Request
-func Login(w http.ResponseWriter, r *http.Request) {
+func login(w http.ResponseWriter, r *http.Request) {
 	// Cap body at 1MB to prevent DoS.
 	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
 
@@ -103,7 +103,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 // Logout clears the auth cookie.
 // Input:  Empty body (Cookie required in header)
 // Output: 200 OK (Set-Cookie: token=; Expires=1970...)
-func Logout(w http.ResponseWriter, r *http.Request) {
+func logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
 		Value:    "",
@@ -113,7 +113,7 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Get user from context (set by middleware).
-	val := r.Context().Value(UserKey)
+	val := r.Context().Value(userKey)
 	username, ok := val.(string)
 	if ok {
 		log.Printf("User '%v' logged out", username)
@@ -127,7 +127,7 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 // UpdatePassword verifies the old password and sets a new one.
 // Input:  {"old_password": "current_secret", "new_password": "new_secret_123"}
 // Output: 200 OK | 400 Bad Request (Weak password) | 401 Unauthorized
-func UpdatePassword(w http.ResponseWriter, r *http.Request) {
+func updatePassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		OldPassword string `json:"old_password"`
 		NewPassword string `json:"new_password"`
@@ -147,7 +147,7 @@ func UpdatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user from context (set by middleware).
-	val := r.Context().Value(UserKey)
+	val := r.Context().Value(userKey)
 	username, ok := val.(string)
 	if !ok {
 		log.Println("UpdatePassword critical: User context missing or invalid")

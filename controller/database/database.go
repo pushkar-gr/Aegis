@@ -56,3 +56,24 @@ func InitDB() {
 
 	log.Println("Database successfully initialized at", dbPath)
 }
+
+// GetRole retrieves the role name associated with a specific username.
+func GetRole(username string) (string, error) {
+	var role string
+
+	query := `
+		SELECT r.name
+		FROM users u
+		INNER JOIN roles r ON u.role_id = r.id
+		WHERE u.username = ?`
+
+	err := DB.QueryRow(query, username).Scan(
+		&role,
+	)
+
+	if err != nil {
+		return "", err
+	}
+
+	return role, nil
+}

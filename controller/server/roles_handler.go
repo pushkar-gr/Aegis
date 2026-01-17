@@ -1,0 +1,204 @@
+package server
+
+import (
+	"Aegis/controller/database"
+	"Aegis/controller/internal/models"
+	"database/sql"
+	"encoding/json"
+	"log"
+	"net/http"
+	"strconv"
+)
+
+type RoleServiceParams struct {
+	RoleID    int `json:"role_id"`
+	ServiceID int `json:"service_id"`
+}
+
+// GetRoles fetches all available roles from the database.
+// Input:  None
+// Output: 200 OK (JSON list of roles) | 500 Internal Error
+func getRoles(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	rows, err := database.DB.Query("SELECT id, name, description FROM roles")
+	if err != nil {
+		log.Printf("GetRoles: DB query failed. %v", err)
+		http.Error(w, "Failed to retrieve roles", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var roles []models.Role
+	for rows.Next() {
+		var r models.Role
+		var desc sql.NullString
+
+		if err := rows.Scan(&r.Id, &r.Name, &desc); err != nil {
+			log.Printf("GetRoles: Error scanning row. %v", err)
+			continue
+		}
+		r.Description = desc.String
+		roles = append(roles, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("GetRoles: Error iterating rows. %v", err)
+		http.Error(w, "Error processing roles", http.StatusInternalServerError)
+		return
+	}
+
+	// Return an empty array instead of null
+	if roles == nil {
+		roles = []models.Role{}
+	}
+
+	if err := json.NewEncoder(w).Encode(roles); err != nil {
+		log.Printf("GetRoles: Encoding response failed. %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// CreateRole adds a new user role to the system.
+// Input:  {"name": "editor", "description": "Can edit posts"}
+// Output: 201 Created (JSON Role) | 400 Bad Request | 409 Conflict (Duplicate)
+func createRole(w http.ResponseWriter, r *http.Request) {
+	var newRole models.Role
+	if err := json.NewDecoder(r.Body).Decode(&newRole); err != nil {
+		log.Printf("CreateRole: Invalid JSON body. %v", err)
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if newRole.Name == "" {
+		http.Error(w, "Role name is required", http.StatusBadRequest)
+		return
+	}
+
+	query := "INSERT INTO roles (name, description) VALUES (?, ?)"
+	stmt, err := database.DB.Prepare(query)
+	if err != nil {
+		log.Printf("CreateRole: DB prepare failed. %v", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	result, err := stmt.Exec(newRole.Name, newRole.Description)
+	if err != nil {
+		log.Printf("CreateRole: Insert failed for '%s'. %v", newRole.Name, err)
+		http.Error(w, "Error creating role (name must be unique)", http.StatusConflict)
+		return
+	}
+
+	id, err := result.LastInsertId()
+	if err == nil {
+		newRole.Id = int(id)
+	}
+
+	log.Printf("CreateRole: Role '%s' created (ID: %d)", newRole.Name, newRole.Id)
+	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(newRole)
+}
+
+// DeleteRole removes a role by ID.
+// Input:  Query param ?id=123
+// Output: 200 OK | 400 Bad Request | 404 Not Found
+func deleteRole(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	if idStr == "" {
+		http.Error(w, "Missing 'id' parameter", http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid role ID", http.StatusBadRequest)
+		return
+	}
+
+	query := "DELETE FROM roles WHERE id = ?"
+	res, err := database.DB.Exec(query, id)
+	if err != nil {
+		log.Printf("DeleteRole: DB execution failed for ID %d. %v", id, err)
+		http.Error(w, "Failed to delete role", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
+		log.Printf("DeleteRole: ID %d not found", id)
+		http.Error(w, "Role not found", http.StatusNotFound)
+		return
+	}
+
+	log.Printf("DeleteRole: Role ID %d deleted", id)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Role deleted successfully"))
+}
+
+// AddRoleService links a service capability to a specific role.
+// Input:  Query param ?id=123 (roll id) and {"service_id": 5}
+// Output: 200 OK | 400 Bad Request
+func addRoleService(w http.ResponseWriter, r *http.Request) {
+	roleIDStr := r.PathValue("id")
+	roleID, err := strconv.Atoi(roleIDStr)
+	if err != nil {
+		http.Error(w, "Invalid Role ID in URL", http.StatusBadRequest)
+		return
+	}
+
+	type ServiceParams struct {
+		ServiceID int `json:"service_id"`
+	}
+	var params ServiceParams
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		log.Printf("AddRoleService: JSON decode failed. %v", err)
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	query := "INSERT OR IGNORE INTO role_services (role_id, service_id) VALUES (?, ?)"
+	_, err = database.DB.Exec(query, roleID, params.ServiceID)
+	if err != nil {
+		log.Printf("AddRoleService: DB link failed (Role: %d, Svc: %d). %v", roleID, params.ServiceID, err)
+		http.Error(w, "Failed to link service to role (check if IDs exist)", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("AddRoleService: Linked service %d to role %d", params.ServiceID, roleID)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Service added to role successfully"))
+}
+
+// RemoveRoleService unlinks a service capability from a role.
+// Input:  Query param ?id=123 (roll id) and ?svcId=123 (service id)
+// Output: 200 OK | 400 Bad Request
+func removeRoleService(w http.ResponseWriter, r *http.Request) {
+	roleIDStr := r.PathValue("id")
+	roleID, err := strconv.Atoi(roleIDStr)
+	if err != nil {
+		http.Error(w, "Invalid Role ID in URL", http.StatusBadRequest)
+		return
+	}
+
+	svcIDStr := r.PathValue("svc_id")
+	svcID, err := strconv.Atoi(svcIDStr)
+	if err != nil {
+		http.Error(w, "Invalid Service ID in URL", http.StatusBadRequest)
+		return
+	}
+
+	query := "DELETE FROM role_services WHERE role_id = ? AND service_id = ?"
+	_, err = database.DB.Exec(query, roleID, svcID)
+	if err != nil {
+		log.Printf("RemoveRoleService: DB unlink failed (Role: %d, Svc: %d). %v", roleID, svcID, err)
+		http.Error(w, "Failed to remove service from role", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("RemoveRoleService: Unlinked service %d from role %d", svcID, roleID)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Service removed from role successfully"))
+}

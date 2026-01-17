@@ -35,12 +35,19 @@ func StartServer() {
 	// --- API Routes ---
 
 	// 1. Authentication
-	mux.HandleFunc("POST /api/auth/login", Login)
-	mux.Handle("POST /api/auth/logout", AuthMiddleware(http.HandlerFunc(Logout), jwtKey))
-	mux.Handle("POST /api/auth/password", AuthMiddleware(http.HandlerFunc(UpdatePassword), jwtKey))
+	mux.HandleFunc("POST /api/auth/login", login)
+	mux.Handle("POST /api/auth/logout", authMiddleware.ThenFunc(logout))
+	mux.Handle("POST /api/auth/password", authMiddleware.ThenFunc(updatePassword))
+
+	// 2. Roles (RBAC)
+	mux.Handle("GET /api/roles", adminOrRootOnly.ThenFunc(getRoles))
+	mux.Handle("POST /api/roles", rootOnly.ThenFunc(createRole))
+	mux.Handle("DELETE /api/roles/{id}", rootOnly.ThenFunc(deleteRole))
+	mux.Handle("POST /api/roles/{id}/services", adminOrRootOnly.ThenFunc(addRoleService))
+	mux.Handle("DELETE /api/roles/{id}/services/{svc_id}", adminOrRootOnly.ThenFunc(removeRoleService))
 
 	log.Printf("Server initializing on port %s...", *port)
-	if err := http.ListenAndServeTLS(*port, *certFile, *keyFile, SecurityHeadersMiddleware(mux)); err != nil {
+	if err := http.ListenAndServeTLS(*port, *certFile, *keyFile, securityHeadersMiddleware(mux)); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }

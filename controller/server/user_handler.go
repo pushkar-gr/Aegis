@@ -9,7 +9,7 @@ import (
 
 // Welcome is a protected endpoint that displays a personalized message.
 func Welcome(w http.ResponseWriter, r *http.Request) {
-	val := r.Context().Value(UserKey)
+	val := r.Context().Value(userKey)
 	username, ok := val.(string)
 
 	if !ok {
