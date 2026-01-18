@@ -46,6 +46,12 @@ func StartServer() {
 	mux.Handle("POST /api/roles/{id}/services", adminOrRootOnly.ThenFunc(addRoleService))
 	mux.Handle("DELETE /api/roles/{id}/services/{svc_id}", adminOrRootOnly.ThenFunc(removeRoleService))
 
+	// 3. Services (Global Management)
+	mux.Handle("GET /api/services", adminOrRootOnly.ThenFunc(getServices))
+	mux.Handle("POST /api/services", rootOnly.ThenFunc(createService))
+	mux.Handle("PUT /api/services/{id}", rootOnly.ThenFunc(updateService))
+	mux.Handle("DELETE /api/services/{id}", rootOnly.ThenFunc(deleteService))
+
 	log.Printf("Server initializing on port %s...", *port)
 	if err := http.ListenAndServeTLS(*port, *certFile, *keyFile, securityHeadersMiddleware(mux)); err != nil {
 		log.Fatalf("Server failed to start: %v", err)

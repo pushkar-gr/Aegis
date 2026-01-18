@@ -10,11 +10,6 @@ import (
 	"strconv"
 )
 
-type RoleServiceParams struct {
-	RoleID    int `json:"role_id"`
-	ServiceID int `json:"service_id"`
-}
-
 // GetRoles fetches all available roles from the database.
 // Input:  None
 // Output: 200 OK (JSON list of roles) | 500 Internal Error
