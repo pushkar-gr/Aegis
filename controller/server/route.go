@@ -65,6 +65,12 @@ func StartServer() {
 	mux.Handle("POST /api/users/{id}/services", adminOrRootOnly.ThenFunc(addUserService))
 	mux.Handle("DELETE /api/users/{id}/services/{svc_id}", adminOrRootOnly.ThenFunc(removeUserService))
 
+	// 5. User Dashboard (Client)
+	mux.Handle("GET /api/me/services", authMiddleware.ThenFunc(getMyServices))
+	mux.Handle("GET /api/me/selected", authMiddleware.ThenFunc(getMyActiveServices))
+	mux.Handle("POST /api/me/selected", authMiddleware.ThenFunc(selectActiveService))
+	mux.Handle("DELETE /api/me/selected/{svc_id}", authMiddleware.ThenFunc(deselectActiveService))
+
 	log.Printf("Server initializing on port %s...", *port)
 	if err := http.ListenAndServeTLS(*port, *certFile, *keyFile, securityHeadersMiddleware(mux)); err != nil {
 		log.Fatalf("Server failed to start: %v", err)

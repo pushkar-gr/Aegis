@@ -50,8 +50,9 @@ CREATE TABLE IF NOT EXISTS user_extra_services (
 
 -- 6. User Active Services (Services the user has currently "Selected")
 CREATE TABLE IF NOT EXISTS user_active_services (
-    user_id INTEGER,
-    service_id INTEGER,
+    user_id INTEGER NOT NULL,
+    service_id INTEGER NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, service_id),
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE CASCADE
