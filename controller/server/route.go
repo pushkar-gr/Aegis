@@ -9,6 +9,8 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var jwtKey []byte
+
 // init loads the JWT secret from environment variables on startup.
 func init() {
 	if err := godotenv.Load(); err != nil {
@@ -52,6 +54,16 @@ func StartServer() {
 	mux.Handle("POST /api/services", adminOrRootOnly.ThenFunc(createService))
 	mux.Handle("PUT /api/services/{id}", adminOrRootOnly.ThenFunc(updateService))
 	mux.Handle("DELETE /api/services/{id}", adminOrRootOnly.ThenFunc(deleteService))
+
+	// 4. User Management (Admin Panel)
+	mux.Handle("GET /api/users", adminOrRootOnly.ThenFunc(getUsers))
+	mux.Handle("POST /api/users", adminOrRootOnly.ThenFunc(createUser))
+	mux.Handle("DELETE /api/users/{id}", adminOrRootOnly.ThenFunc(deleteUser))
+	mux.Handle("PUT /api/users/{id}/role", adminOrRootOnly.ThenFunc(updateUserRole))
+	mux.Handle("POST /api/users/{id}/reset-password", adminOrRootOnly.ThenFunc(resetUserPassword))
+	mux.Handle("GET /api/users/{id}/services", adminOrRootOnly.ThenFunc(getUserServices))
+	mux.Handle("POST /api/users/{id}/services", adminOrRootOnly.ThenFunc(addUserService))
+	mux.Handle("DELETE /api/users/{id}/services/{svc_id}", adminOrRootOnly.ThenFunc(removeUserService))
 
 	log.Printf("Server initializing on port %s...", *port)
 	if err := http.ListenAndServeTLS(*port, *certFile, *keyFile, securityHeadersMiddleware(mux)); err != nil {

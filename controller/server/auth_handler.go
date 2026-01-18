@@ -8,16 +8,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-)
-
-var (
-	// UsernameRE enforces 5-30 char alphanumeric usernames.
-	UsernameRE = regexp.MustCompile("^[a-zA-Z0-9_]{5,30}$")
-	jwtKey     []byte
 )
 
 // Login validates credentials and checks if the user is active.
