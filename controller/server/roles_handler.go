@@ -133,6 +133,59 @@ func deleteRole(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Role deleted successfully"))
 }
 
+// GetRoleServices retrieves all services assigned to a specific role.
+// Input:  Query param ?id=123 (Role ID)
+// Output: 200 OK (JSON list of services) | 400 Bad Request | 500 Internal Error
+func getRoleServices(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	idStr := r.PathValue("id")
+	roleID, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid Role ID", http.StatusBadRequest)
+		return
+	}
+
+	query := `
+		SELECT s.id, s.name, s.ip_port, s.description, s.created_at
+		FROM services s
+		INNER JOIN role_services rs ON s.id = rs.service_id
+		WHERE rs.role_id = ?`
+
+	rows, err := database.DB.Query(query, roleID)
+	if err != nil {
+		log.Printf("GetRoleServices: DB query failed for Role %d. %v", roleID, err)
+		http.Error(w, "Failed to retrieve role services", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	services := []models.Service{}
+
+	for rows.Next() {
+		var s models.Service
+		var desc sql.NullString
+
+		if err := rows.Scan(&s.Id, &s.Name, &s.IpPort, &desc, &s.CreatedAt); err != nil {
+			log.Printf("GetRoleServices: Error scanning row. %v", err)
+			continue
+		}
+		s.Description = desc.String
+		services = append(services, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("GetRoleServices: Error iterating rows. %v", err)
+		http.Error(w, "Error processing services", http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(services); err != nil {
+		log.Printf("GetRoleServices: Encoding response failed. %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
 // AddRoleService links a service capability to a specific role.
 // Input:  Query param ?id=123 (roll id) and {"service_id": 5}
 // Output: 200 OK | 400 Bad Request

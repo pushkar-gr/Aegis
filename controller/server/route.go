@@ -43,14 +43,15 @@ func StartServer() {
 	mux.Handle("GET /api/roles", adminOrRootOnly.ThenFunc(getRoles))
 	mux.Handle("POST /api/roles", rootOnly.ThenFunc(createRole))
 	mux.Handle("DELETE /api/roles/{id}", rootOnly.ThenFunc(deleteRole))
+	mux.Handle("GET /api/roles/{id}/services", adminOrRootOnly.ThenFunc(getRoleServices))
 	mux.Handle("POST /api/roles/{id}/services", adminOrRootOnly.ThenFunc(addRoleService))
 	mux.Handle("DELETE /api/roles/{id}/services/{svc_id}", adminOrRootOnly.ThenFunc(removeRoleService))
 
 	// 3. Services (Global Management)
 	mux.Handle("GET /api/services", adminOrRootOnly.ThenFunc(getServices))
-	mux.Handle("POST /api/services", rootOnly.ThenFunc(createService))
-	mux.Handle("PUT /api/services/{id}", rootOnly.ThenFunc(updateService))
-	mux.Handle("DELETE /api/services/{id}", rootOnly.ThenFunc(deleteService))
+	mux.Handle("POST /api/services", adminOrRootOnly.ThenFunc(createService))
+	mux.Handle("PUT /api/services/{id}", adminOrRootOnly.ThenFunc(updateService))
+	mux.Handle("DELETE /api/services/{id}", adminOrRootOnly.ThenFunc(deleteService))
 
 	log.Printf("Server initializing on port %s...", *port)
 	if err := http.ListenAndServeTLS(*port, *certFile, *keyFile, securityHeadersMiddleware(mux)); err != nil {
