@@ -23,7 +23,7 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Logic: Union of Role-based services AND User-specific extra services
-	query := `
+	rows, err := database.DB.Query(`
 		SELECT s.id, s.name, s.ip_port, s.description, s.created_at
 		FROM services s
 		JOIN role_services rs ON s.id = rs.service_id
@@ -32,9 +32,8 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 		SELECT s.id, s.name, s.ip_port, s.description, s.created_at
 		FROM services s
 		JOIN user_extra_services ues ON s.id = ues.service_id
-		WHERE ues.user_id = ?`
+		WHERE ues.user_id = ?`, roleID, userID)
 
-	rows, err := database.DB.Query(query, roleID, userID)
 	if err != nil {
 		log.Printf("GetMyServices: DB Error for User %d: %v", userID, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -42,7 +41,7 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	services := []models.Service{}
+	services := make([]models.Service, 0, 10)
 	for rows.Next() {
 		var s models.Service
 		var desc sql.NullString
@@ -66,14 +65,13 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `
+	rows, err := database.DB.Query(`
 		SELECT s.id, s.name, s.ip_port, s.description, s.created_at
 		FROM services s
 		JOIN user_active_services uas ON s.id = uas.service_id
 		WHERE uas.user_id = ?
-		ORDER BY uas.updated_at DESC` // Shows most recently updated/added first
+		ORDER BY uas.updated_at DESC`, userID)
 
-	rows, err := database.DB.Query(query, userID)
 	if err != nil {
 		log.Printf("GetMyActiveServices: DB Error: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -81,7 +79,7 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	services := []models.Service{}
+	services := make([]models.Service, 0, 5)
 	for rows.Next() {
 		var s models.Service
 		var desc sql.NullString
@@ -103,23 +101,20 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var params struct {
+	var req struct {
 		ServiceID int `json:"service_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	// 1. Verify Permission: Does the user actually have access to this service?
-	// We check both Role permissions and User Extra permissions.
-	permQuery := `
+	var exists int
+	err = database.DB.QueryRow(`
 		SELECT 1 FROM role_services WHERE role_id = ? AND service_id = ?
 		UNION
-		SELECT 1 FROM user_extra_services WHERE user_id = ? AND service_id = ?`
-
-	var exists int
-	err = database.DB.QueryRow(permQuery, roleID, params.ServiceID, userID, params.ServiceID).Scan(&exists)
+		SELECT 1 FROM user_extra_services WHERE user_id = ? AND service_id = ?`,
+		roleID, req.ServiceID, userID, req.ServiceID).Scan(&exists)
 
 	if err == sql.ErrNoRows {
 		http.Error(w, "Forbidden: You do not have access to this service", http.StatusForbidden)
@@ -130,12 +125,8 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Upsert: Insert or Update Timestamp
-	// "INSERT OR REPLACE" is SQLite syntax.
-	// For MySQL/Postgres use: "INSERT ... ON DUPLICATE KEY UPDATE updated_at = NOW()"
-	query := `INSERT OR REPLACE INTO user_active_services (user_id, service_id, updated_at) VALUES (?, ?, ?)`
-
-	_, err = database.DB.Exec(query, userID, params.ServiceID, time.Now())
+	_, err = database.DB.Exec("INSERT OR REPLACE INTO user_active_services (user_id, service_id, updated_at) VALUES (?, ?, ?)",
+		userID, req.ServiceID, time.Now())
 	if err != nil {
 		log.Printf("SelectActiveService: DB Write failed: %v", err)
 		http.Error(w, "Failed to update active status", http.StatusInternalServerError)
@@ -154,15 +145,13 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	svcIDStr := r.PathValue("svc_id") // Go 1.22+ syntax
-	svcID, err := strconv.Atoi(svcIDStr)
+	svcID, err := strconv.Atoi(r.PathValue("svc_id"))
 	if err != nil {
 		http.Error(w, "Invalid Service ID", http.StatusBadRequest)
 		return
 	}
 
-	query := "DELETE FROM user_active_services WHERE user_id = ? AND service_id = ?"
-	_, err = database.DB.Exec(query, userID, svcID)
+	_, err = database.DB.Exec("DELETE FROM user_active_services WHERE user_id = ? AND service_id = ?", userID, svcID)
 	if err != nil {
 		log.Printf("DeselectActiveService: DB Error: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -173,17 +162,12 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Service removed from active list"))
 }
 
-// --- Helper ---
-
 func resolveCurrentUser(r *http.Request) (int, int, error) {
-	// 'userKey' must be defined in your auth_handler or middleware file
-	val := r.Context().Value(userKey)
-	username, ok := val.(string)
+	username, ok := r.Context().Value(userKey).(string)
 	if !ok || username == "" {
 		return 0, 0, sql.ErrNoRows
 	}
 
-	var id, roleID int
-	err := database.DB.QueryRow("SELECT id, role_id FROM users WHERE username = ?", username).Scan(&id, &roleID)
+	id, roleID, err := database.GetUserIDAndRole(username)
 	return id, roleID, err
 }

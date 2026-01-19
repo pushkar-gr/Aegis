@@ -15,6 +15,11 @@ const DB_DIR = "./data"
 var (
 	// DB is the global database connection pool.
 	DB *sql.DB
+
+	// Prepared statements for frequently used queries
+	stmtGetUserCredentials *sql.Stmt
+	stmtGetUserIDAndRole   *sql.Stmt
+	stmtUpdatePassword     *sql.Stmt
 )
 
 // InitDB initializes the database directory, opens the connection, sets performance pragmas,
@@ -54,26 +59,53 @@ func InitDB() {
 	DB.SetMaxIdleConns(1)
 	DB.SetConnMaxLifetime(time.Hour)
 
+	// Prepare frequently used statements
+	stmtGetUserCredentials, err = DB.Prepare("SELECT password, is_active FROM users WHERE username = ?")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtGetUserCredentials: ", err)
+	}
+
+	stmtGetUserIDAndRole, err = DB.Prepare("SELECT id, role_id FROM users WHERE username = ?")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtGetUserIDAndRole: ", err)
+	}
+
+	stmtUpdatePassword, err = DB.Prepare("UPDATE users SET password = ? WHERE username = ?")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtUpdatePassword: ", err)
+	}
+
 	log.Println("Database successfully initialized at", dbPath)
 }
 
-// GetRole retrieves the role name associated with a specific username.
-func GetRole(username string) (string, error) {
-	var role string
+// GetUserCredentials retrieves password hash and active status for a user.
+// Used during login authentication.
+func GetUserCredentials(username string) (passwordHash string, isActive bool, err error) {
+	err = stmtGetUserCredentials.QueryRow(username).Scan(&passwordHash, &isActive)
+	return
+}
 
-	query := `
-		SELECT r.name
-		FROM users u
-		INNER JOIN roles r ON u.role_id = r.id
-		WHERE u.username = ?`
+// GetUserIDAndRole retrieves user ID and role ID for a given username.
+// Used in dashboard and user context resolution.
+func GetUserIDAndRole(username string) (id int, roleID int, err error) {
+	err = stmtGetUserIDAndRole.QueryRow(username).Scan(&id, &roleID)
+	return
+}
 
-	err := DB.QueryRow(query, username).Scan(
-		&role,
-	)
-
+// UpdateUserPassword updates a user's password hash.
+// Used in password change operations.
+func UpdateUserPassword(username, newPasswordHash string) (int64, error) {
+	result, err := stmtUpdatePassword.Exec(newPasswordHash, username)
 	if err != nil {
-		return "", err
+		return 0, err
 	}
+	return result.RowsAffected()
+}
 
-	return role, nil
+// GetPasswordHash retrieves only the password hash for a user.
+// Used in password verification operations.
+func GetPasswordHash(username string) (string, error) {
+	var hash string
+	err := DB.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&hash)
+	return hash, err
 }

@@ -52,15 +52,19 @@ var authMiddleware = alice.New(
 // Output: Next handler | 500 Error | 403 Forbidden
 func rootOnlyFunc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		val := r.Context().Value(userKey)
-		username, ok := val.(string)
+		username, ok := r.Context().Value(userKey).(string)
 		if !ok {
 			log.Println("RootOnly: User context missing or invalid")
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 
-		role, err := database.GetRole(username)
+		var role string
+		err := database.DB.QueryRow(`
+			SELECT r.name
+			FROM users u
+			INNER JOIN roles r ON u.role_id = r.id
+			WHERE u.username = ?`, username).Scan(&role)
 		if err != nil {
 			log.Printf("RootOnly: DB error fetching role for '%s'. %v", username, err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -87,15 +91,19 @@ var rootOnly = alice.New(
 // Output: Next handler | 500 Error | 403 Forbidden
 func adminOrRootOnlyFunc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		val := r.Context().Value(userKey)
-		username, ok := val.(string)
+		username, ok := r.Context().Value(userKey).(string)
 		if !ok {
 			log.Println("AdminOrRoot: User context missing or invalid")
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 
-		role, err := database.GetRole(username)
+		var role string
+		err := database.DB.QueryRow(`
+			SELECT r.name
+			FROM users u
+			INNER JOIN roles r ON u.role_id = r.id
+			WHERE u.username = ?`, username).Scan(&role)
 		if err != nil {
 			log.Printf("AdminOrRoot: DB error fetching role for '%s'. %v", username, err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)

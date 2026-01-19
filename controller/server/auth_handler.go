@@ -30,10 +30,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var storedHash string
-	var isActive bool
-	row := database.DB.QueryRow("SELECT password, is_active FROM users WHERE username = ?", creds.Username)
-	err := row.Scan(&storedHash, &isActive)
+	storedHash, isActive, err := database.GetUserCredentials(creds.Username)
 
 	// Determine if user exists. Always run a hash check to prevent timing attacks.
 	if err == sql.ErrNoRows {
@@ -69,8 +66,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtKey)
 	if err != nil {
 		log.Printf("Login token signing error for '%s': %v", creds.Username, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -106,9 +102,7 @@ func logout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Get user from context (set by middleware).
-	val := r.Context().Value(userKey)
-	username, ok := val.(string)
-	if ok {
+	if username, ok := r.Context().Value(userKey).(string); ok {
 		log.Printf("User '%v' logged out", username)
 	} else {
 		log.Println("Logout called (no active user context found)")
@@ -140,8 +134,7 @@ func updatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user from context (set by middleware).
-	val := r.Context().Value(userKey)
-	username, ok := val.(string)
+	username, ok := r.Context().Value(userKey).(string)
 	if !ok {
 		log.Println("UpdatePassword critical: User context missing or invalid")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -149,9 +142,7 @@ func updatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch current hash.
-	var storedHash string
-	row := database.DB.QueryRow("SELECT password FROM users WHERE username = ?", username)
-	err := row.Scan(&storedHash)
+	storedHash, err := database.GetPasswordHash(username)
 	if err != nil {
 		log.Printf("UpdatePassword DB lookup error for '%s': %v", username, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -174,14 +165,13 @@ func updatePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update DB.
-	res, err := database.DB.Exec("UPDATE users SET password = ? WHERE username = ?", newHash, username)
+	rows, err := database.UpdateUserPassword(username, newHash)
 	if err != nil {
 		log.Printf("UpdatePassword DB update failed for '%s': %v", username, err)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
 
-	rows, _ := res.RowsAffected()
 	if rows == 0 {
 		log.Printf("UpdatePassword warning: No rows affected for '%s'", username)
 		http.Error(w, "User not found", http.StatusInternalServerError)

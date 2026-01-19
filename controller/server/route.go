@@ -19,9 +19,8 @@ func init() {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		log.Fatal("FATAL: JWT_SECRET environment variable is required")
-	} else {
-		jwtKey = []byte(secret)
 	}
+	jwtKey = []byte(secret)
 }
 
 // StartServer configures and starts the TLS-enabled HTTP server.
