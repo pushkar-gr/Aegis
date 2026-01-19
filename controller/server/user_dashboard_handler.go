@@ -39,7 +39,11 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("[dashboard] failed to close rows: %v", err)
+		}
+	}()
 
 	services := make([]models.Service, 0, 10)
 	for rows.Next() {
@@ -51,7 +55,9 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	json.NewEncoder(w).Encode(services)
+	if err := json.NewEncoder(w).Encode(services); err != nil {
+		log.Printf("[dashboard] failed to encode response: %v", err)
+	}
 }
 
 // GetMyActiveServices returns only the services currently in the 'user_active_services' table.
@@ -77,7 +83,11 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("[dashboard] failed to close rows: %v", err)
+		}
+	}()
 
 	services := make([]models.Service, 0, 5)
 	for rows.Next() {
@@ -89,7 +99,9 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	json.NewEncoder(w).Encode(services)
+	if err := json.NewEncoder(w).Encode(services); err != nil {
+		log.Printf("[dashboard] failed to encode response: %v", err)
+	}
 }
 
 // SelectActiveService adds or refreshes a service in the active list.
@@ -134,7 +146,9 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Service set to active"))
+	if _, err := w.Write([]byte("Service set to active")); err != nil {
+		log.Printf("[dashboard] failed to write response: %v", err)
+	}
 }
 
 // DeselectActiveService removes a service from the monitoring list.
@@ -159,7 +173,9 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Service removed from active list"))
+	if _, err := w.Write([]byte("Service removed from active list")); err != nil {
+		log.Printf("[dashboard] failed to write response: %v", err)
+	}
 }
 
 func resolveCurrentUser(r *http.Request) (int, int, error) {

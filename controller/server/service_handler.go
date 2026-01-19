@@ -21,7 +21,11 @@ func getServices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to retrieve services", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("[services] failed to close rows: %v", err)
+		}
+	}()
 
 	services := make([]models.Service, 0, 10)
 	for rows.Next() {
@@ -42,7 +46,9 @@ func getServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(services)
+	if err := json.NewEncoder(w).Encode(services); err != nil {
+		log.Printf("[services] failed to encode response: %v", err)
+	}
 }
 
 // createService adds a new service to the system.
@@ -64,7 +70,7 @@ func createService(w http.ResponseWriter, r *http.Request) {
 	result, err := database.DB.Exec("INSERT INTO services (name, ip_port, description) VALUES (?, ?, ?)",
 		newService.Name, newService.IpPort, newService.Description)
 	if err != nil {
-		log.Printf("[services] create failed for '%s': database insert error '%s'. %v", newService.Name, err)
+		log.Printf("[services] create failed for '%s': database insert error - %v", newService.Name, err)
 		http.Error(w, "Error creating service (name must be unique)", http.StatusConflict)
 		return
 	}
@@ -76,7 +82,9 @@ func createService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[services] created service '%s' created (ID: %d)", newService.Name, newService.Id)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newService)
+	if err := json.NewEncoder(w).Encode(newService); err != nil {
+		log.Printf("[services] failed to encode response: %v", err)
+	}
 }
 
 // updateService modifies an existing service by ID.
@@ -119,7 +127,9 @@ func updateService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[services] updated service '%s' updated (ID: %d)", service.Name, service.Id)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(service)
+	if err := json.NewEncoder(w).Encode(service); err != nil {
+		log.Printf("[services] failed to encode response: %v", err)
+	}
 }
 
 // deleteService removes a service by ID.
@@ -147,5 +157,7 @@ func deleteService(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[services] deleted service ID %d successfully", id)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Service deleted successfully"))
+	if _, err := w.Write([]byte("Service deleted successfully")); err != nil {
+		log.Printf("[services] failed to write response: %v", err)
+	}
 }

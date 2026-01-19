@@ -71,6 +71,29 @@ func InitDB() {
 	log.Printf("[database] initialized successfully at %s", dbPath)
 }
 
+// InitPreparedStatements prepares frequently used SQL statements for reuse.
+// This is exported for testing purposes.
+func InitPreparedStatements() error {
+	var err error
+
+	stmtGetUserCredentials, err = DB.Prepare("SELECT password, is_active FROM users WHERE username = ?")
+	if err != nil {
+		return err
+	}
+
+	stmtGetUserIDAndRole, err = DB.Prepare("SELECT id, role_id FROM users WHERE username = ?")
+	if err != nil {
+		return err
+	}
+
+	stmtUpdatePassword, err = DB.Prepare("UPDATE users SET password = ? WHERE username = ?")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // GetUserCredentials fetches the password hash and active status for login authentication.
 func GetUserCredentials(username string) (passwordHash string, isActive bool, err error) {
 	err = stmtGetUserCredentials.QueryRow(username).Scan(&passwordHash, &isActive)

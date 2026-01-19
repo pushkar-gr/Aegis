@@ -25,7 +25,11 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to retrieve users", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("[users] failed to close rows: %v", err)
+		}
+	}()
 
 	users := make([]models.User, 0, 10)
 	for rows.Next() {
@@ -44,7 +48,9 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[users] retrieved %d users successfully", len(users))
-	json.NewEncoder(w).Encode(users)
+	if err := json.NewEncoder(w).Encode(users); err != nil {
+		log.Printf("[users] failed to encode response: %v", err)
+	}
 }
 
 // createUser adds a new user with a hashed password.
@@ -99,7 +105,9 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	newUser.Credentials.Password = ""
-	json.NewEncoder(w).Encode(newUser)
+	if err := json.NewEncoder(w).Encode(newUser); err != nil {
+		log.Printf("[users] failed to encode response: %v", err)
+	}
 }
 
 // DeleteUser removes a user by ID.
@@ -114,7 +122,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 
 	res, err := database.DB.Exec("DELETE FROM users WHERE id = ?", id)
 	if err != nil {
-		log.Printf("[users] delete failed for ID %d: database error for ID %d. %v", id, err)
+		log.Printf("[users] delete failed for ID %d: database error - %v", id, err)
 		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
 		return
 	}
@@ -127,7 +135,9 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[users] deleted user ID %d successfully", id)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("User deleted successfully"))
+	if _, err := w.Write([]byte("User deleted successfully")); err != nil {
+		log.Printf("[users] failed to write response: %v", err)
+	}
 }
 
 // UpdateUserRole modifies the role assigned to a user.
@@ -151,7 +161,7 @@ func updateUserRole(w http.ResponseWriter, r *http.Request) {
 
 	res, err := database.DB.Exec("UPDATE users SET role_id = ? WHERE id = ?", req.RoleId, id)
 	if err != nil {
-		log.Printf("[users] update role failed for ID %d: database error for ID %d. %v", id, err)
+		log.Printf("[users] update role failed for ID %d: database error - %v", id, err)
 		http.Error(w, "Failed to update user role", http.StatusInternalServerError)
 		return
 	}
@@ -164,7 +174,9 @@ func updateUserRole(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[users] updated role for user ID %d to role %d successfully", id, req.RoleId)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("User role updated successfully"))
+	if _, err := w.Write([]byte("User role updated successfully")); err != nil {
+		log.Printf("[users] failed to write response: %v", err)
+	}
 }
 
 // ResetUserPassword forces a password change for a specific user.
@@ -193,14 +205,14 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
-		log.Printf("[users] reset password failed for ID %d: hashing error for ID %d. %v", id, err)
+		log.Printf("[users] reset password failed for ID %d: hashing error - %v", id, err)
 		http.Error(w, "Internal server error processing credentials", http.StatusInternalServerError)
 		return
 	}
 
 	res, err := database.DB.Exec("UPDATE users SET password = ? WHERE id = ?", hashedPassword, id)
 	if err != nil {
-		log.Printf("[users] reset password failed for ID %d: database error for ID %d. %v", id, err)
+		log.Printf("[users] reset password failed for ID %d: database error - %v", id, err)
 		http.Error(w, "Failed to reset user password", http.StatusInternalServerError)
 		return
 	}
@@ -213,7 +225,9 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[users] reset password successfully for user ID %d", id)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("User password reset successfully"))
+	if _, err := w.Write([]byte("User password reset successfully")); err != nil {
+		log.Printf("[users] failed to write response: %v", err)
+	}
 }
 
 // GetUserServices retrieves specific extra services assigned to a user.
@@ -235,11 +249,15 @@ func getUserServices(w http.ResponseWriter, r *http.Request) {
 		JOIN user_extra_services ues ON s.id = ues.service_id
 		WHERE ues.user_id = ?`, userID)
 	if err != nil {
-		log.Printf("[users] get services failed for user ID %d: database query error for User %d. %v", userID, err)
+		log.Printf("[users] get services failed for user ID %d: database query error - %v", userID, err)
 		http.Error(w, "Failed to retrieve user services", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("[users] failed to close rows: %v", err)
+		}
+	}()
 
 	// Initialize as empty slice to return [] instead of null
 	services := make([]models.Service, 0, 5)
@@ -262,7 +280,9 @@ func getUserServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(services)
+	if err := json.NewEncoder(w).Encode(services); err != nil {
+		log.Printf("[users] failed to encode response: %v", err)
+	}
 }
 
 // AddUserService grants an *extra* specific service permission to a user.
@@ -288,14 +308,16 @@ func addUserService(w http.ResponseWriter, r *http.Request) {
 	_, err = database.DB.Exec("INSERT OR IGNORE INTO user_extra_services (user_id, service_id) VALUES (?, ?)",
 		userID, req.ServiceID)
 	if err != nil {
-		log.Printf("[users] add service failed for user %d and service %d: database error (User: %d, Svc: %d). %v", userID, req.ServiceID, err)
+		log.Printf("[users] add service failed for user %d and service %d: database error - %v", userID, req.ServiceID, err)
 		http.Error(w, "Failed to assign service to user (check if IDs exist)", http.StatusBadRequest)
 		return
 	}
 
 	log.Printf("[users] added service %d to user %d successfully", req.ServiceID, userID)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Service assigned to user successfully"))
+	if _, err := w.Write([]byte("Service assigned to user successfully")); err != nil {
+		log.Printf("[users] failed to write response: %v", err)
+	}
 }
 
 // RemoveUserService revokes an *extra* service permission from a user.
@@ -329,5 +351,7 @@ func removeUserService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Service removed from user successfully"))
+	if _, err := w.Write([]byte("Service removed from user successfully")); err != nil {
+		log.Printf("[users] failed to write response: %v", err)
+	}
 }

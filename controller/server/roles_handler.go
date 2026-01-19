@@ -22,7 +22,11 @@ func getRoles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to retrieve roles", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("[roles] failed to close rows: %v", err)
+		}
+	}()
 
 	roles := make([]models.Role, 0, 5)
 	for rows.Next() {
@@ -43,7 +47,9 @@ func getRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(roles)
+	if err := json.NewEncoder(w).Encode(roles); err != nil {
+		log.Printf("[roles] failed to encode response: %v", err)
+	}
 }
 
 // createRole adds a new user role to the system.
@@ -65,7 +71,7 @@ func createRole(w http.ResponseWriter, r *http.Request) {
 	result, err := database.DB.Exec("INSERT INTO roles (name, description) VALUES (?, ?)",
 		newRole.Name, newRole.Description)
 	if err != nil {
-		log.Printf("[roles] create failed for '%s': database insert error '%s'. %v", newRole.Name, err)
+		log.Printf("[roles] create failed for '%s': database insert error - %v", newRole.Name, err)
 		http.Error(w, "Error creating role (name must be unique)", http.StatusConflict)
 		return
 	}
@@ -77,7 +83,9 @@ func createRole(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[roles] created role '%s' created (ID: %d)", newRole.Name, newRole.Id)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newRole)
+	if err := json.NewEncoder(w).Encode(newRole); err != nil {
+		log.Printf("[roles] failed to encode response: %v", err)
+	}
 }
 
 // deleteRole removes a role by ID.
@@ -105,7 +113,9 @@ func deleteRole(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[roles] deleted role ID %d successfully", id)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Role deleted successfully"))
+	if _, err := w.Write([]byte("Role deleted successfully")); err != nil {
+		log.Printf("[roles] failed to write response: %v", err)
+	}
 }
 
 // getRoleServices retrieves all services assigned to a specific role.
@@ -131,7 +141,11 @@ func getRoleServices(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to retrieve role services", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("[roles] failed to close rows: %v", err)
+		}
+	}()
 
 	services := make([]models.Service, 0, 5)
 
@@ -153,7 +167,9 @@ func getRoleServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(services)
+	if err := json.NewEncoder(w).Encode(services); err != nil {
+		log.Printf("[roles] failed to encode response: %v", err)
+	}
 }
 
 // addRoleService links a service to a role.
@@ -178,14 +194,16 @@ func addRoleService(w http.ResponseWriter, r *http.Request) {
 	_, err = database.DB.Exec("INSERT OR IGNORE INTO role_services (role_id, service_id) VALUES (?, ?)",
 		roleID, req.ServiceID)
 	if err != nil {
-		log.Printf("[roles] add service failed for role %d and service %d: database error (Role: %d, Svc: %d). %v", roleID, req.ServiceID, err)
+		log.Printf("[roles] add service failed for role %d and service %d: database error - %v", roleID, req.ServiceID, err)
 		http.Error(w, "Failed to link service to role (check if IDs exist)", http.StatusBadRequest)
 		return
 	}
 
 	log.Printf("[roles] added service %d to role %d successfully", req.ServiceID, roleID)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Service added to role successfully"))
+	if _, err := w.Write([]byte("Service added to role successfully")); err != nil {
+		log.Printf("[roles] failed to write response: %v", err)
+	}
 }
 
 // removeRoleService unlinks a service from a role.
@@ -206,12 +224,14 @@ func removeRoleService(w http.ResponseWriter, r *http.Request) {
 
 	_, err = database.DB.Exec("DELETE FROM role_services WHERE role_id = ? AND service_id = ?", roleID, svcID)
 	if err != nil {
-		log.Printf("[roles] remove service failed for role %d and service %d: database error (Role: %d, Svc: %d). %v", roleID, svcID, err)
+		log.Printf("[roles] remove service failed for role %d and service %d: database error - %v", roleID, svcID, err)
 		http.Error(w, "Failed to remove service from role", http.StatusInternalServerError)
 		return
 	}
 
 	log.Printf("[roles] removed service %d from role %d successfully", svcID, roleID)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Service removed from role successfully"))
+	if _, err := w.Write([]byte("Service removed from role successfully")); err != nil {
+		log.Printf("[roles] failed to write response: %v", err)
+	}
 }

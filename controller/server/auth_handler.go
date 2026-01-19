@@ -83,7 +83,9 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[auth] login successful for user '%s'", creds.Username)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Logged in successfully"))
+	if _, err := w.Write([]byte("Logged in successfully")); err != nil {
+		log.Printf("[auth] failed to write response: %v", err)
+	}
 }
 
 // Logout clears the auth cookie.
@@ -105,7 +107,9 @@ func logout(w http.ResponseWriter, r *http.Request) {
 		log.Println("Logout called (no active user context found)")
 	}
 
-	w.Write([]byte("Logged out successfully"))
+	if _, err := w.Write([]byte("Logged out successfully")); err != nil {
+		log.Printf("[auth] failed to write response: %v", err)
+	}
 }
 
 // updatePassword changes a user's password after verifying the old one.
@@ -171,5 +175,7 @@ func updatePassword(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[auth] password updated successfully for user '%s'", username)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Password updated successfully"))
+	if _, err := w.Write([]byte("Password updated successfully")); err != nil {
+		log.Printf("[auth] failed to write response: %v", err)
+	}
 }
