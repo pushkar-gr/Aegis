@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// GetMyServices returns ALL services the user has permission to see (Role + Extra).
-// This is the "Catalog" view.
+// getMyServices returns all services the user can access (role-based plus extra assigned services).
+// Response: 200 OK with service list | 401 Unauthorized | 500 Internal Server Error
 func getMyServices(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -35,7 +35,7 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 		WHERE ues.user_id = ?`, roleID, userID)
 
 	if err != nil {
-		log.Printf("GetMyServices: DB Error for User %d: %v", userID, err)
+		log.Printf("[dashboard] get my services failed for user ID %d: database error - %v", userID, err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -73,7 +73,7 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 		ORDER BY uas.updated_at DESC`, userID)
 
 	if err != nil {
-		log.Printf("GetMyActiveServices: DB Error: %v", err)
+		log.Printf("[dashboard] get active services failed: database error - %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -120,7 +120,7 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden: You do not have access to this service", http.StatusForbidden)
 		return
 	} else if err != nil {
-		log.Printf("SelectActiveService: Perm check failed: %v", err)
+		log.Printf("[dashboard] select service failed: permission check error - %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -128,7 +128,7 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 	_, err = database.DB.Exec("INSERT OR REPLACE INTO user_active_services (user_id, service_id, updated_at) VALUES (?, ?, ?)",
 		userID, req.ServiceID, time.Now())
 	if err != nil {
-		log.Printf("SelectActiveService: DB Write failed: %v", err)
+		log.Printf("[dashboard] select service failed: database write error - %v", err)
 		http.Error(w, "Failed to update active status", http.StatusInternalServerError)
 		return
 	}
@@ -153,7 +153,7 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 
 	_, err = database.DB.Exec("DELETE FROM user_active_services WHERE user_id = ? AND service_id = ?", userID, svcID)
 	if err != nil {
-		log.Printf("DeselectActiveService: DB Error: %v", err)
+		log.Printf("[dashboard] deselect service failed: database error - %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}

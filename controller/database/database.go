@@ -22,78 +22,68 @@ var (
 	stmtUpdatePassword     *sql.Stmt
 )
 
-// InitDB initializes the database directory, opens the connection, sets performance pragmas,
-// and ensures all necessary tables and seed data exist.
+// InitDB sets up the database connection and prepares frequently used statements.
+// This includes enabling WAL mode for better performance and preparing queries for login, user lookup, and password updates.
 func InitDB() {
 	var err error
 
-	// Ensure the data directory exists.
 	if _, err := os.Stat(DB_DIR); os.IsNotExist(err) {
-		log.Fatal("Error: Database directory './data' does not exist. Please create it.")
+		log.Fatalf("[database] init failed: data directory '%s' does not exist", DB_DIR)
 	}
 	dbPath := filepath.Join(DB_DIR, "aegis.db")
 
-	// 2. Check for Database File
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		log.Fatal("Error: 'aegis.db' not found. Please download it from the repo.")
+		log.Fatalf("[database] init failed: aegis.db not found at %s", dbPath)
 	}
 
-	// Open the SQLite database.
 	DB, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
-		log.Fatal("Failed to open database: ", err)
+		log.Fatalf("[database] init failed: unable to open database: %v", err)
 	}
 
-	// Enable Write-Ahead Logging (WAL) for better concurrency and performance.
 	if _, err := DB.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		log.Println("Warning: Failed to enable WAL mode:", err)
+		log.Printf("[database] warning: WAL mode not enabled: %v", err)
 	}
 
-	// Enforce foreign key constraints.
 	if _, err := DB.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		log.Fatal("Failed to enable foreign keys: ", err)
+		log.Fatalf("[database] init failed: unable to enable foreign keys: %v", err)
 	}
 
-	// Configure connection pooling settings.
-	DB.SetMaxOpenConns(1) // SQLite supports only one writer at a time.
+	DB.SetMaxOpenConns(1)
 	DB.SetMaxIdleConns(1)
 	DB.SetConnMaxLifetime(time.Hour)
 
-	// Prepare frequently used statements
 	stmtGetUserCredentials, err = DB.Prepare("SELECT password, is_active FROM users WHERE username = ?")
 	if err != nil {
-		log.Fatal("Failed to prepare stmtGetUserCredentials: ", err)
+		log.Fatalf("[database] init failed: unable to prepare user credentials query: %v", err)
 	}
 
 	stmtGetUserIDAndRole, err = DB.Prepare("SELECT id, role_id FROM users WHERE username = ?")
 	if err != nil {
-		log.Fatal("Failed to prepare stmtGetUserIDAndRole: ", err)
+		log.Fatalf("[database] init failed: unable to prepare user ID query: %v", err)
 	}
 
 	stmtUpdatePassword, err = DB.Prepare("UPDATE users SET password = ? WHERE username = ?")
 	if err != nil {
-		log.Fatal("Failed to prepare stmtUpdatePassword: ", err)
+		log.Fatalf("[database] init failed: unable to prepare password update query: %v", err)
 	}
 
-	log.Println("Database successfully initialized at", dbPath)
+	log.Printf("[database] initialized successfully at %s", dbPath)
 }
 
-// GetUserCredentials retrieves password hash and active status for a user.
-// Used during login authentication.
+// GetUserCredentials fetches the password hash and active status for login authentication.
 func GetUserCredentials(username string) (passwordHash string, isActive bool, err error) {
 	err = stmtGetUserCredentials.QueryRow(username).Scan(&passwordHash, &isActive)
 	return
 }
 
-// GetUserIDAndRole retrieves user ID and role ID for a given username.
-// Used in dashboard and user context resolution.
+// GetUserIDAndRole fetches the user ID and role ID for context resolution in requests.
 func GetUserIDAndRole(username string) (id int, roleID int, err error) {
 	err = stmtGetUserIDAndRole.QueryRow(username).Scan(&id, &roleID)
 	return
 }
 
-// UpdateUserPassword updates a user's password hash.
-// Used in password change operations.
+// UpdateUserPassword changes a user's password hash and returns the number of affected rows.
 func UpdateUserPassword(username, newPasswordHash string) (int64, error) {
 	result, err := stmtUpdatePassword.Exec(newPasswordHash, username)
 	if err != nil {
@@ -102,8 +92,7 @@ func UpdateUserPassword(username, newPasswordHash string) (int64, error) {
 	return result.RowsAffected()
 }
 
-// GetPasswordHash retrieves only the password hash for a user.
-// Used in password verification operations.
+// GetPasswordHash retrieves the password hash for verifying the current password.
 func GetPasswordHash(username string) (string, error) {
 	var hash string
 	err := DB.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&hash)

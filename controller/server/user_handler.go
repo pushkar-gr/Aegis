@@ -12,18 +12,16 @@ import (
 	"strconv"
 )
 
-// UsernameRE enforces 5-30 char alphanumeric usernames.
 var UsernameRE = regexp.MustCompile("^[a-zA-Z0-9_]{5,30}$")
 
-// GetUsers retrieves all users from the database.
-// Input:  None
-// Output: 200 OK (JSON list of users) | 500 Internal Error
+// getUsers retrieves all users from the database.
+// Response: 200 OK with user list | 500 Internal Server Error
 func getUsers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	rows, err := database.DB.Query("SELECT id, username, role_id, is_active FROM users")
 	if err != nil {
-		log.Printf("GetUsers: DB query failed. %v", err)
+		log.Printf("[users] get all failed: database query error - %v", err)
 		http.Error(w, "Failed to retrieve users", http.StatusInternalServerError)
 		return
 	}
@@ -32,52 +30,55 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	users := make([]models.User, 0, 10)
 	for rows.Next() {
 		var u models.User
-
 		if err := rows.Scan(&u.Id, &u.Username, &u.RoleId, &u.IsActive); err != nil {
-			log.Printf("GetUsers: Error scanning row. %v", err)
+			log.Printf("[users] get all: row scan error - %v", err)
 			continue
 		}
 		users = append(users, u)
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Printf("GetUsers: Error iterating rows. %v", err)
+		log.Printf("[users] get all failed: row iteration error - %v", err)
 		http.Error(w, "Error processing users", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("[users] retrieved %d users successfully", len(users))
 	json.NewEncoder(w).Encode(users)
 }
 
-// CreateUser adds a new user with a hashed password.
-// Input:  {"credentials": {"username": "...", "password": "..."}, "role_id": 1}
-// Output: 201 Created (JSON User) | 400 Bad Request | 409 Conflict
+// createUser adds a new user with a hashed password.
+// Request: {"credentials": {"username": "jdoe", "password": "secret"}, "role_id": 1}
+// Response: 201 Created with user details | 400 Bad Request | 409 Conflict
 func createUser(w http.ResponseWriter, r *http.Request) {
 	var newUser models.UserWithCredentials
 	if err := json.NewDecoder(r.Body).Decode(&newUser); err != nil {
-		log.Printf("CreateUser: Invalid JSON body. %v", err)
+		log.Printf("[users] create failed: invalid request body - %v", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
 	if !UsernameRE.MatchString(newUser.Credentials.Username) {
+		log.Printf("[users] create failed: invalid username format '%s'", newUser.Credentials.Username)
 		http.Error(w, "Invalid username format", http.StatusBadRequest)
 		return
 	}
 
 	if err := utils.ValidatePasswordComplexity(newUser.Credentials.Password); err != nil {
+		log.Printf("[users] create failed for '%s': weak password", newUser.Credentials.Username)
 		http.Error(w, "Password too weak: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if newUser.RoleId == 0 {
+		log.Printf("[users] create failed for '%s': missing role_id", newUser.Credentials.Username)
 		http.Error(w, "User role_id is required", http.StatusBadRequest)
 		return
 	}
 
 	hashedPwd, err := utils.HashPassword(newUser.Credentials.Password)
 	if err != nil {
-		log.Printf("CreateUser: Error hashing password for '%s'. %v", newUser.Credentials.Username, err)
+		log.Printf("[users] create failed for '%s': password hashing error - %v", newUser.Credentials.Username, err)
 		http.Error(w, "Internal server error processing credentials", http.StatusInternalServerError)
 		return
 	}
@@ -85,7 +86,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	result, err := database.DB.Exec("INSERT INTO users (username, password, role_id) VALUES (?, ?, ?)",
 		newUser.Credentials.Username, hashedPwd, newUser.RoleId)
 	if err != nil {
-		log.Printf("CreateUser: Insert failed for '%s'. %v", newUser.Credentials.Username, err)
+		log.Printf("[users] create failed for '%s': database insert error - %v", newUser.Credentials.Username, err)
 		http.Error(w, "Error creating user (name must be unique)", http.StatusConflict)
 		return
 	}
@@ -94,7 +95,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		newUser.Id = int(id)
 	}
 
-	log.Printf("CreateUser: User '%s' created (ID: %d)", newUser.Credentials.Username, newUser.Id)
+	log.Printf("[users] created user '%s' successfully with ID %d", newUser.Credentials.Username, newUser.Id)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	newUser.Credentials.Password = ""
@@ -113,18 +114,18 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 
 	res, err := database.DB.Exec("DELETE FROM users WHERE id = ?", id)
 	if err != nil {
-		log.Printf("DeleteUser: DB execution failed for ID %d. %v", id, err)
+		log.Printf("[users] delete failed for ID %d: database error for ID %d. %v", id, err)
 		http.Error(w, "Failed to delete user", http.StatusInternalServerError)
 		return
 	}
 
 	if rows, _ := res.RowsAffected(); rows == 0 {
-		log.Printf("DeleteUser: ID %d not found", id)
+		log.Printf("[users] delete failed: user ID %d not found", id)
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	log.Printf("DeleteUser: User ID %d deleted", id)
+	log.Printf("[users] deleted user ID %d successfully", id)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("User deleted successfully"))
 }
@@ -143,25 +144,25 @@ func updateUserRole(w http.ResponseWriter, r *http.Request) {
 		RoleId int `json:"role_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("UpdateUserRole: Invalid JSON body. %v", err)
+		log.Printf("[users] update role failed: invalid request body. %v", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
 	res, err := database.DB.Exec("UPDATE users SET role_id = ? WHERE id = ?", req.RoleId, id)
 	if err != nil {
-		log.Printf("UpdateUserRole: DB execution failed for ID %d. %v", id, err)
+		log.Printf("[users] update role failed for ID %d: database error for ID %d. %v", id, err)
 		http.Error(w, "Failed to update user role", http.StatusInternalServerError)
 		return
 	}
 
 	if rows, _ := res.RowsAffected(); rows == 0 {
-		log.Printf("UpdateUserRole: ID %d not found", id)
+		log.Printf("[users] update role failed: user ID %d not found", id)
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	log.Printf("UpdateUserRole: User ID %d role updated to %d", id, req.RoleId)
+	log.Printf("[users] updated role for user ID %d to role %d successfully", id, req.RoleId)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("User role updated successfully"))
 }
@@ -180,7 +181,7 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("ResetUserPassword: Invalid JSON body. %v", err)
+		log.Printf("[users] reset password failed: invalid request body. %v", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
@@ -192,25 +193,25 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
-		log.Printf("ResetUserPassword: Error hashing password for ID %d. %v", id, err)
+		log.Printf("[users] reset password failed for ID %d: hashing error for ID %d. %v", id, err)
 		http.Error(w, "Internal server error processing credentials", http.StatusInternalServerError)
 		return
 	}
 
 	res, err := database.DB.Exec("UPDATE users SET password = ? WHERE id = ?", hashedPassword, id)
 	if err != nil {
-		log.Printf("ResetUserPassword: DB execution failed for ID %d. %v", id, err)
+		log.Printf("[users] reset password failed for ID %d: database error for ID %d. %v", id, err)
 		http.Error(w, "Failed to reset user password", http.StatusInternalServerError)
 		return
 	}
 
 	if rows, _ := res.RowsAffected(); rows == 0 {
-		log.Printf("ResetUserPassword: ID %d not found", id)
+		log.Printf("[users] reset password failed: user ID %d not found", id)
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	log.Printf("ResetUserPassword: Password reset for User ID %d", id)
+	log.Printf("[users] reset password successfully for user ID %d", id)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("User password reset successfully"))
 }
@@ -234,7 +235,7 @@ func getUserServices(w http.ResponseWriter, r *http.Request) {
 		JOIN user_extra_services ues ON s.id = ues.service_id
 		WHERE ues.user_id = ?`, userID)
 	if err != nil {
-		log.Printf("GetUserServices: DB query failed for User %d. %v", userID, err)
+		log.Printf("[users] get services failed for user ID %d: database query error for User %d. %v", userID, err)
 		http.Error(w, "Failed to retrieve user services", http.StatusInternalServerError)
 		return
 	}
@@ -248,7 +249,7 @@ func getUserServices(w http.ResponseWriter, r *http.Request) {
 		var desc sql.NullString
 
 		if err := rows.Scan(&s.Id, &s.Name, &s.IpPort, &desc, &s.CreatedAt); err != nil {
-			log.Printf("GetUserServices: Error scanning row. %v", err)
+			log.Printf("[users] get services: row scan error. %v", err)
 			continue
 		}
 		s.Description = desc.String
@@ -256,7 +257,7 @@ func getUserServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Printf("GetUserServices: Error iterating rows. %v", err)
+		log.Printf("[users] get services failed: row iteration error. %v", err)
 		http.Error(w, "Error processing services", http.StatusInternalServerError)
 		return
 	}
@@ -278,7 +279,7 @@ func addUserService(w http.ResponseWriter, r *http.Request) {
 		ServiceID int `json:"service_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("AddUserService: JSON decode failed. %v", err)
+		log.Printf("[users] add service failed: invalid request body. %v", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
@@ -287,12 +288,12 @@ func addUserService(w http.ResponseWriter, r *http.Request) {
 	_, err = database.DB.Exec("INSERT OR IGNORE INTO user_extra_services (user_id, service_id) VALUES (?, ?)",
 		userID, req.ServiceID)
 	if err != nil {
-		log.Printf("AddUserService: DB link failed (User: %d, Svc: %d). %v", userID, req.ServiceID, err)
+		log.Printf("[users] add service failed for user %d and service %d: database error (User: %d, Svc: %d). %v", userID, req.ServiceID, err)
 		http.Error(w, "Failed to assign service to user (check if IDs exist)", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("AddUserService: Assigned extra service %d to user %d", req.ServiceID, userID)
+	log.Printf("[users] added service %d to user %d successfully", req.ServiceID, userID)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Service assigned to user successfully"))
 }
@@ -316,15 +317,15 @@ func removeUserService(w http.ResponseWriter, r *http.Request) {
 	// Delete from user_extra_services only
 	res, err := database.DB.Exec("DELETE FROM user_extra_services WHERE user_id = ? AND service_id = ?", userID, svcID)
 	if err != nil {
-		log.Printf("RemoveUserService: DB unlink failed (User: %d, Svc: %d). %v", userID, svcID, err)
+		log.Printf("[users] remove service failed for user %d and service %d: database error - %v", userID, svcID, err)
 		http.Error(w, "Failed to remove service from user", http.StatusInternalServerError)
 		return
 	}
 
 	if rows, _ := res.RowsAffected(); rows == 0 {
-		log.Printf("RemoveUserService: No assignment found for User %d, Svc %d", userID, svcID)
+		log.Printf("[users] remove service: no assignment found for user %d and service %d", userID, svcID)
 	} else {
-		log.Printf("RemoveUserService: Removed extra service %d from user %d", svcID, userID)
+		log.Printf("[users] removed service %d from user %d successfully", svcID, userID)
 	}
 
 	w.WriteHeader(http.StatusOK)
