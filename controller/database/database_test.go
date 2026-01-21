@@ -1,7 +1,6 @@
 package database
 
 import (
-	"Aegis/controller/internal/models"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -10,9 +9,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// setupTestDB creates a temporary test database
 func setupTestDB(t *testing.T) func() {
-	// Create a temporary directory for testing
 	tempDir := filepath.Join(os.TempDir(), "aegis-test-"+t.Name())
 	err := os.MkdirAll(tempDir, 0755)
 	if err != nil {
@@ -20,70 +17,77 @@ func setupTestDB(t *testing.T) func() {
 	}
 	testDBPath := filepath.Join(tempDir, "test_aegis.db")
 
-	// Open test database
 	DB, err = sql.Open("sqlite3", testDBPath)
 	if err != nil {
 		t.Fatalf("Failed to open test database: %v", err)
 	}
 
-	// Enable WAL mode
 	if _, err := DB.Exec("PRAGMA journal_mode=WAL;"); err != nil {
 		t.Logf("Warning: Failed to enable WAL mode: %v", err)
 	}
 
-	// Configure connection pooling
 	DB.SetMaxOpenConns(1)
 	DB.SetMaxIdleConns(1)
 
-	// Enable foreign keys
 	if _, err := DB.Exec("PRAGMA foreign_keys = ON;"); err != nil {
 		t.Fatalf("Failed to enable foreign keys: %v", err)
 	}
 
-	// Create roles table
 	createRolesTable := `
-		CREATE TABLE IF NOT EXISTS roles (
-			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			"name" TEXT NOT NULL UNIQUE,
-			"description" TEXT
-		);`
+CREATE TABLE IF NOT EXISTS roles (
+"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+"name" TEXT NOT NULL UNIQUE,
+"description" TEXT
+);`
 	if _, err := DB.Exec(createRolesTable); err != nil {
 		t.Fatalf("Failed to create roles table: %v", err)
 	}
 
-	// Seed roles
 	seedRoles := `INSERT OR IGNORE INTO roles (name, description) VALUES 
-		('admin', 'Administrator with full access'),
-		('user', 'Standard user access');`
+('admin', 'Administrator with full access'),
+('user', 'Standard user access'),
+('root', 'Root access');`
 	if _, err := DB.Exec(seedRoles); err != nil {
 		t.Fatalf("Failed to seed roles: %v", err)
 	}
 
-	// Create users table
 	createUsersTable := `
-		CREATE TABLE IF NOT EXISTS users (
-			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			"username" TEXT NOT NULL UNIQUE,
-			"password" TEXT NOT NULL,
-			"role_id" INTEGER NOT NULL DEFAULT 2,
-			FOREIGN KEY(role_id) REFERENCES roles(id)
-		);`
+CREATE TABLE IF NOT EXISTS users (
+"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+"username" TEXT NOT NULL UNIQUE,
+"password" TEXT NOT NULL,
+"role_id" INTEGER NOT NULL DEFAULT 2,
+"is_active" INTEGER NOT NULL DEFAULT 1,
+FOREIGN KEY(role_id) REFERENCES roles(id)
+);`
 	if _, err := DB.Exec(createUsersTable); err != nil {
 		t.Fatalf("Failed to create users table: %v", err)
 	}
 
-	// Prepare the user creation statement
-	createUserStmt, err = DB.Prepare(`
-		INSERT INTO users (username, password, role_id) 
-		VALUES (?, ?, (SELECT id FROM roles WHERE name = ?));`)
+	stmtGetUserCredentials, err = DB.Prepare("SELECT password, is_active FROM users WHERE username = ?")
 	if err != nil {
-		t.Fatalf("Failed to prepare create user statement: %v", err)
+		t.Fatalf("Failed to prepare stmtGetUserCredentials: %v", err)
 	}
 
-	// Return cleanup function
+	stmtGetUserIDAndRole, err = DB.Prepare("SELECT id, role_id FROM users WHERE username = ?")
+	if err != nil {
+		t.Fatalf("Failed to prepare stmtGetUserIDAndRole: %v", err)
+	}
+
+	stmtUpdatePassword, err = DB.Prepare("UPDATE users SET password = ? WHERE username = ?")
+	if err != nil {
+		t.Fatalf("Failed to prepare stmtUpdatePassword: %v", err)
+	}
+
 	return func() {
-		if createUserStmt != nil {
-			_ = createUserStmt.Close()
+		if stmtGetUserCredentials != nil {
+			_ = stmtGetUserCredentials.Close()
+		}
+		if stmtGetUserIDAndRole != nil {
+			_ = stmtGetUserIDAndRole.Close()
+		}
+		if stmtUpdatePassword != nil {
+			_ = stmtUpdatePassword.Close()
 		}
 		if DB != nil {
 			_ = DB.Close()
@@ -92,205 +96,133 @@ func setupTestDB(t *testing.T) func() {
 	}
 }
 
-func TestCreateUser(t *testing.T) {
+func TestGetUserCredentials(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tests := []struct {
-		name        string
-		user        models.User
-		shouldError bool
-	}{
-		{
-			name: "Create admin user",
-			user: models.User{
-				Creds: models.Credentials{
-					Username: "admin1",
-					Password: "hashed_password_1",
-				},
-				Role: "admin",
-			},
-			shouldError: false,
-		},
-		{
-			name: "Create regular user",
-			user: models.User{
-				Creds: models.Credentials{
-					Username: "user1",
-					Password: "hashed_password_2",
-				},
-				Role: "user",
-			},
-			shouldError: false,
-		},
-		{
-			name: "Create user with invalid role",
-			user: models.User{
-				Creds: models.Credentials{
-					Username: "user2",
-					Password: "hashed_password_3",
-				},
-				Role: "invalid_role",
-			},
-			shouldError: true,
-		},
-	}
+	testUsername := "testuser"
+	testPassword := "hashed_password_123"
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := CreateUser(tt.user)
-			if tt.shouldError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
-			}
-		})
-	}
-}
-
-func TestCreateUserDuplicate(t *testing.T) {
-	cleanup := setupTestDB(t)
-	defer cleanup()
-
-	user := models.User{
-		Creds: models.Credentials{
-			Username: "testuser",
-			Password: "hashed_password",
-		},
-		Role: "user",
-	}
-
-	// Create user first time - should succeed
-	err := CreateUser(user)
-	if err != nil {
-		t.Fatalf("Failed to create user: %v", err)
-	}
-
-	// Try to create the same user again - should fail
-	err = CreateUser(user)
-	if err == nil {
-		t.Error("Expected error when creating duplicate user, but got none")
-	}
-}
-
-func TestGetUser(t *testing.T) {
-	cleanup := setupTestDB(t)
-	defer cleanup()
-
-	// Create a test user
-	testUser := models.User{
-		Creds: models.Credentials{
-			Username: "getuser_test",
-			Password: "hashed_password_test",
-		},
-		Role: "admin",
-	}
-
-	err := CreateUser(testUser)
+	_, err := DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		testUsername, testPassword)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
-	// Test getting the user
-	retrievedUser, err := GetUser("getuser_test")
+	passwordHash, isActive, err := GetUserCredentials(testUsername)
 	if err != nil {
-		t.Errorf("Failed to get user: %v", err)
+		t.Errorf("GetUserCredentials failed: %v", err)
 	}
 
-	if retrievedUser.Creds.Username != testUser.Creds.Username {
-		t.Errorf("Expected username %s, got %s", testUser.Creds.Username, retrievedUser.Creds.Username)
+	if passwordHash != testPassword {
+		t.Errorf("Expected password %s, got %s", testPassword, passwordHash)
 	}
 
-	if retrievedUser.Creds.Password != testUser.Creds.Password {
-		t.Errorf("Expected password %s, got %s", testUser.Creds.Password, retrievedUser.Creds.Password)
-	}
-
-	if retrievedUser.Role != testUser.Role {
-		t.Errorf("Expected role %s, got %s", testUser.Role, retrievedUser.Role)
+	if !isActive {
+		t.Error("Expected user to be active")
 	}
 }
 
-func TestGetUserNotFound(t *testing.T) {
+func TestGetUserCredentialsNotFound(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	// Try to get a non-existent user
-	_, err := GetUser("nonexistent_user")
-	if err == nil {
-		t.Error("Expected error when getting non-existent user, but got none")
-	}
+	_, _, err := GetUserCredentials("nonexistent_user")
 	if err != sql.ErrNoRows {
 		t.Errorf("Expected sql.ErrNoRows, got %v", err)
 	}
 }
 
-func TestGetRole(t *testing.T) {
+func TestGetUserIDAndRole(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tests := []struct {
-		name         string
-		user         models.User
-		expectedRole string
-	}{
-		{
-			name: "Get admin role",
-			user: models.User{
-				Creds: models.Credentials{
-					Username: "admin_role_test",
-					Password: "hashed_password",
-				},
-				Role: "admin",
-			},
-			expectedRole: "admin",
-		},
-		{
-			name: "Get user role",
-			user: models.User{
-				Creds: models.Credentials{
-					Username: "user_role_test",
-					Password: "hashed_password",
-				},
-				Role: "user",
-			},
-			expectedRole: "user",
-		},
+	testUsername := "testuser2"
+
+	result, err := DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 1, 1)",
+		testUsername, "password")
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create the user
-			err := CreateUser(tt.user)
-			if err != nil {
-				t.Fatalf("Failed to create user: %v", err)
-			}
+	expectedID, _ := result.LastInsertId()
 
-			// Get the role
-			role, err := GetRole(tt.user.Creds.Username)
-			if err != nil {
-				t.Errorf("Failed to get role: %v", err)
-			}
+	id, roleID, err := GetUserIDAndRole(testUsername)
+	if err != nil {
+		t.Errorf("GetUserIDAndRole failed: %v", err)
+	}
 
-			if role != tt.expectedRole {
-				t.Errorf("Expected role %s, got %s", tt.expectedRole, role)
-			}
-		})
+	if int64(id) != expectedID {
+		t.Errorf("Expected user ID %d, got %d", expectedID, id)
+	}
+
+	if roleID != 1 {
+		t.Errorf("Expected role ID 1, got %d", roleID)
 	}
 }
 
-func TestGetRoleNotFound(t *testing.T) {
+func TestUpdateUserPassword(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	// Try to get role for non-existent user
-	_, err := GetRole("nonexistent_user")
-	if err == nil {
-		t.Error("Expected error when getting role for non-existent user, but got none")
+	testUsername := "testuser3"
+	oldPassword := "old_hashed_password"
+	newPassword := "new_hashed_password"
+
+	_, err := DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		testUsername, oldPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
 	}
+
+	rowsAffected, err := UpdateUserPassword(testUsername, newPassword)
+	if err != nil {
+		t.Errorf("UpdateUserPassword failed: %v", err)
+	}
+
+	if rowsAffected != 1 {
+		t.Errorf("Expected 1 row affected, got %d", rowsAffected)
+	}
+
+	var storedPassword string
+	err = DB.QueryRow("SELECT password FROM users WHERE username = ?", testUsername).Scan(&storedPassword)
+	if err != nil {
+		t.Fatalf("Failed to retrieve updated password: %v", err)
+	}
+
+	if storedPassword != newPassword {
+		t.Errorf("Expected password %s, got %s", newPassword, storedPassword)
+	}
+}
+
+func TestGetPasswordHash(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	testUsername := "testuser4"
+	testPassword := "hashed_password_456"
+
+	_, err := DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		testUsername, testPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	hash, err := GetPasswordHash(testUsername)
+	if err != nil {
+		t.Errorf("GetPasswordHash failed: %v", err)
+	}
+
+	if hash != testPassword {
+		t.Errorf("Expected password hash %s, got %s", testPassword, hash)
+	}
+}
+
+func TestGetPasswordHashNotFound(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	_, err := GetPasswordHash("nonexistent_user")
 	if err != sql.ErrNoRows {
 		t.Errorf("Expected sql.ErrNoRows, got %v", err)
 	}

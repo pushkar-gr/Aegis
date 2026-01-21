@@ -4,8 +4,17 @@ import "github.com/golang-jwt/jwt/v5"
 
 // User represents a system user entity, containing authentication credentials and an assigned role.
 type User struct {
-	Creds Credentials `json:"Creds"`
-	Role  string      `json:"role"`
+	Id       int    `json:"id"`
+	Username string `json:"username"`
+	RoleId   int    `json:"role_id"`
+	IsActive bool   `json:"is_active"`
+}
+
+type UserWithCredentials struct {
+	Id          int         `json:"id"`
+	Credentials Credentials `json:"credentials"`
+	RoleId      int         `json:"role_id"`
+	IsActive    bool        `json:"is_active"`
 }
 
 // Credentials holds the authentication payload (username and password) provided by the client.

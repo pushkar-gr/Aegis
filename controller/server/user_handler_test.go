@@ -1,130 +1,315 @@
 package server
 
 import (
-	"context"
+	"Aegis/controller/database"
+	"Aegis/controller/internal/models"
+	"Aegis/controller/internal/utils"
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
-func TestWelcome(t *testing.T) {
+func TestGetUsers(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	hashedPassword, _ := utils.HashPassword("TestPass123!")
+	_, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		"user1", hashedPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	w := httptest.NewRecorder()
+
+	getUsers(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var users []models.User
+	if err := json.NewDecoder(w.Body).Decode(&users); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if len(users) == 0 {
+		t.Error("Expected at least one user in response")
+	}
+}
+
+func TestCreateUser(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
 	tests := []struct {
 		name           string
-		contextValue   interface{}
-		setContext     bool
+		payload        models.UserWithCredentials
 		expectedStatus int
-		expectedBody   string
 	}{
 		{
-			name:           "Valid user in context",
-			contextValue:   "testuser",
-			setContext:     true,
-			expectedStatus: http.StatusOK,
-			expectedBody:   "Welcome, testuser! This is a protected route.",
+			name: "Successful user creation",
+			payload: models.UserWithCredentials{
+				Credentials: models.Credentials{
+					Username: "newuser",
+					Password: "ValidPass123!",
+				},
+				RoleId: 2,
+			},
+			expectedStatus: http.StatusCreated,
 		},
 		{
-			name:           "Different username",
-			contextValue:   "anotheruser",
-			setContext:     true,
-			expectedStatus: http.StatusOK,
-			expectedBody:   "Welcome, anotheruser! This is a protected route.",
+			name: "Invalid username format",
+			payload: models.UserWithCredentials{
+				Credentials: models.Credentials{
+					Username: "ab",
+					Password: "ValidPass123!",
+				},
+				RoleId: 2,
+			},
+			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:           "Missing context",
-			contextValue:   nil,
-			setContext:     false,
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "Internal server error: user context missing\n",
+			name: "Weak password",
+			payload: models.UserWithCredentials{
+				Credentials: models.Credentials{
+					Username: "validuser",
+					Password: "weak",
+				},
+				RoleId: 2,
+			},
+			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:           "Invalid context type",
-			contextValue:   123, // Not a string
-			setContext:     true,
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "Internal server error: user context missing\n",
+			name: "Missing role_id",
+			payload: models.UserWithCredentials{
+				Credentials: models.Credentials{
+					Username: "validuser2",
+					Password: "ValidPass123!",
+				},
+				RoleId: 0,
+			},
+			expectedStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/welcome", nil)
+			body, _ := json.Marshal(tt.payload)
+			req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
 
-			// Set context if needed
-			if tt.setContext {
-				ctx := context.WithValue(req.Context(), UserKey, tt.contextValue)
-				req = req.WithContext(ctx)
+			createUser(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
 			}
 
-			rr := httptest.NewRecorder()
-			Welcome(rr, req)
-
-			if rr.Code != tt.expectedStatus {
-				t.Errorf("Expected status %d, got %d", tt.expectedStatus, rr.Code)
-			}
-
-			if rr.Body.String() != tt.expectedBody {
-				t.Errorf("Expected body %q, got %q", tt.expectedBody, rr.Body.String())
+			if tt.expectedStatus == http.StatusCreated {
+				var user models.UserWithCredentials
+				if err := json.NewDecoder(w.Body).Decode(&user); err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
+				if user.Id == 0 {
+					t.Error("Expected user ID to be set")
+				}
 			}
 		})
 	}
 }
 
-func TestWelcomeXSSProtection(t *testing.T) {
-	// Test that HTML/JS in username is escaped
-	maliciousUsername := "<script>alert('xss')</script>"
+func TestCreateUserDuplicate(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
 
-	req := httptest.NewRequest(http.MethodGet, "/welcome", nil)
-	ctx := context.WithValue(req.Context(), UserKey, maliciousUsername)
-	req = req.WithContext(ctx)
-
-	rr := httptest.NewRecorder()
-	Welcome(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
+	hashedPassword, _ := utils.HashPassword("TestPass123!")
+	_, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		"existinguser", hashedPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
 	}
 
-	body := rr.Body.String()
-
-	// Check that the malicious script is escaped
-	if strings.Contains(body, "<script>") {
-		t.Error("XSS vulnerability: script tag not escaped")
+	payload := models.UserWithCredentials{
+		Credentials: models.Credentials{
+			Username: "existinguser",
+			Password: "ValidPass123!",
+		},
+		RoleId: 2,
 	}
 
-	// Check that the escaped version is present
-	if !strings.Contains(body, "&lt;script&gt;") {
-		t.Error("Expected HTML-escaped username in response")
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	createUser(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("Expected status %d for duplicate user, got %d", http.StatusConflict, w.Code)
 	}
 }
 
-func TestWelcomeSpecialCharacters(t *testing.T) {
-	specialUsernames := []string{
-		"user&name",
-		"user<name>",
-		"user\"name",
-		"user'name",
-		"user@example.com",
+func TestDeleteUser(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	hashedPassword, _ := utils.HashPassword("TestPass123!")
+	result, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		"deleteuser", hashedPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+	userID, _ := result.LastInsertId()
+
+	tests := []struct {
+		name           string
+		userID         string
+		expectedStatus int
+	}{
+		{
+			name:           "Successful deletion",
+			userID:         "1",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Non-existent user",
+			userID:         "99999",
+			expectedStatus: http.StatusNotFound,
+		},
+		{
+			name:           "Invalid user ID",
+			userID:         "invalid",
+			expectedStatus: http.StatusBadRequest,
+		},
 	}
 
-	for _, username := range specialUsernames {
-		t.Run("Username_"+username, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/welcome", nil)
-			ctx := context.WithValue(req.Context(), UserKey, username)
-			req = req.WithContext(ctx)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodDelete, "/api/users/"+tt.userID, nil)
+			req.SetPathValue("id", tt.userID)
+			w := httptest.NewRecorder()
 
-			rr := httptest.NewRecorder()
-			Welcome(rr, req)
+			deleteUser(w, req)
 
-			if rr.Code != http.StatusOK {
-				t.Errorf("Expected status %d, got %d", http.StatusOK, rr.Code)
-			}
-
-			// Ensure response contains some form of the username (escaped or not)
-			body := rr.Body.String()
-			if !strings.Contains(body, "Welcome") {
-				t.Error("Response should contain welcome message")
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
 			}
 		})
 	}
+
+	_ = userID
+}
+
+func TestUpdateUserRole(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	hashedPassword, _ := utils.HashPassword("TestPass123!")
+	result, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		"roleuser", hashedPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+	userID, _ := result.LastInsertId()
+
+	tests := []struct {
+		name           string
+		userID         string
+		newRoleID      int
+		expectedStatus int
+	}{
+		{
+			name:           "Successful role update",
+			userID:         "1",
+			newRoleID:      1,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Invalid user ID",
+			userID:         "invalid",
+			newRoleID:      1,
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := map[string]int{"role_id": tt.newRoleID}
+			body, _ := json.Marshal(payload)
+			req := httptest.NewRequest(http.MethodPut, "/api/users/"+tt.userID+"/role", bytes.NewReader(body))
+			req.SetPathValue("id", tt.userID)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			updateUserRole(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+		})
+	}
+
+	_ = userID
+}
+
+func TestResetUserPassword(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	hashedPassword, _ := utils.HashPassword("TestPass123!")
+	result, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		"resetuser", hashedPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+	userID, _ := result.LastInsertId()
+
+	tests := []struct {
+		name           string
+		userID         string
+		newPassword    string
+		expectedStatus int
+	}{
+		{
+			name:           "Successful password reset",
+			userID:         "1",
+			newPassword:    "NewValidPass123!",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Weak password",
+			userID:         "1",
+			newPassword:    "weak",
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Invalid user ID",
+			userID:         "invalid",
+			newPassword:    "NewValidPass123!",
+			expectedStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := map[string]string{"password": tt.newPassword}
+			body, _ := json.Marshal(payload)
+			req := httptest.NewRequest(http.MethodPost, "/api/users/"+tt.userID+"/reset-password", bytes.NewReader(body))
+			req.SetPathValue("id", tt.userID)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			resetUserPassword(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+		})
+	}
+
+	_ = userID
 }

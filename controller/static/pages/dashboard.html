@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Aegis Controller</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <div class="text-white text-xl font-bold">Aegis</div>
+                    <div class="ml-10 flex items-baseline space-x-4" id="navigation"></div>
+                </div>
+                <div id="profileSection"></div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div class="px-4 py-6 sm:px-0">
+            <h1 class="text-3xl font-bold mb-6">Service Dashboard</h1>
+            
+            <!-- Tabs -->
+            <div class="mb-6">
+                <div class="border-b border-gray-200">
+                    <nav class="-mb-px flex space-x-8">
+                        <button onclick="switchTab('all')" id="tabAll"
+                            class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                            All Services
+                        </button>
+                        <button onclick="switchTab('selected')" id="tabSelected"
+                            class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                            Selected Services
+                        </button>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Search Box -->
+            <div class="mb-6">
+                <input type="text" id="searchBox" placeholder="Search services..."
+                    class="w-full max-w-md px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <!-- Services List -->
+            <div id="servicesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden text-center py-12">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No services found</h3>
+                <p class="mt-1 text-sm text-gray-500">No services available or selected.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/components.js"></script>
+    <script>
+        let currentTab = 'all';
+        let allServices = [];
+        let selectedServices = [];
+        let searchQuery = '';
+        let countdownIntervals = {};
+
+        // Check authentication
+        if (!requireAuth()) {
+            // Will redirect in requireAuth
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('navigation').innerHTML = createNavigation('dashboard.html');
+            document.getElementById('profileSection').innerHTML = createProfileDropdown();
+            
+            await loadServices();
+            switchTab('all');
+
+            // Search functionality
+            document.getElementById('searchBox').addEventListener('input', (e) => {
+                searchQuery = e.target.value.toLowerCase();
+                renderServices();
+            });
+
+            // Event delegation for service buttons
+            document.getElementById('servicesList').addEventListener('click', (e) => {
+                const button = e.target.closest('button[data-action]');
+                if (!button) return;
+                
+                const serviceId = parseInt(button.dataset.serviceId);
+                const action = button.dataset.action;
+                
+                if (action === 'toggle') {
+                    const isSelected = button.dataset.isSelected === 'true';
+                    toggleService(serviceId, isSelected);
+                } else if (action === 'deselect') {
+                    deselectService(serviceId);
+                }
+            });
+
+            // Auto-refresh selected services every 10 seconds to update from backend
+            setInterval(async () => {
+                if (currentTab === 'selected') {
+                    await loadSelectedServices();
+                    renderServices();
+                }
+            }, 10000);
+
+            // Update countdown every second
+            setInterval(() => {
+                if (currentTab === 'selected') {
+                    updateCountdowns();
+                }
+            }, 1000);
+        });
+
+        async function loadServices() {
+            try {
+                allServices = await API.getMyServices() || [];
+                await loadSelectedServices();
+            } catch (error) {
+                showToast('Failed to load services', 'error');
+            }
+        }
+
+        async function loadSelectedServices() {
+            try {
+                const services = await API.getMySelectedServices() || [];
+                // Calculate actual time left based on updated_at and time_left
+                selectedServices = services.map(service => {
+                    const updatedAt = new Date(service.updated_at);
+                    const now = new Date();
+                    const elapsedSeconds = Math.floor((now - updatedAt) / 1000);
+                    const actualTimeLeft = Math.max(0, service.time_left - elapsedSeconds);
+                    return {
+                        ...service,
+                        calculated_time_left: actualTimeLeft,
+                        last_update_time: now
+                    };
+                });
+            } catch (error) {
+                console.error('Failed to load selected services:', error);
+            }
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // Update tab styling
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('border-blue-500', 'text-blue-600');
+                btn.classList.add('border-transparent', 'text-gray-500');
+            });
+            
+            if (tab === 'all') {
+                document.getElementById('tabAll').classList.remove('border-transparent', 'text-gray-500');
+                document.getElementById('tabAll').classList.add('border-blue-500', 'text-blue-600');
+            } else {
+                document.getElementById('tabSelected').classList.remove('border-transparent', 'text-gray-500');
+                document.getElementById('tabSelected').classList.add('border-blue-500', 'text-blue-600');
+            }
+            
+            renderServices();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function renderServices() {
+            const container = document.getElementById('servicesList');
+            const emptyState = document.getElementById('emptyState');
+            
+            let services = currentTab === 'all' ? allServices : selectedServices;
+            
+            // Filter by search query
+            if (searchQuery) {
+                services = services.filter(s => 
+                    s.name.toLowerCase().includes(searchQuery) ||
+                    (s.description && s.description.toLowerCase().includes(searchQuery)) ||
+                    s.ip_port.toLowerCase().includes(searchQuery)
+                );
+            }
+            
+            if (services.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            
+            container.innerHTML = services.map(service => {
+                const isSelected = selectedServices.some(s => s.id === service.id);
+                const selectedService = selectedServices.find(s => s.id === service.id);
+                return `
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-lg font-semibold">${escapeHtml(service.name)}</h3>
+                            ${isSelected ? 
+                                '<span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Active</span>' : 
+                                '<span class="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">Inactive</span>'
+                            }
+                        </div>
+                        <p class="text-sm text-gray-600 mb-2">${escapeHtml(service.description || 'No description')}</p>
+                        <p class="text-sm text-gray-500 mb-3">
+                            <span class="font-medium">IP:Port:</span> ${escapeHtml(service.ip_port)}
+                        </p>
+                        ${currentTab === 'all' ? `
+                            <button data-service-id="${service.id}" data-is-selected="${isSelected}" data-action="toggle"
+                                class="${isSelected ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'} text-white px-4 py-2 rounded text-sm w-full">
+                                ${isSelected ? 'Deselect' : 'Select'}
+                            </button>
+                        ` : `
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-500" id="timer-${service.id}">
+                                    Time left: ${selectedService ? selectedService.calculated_time_left : 60}s
+                                </span>
+                                <button data-service-id="${service.id}" data-action="deselect"
+                                    class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm">
+                                    Remove
+                                </button>
+                            </div>
+                        `}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateCountdowns() {
+            selectedServices.forEach(service => {
+                const timerElement = document.getElementById(`timer-${service.id}`);
+                if (timerElement && service.calculated_time_left > 0) {
+                    service.calculated_time_left--;
+                    timerElement.textContent = `Time left: ${service.calculated_time_left}s`;
+                    
+                    // Auto-remove when time reaches 0
+                    if (service.calculated_time_left <= 0) {
+                        deselectService(service.id);
+                    }
+                }
+            });
+        }
+
+        async function toggleService(serviceId, isSelected) {
+            try {
+                if (isSelected) {
+                    await API.deselectService(serviceId);
+                    showToast('Service deselected', 'success');
+                } else {
+                    await API.selectService(serviceId);
+                    showToast('Service selected', 'success');
+                }
+                await loadSelectedServices();
+                renderServices();
+            } catch (error) {
+                showToast('Failed to update service', 'error');
+            }
+        }
+
+        async function deselectService(serviceId) {
+            try {
+                await API.deselectService(serviceId);
+                showToast('Service removed', 'success');
+                await loadSelectedServices();
+                renderServices();
+            } catch (error) {
+                showToast('Failed to remove service', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

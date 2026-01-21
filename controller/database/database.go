@@ -1,7 +1,6 @@
 package database
 
 import (
-	"Aegis/controller/internal/models"
 	"database/sql"
 	"log"
 	"os"
@@ -16,149 +15,109 @@ const DB_DIR = "./data"
 var (
 	// DB is the global database connection pool.
 	DB *sql.DB
-	// createUserStmt is a prepared statement for inserting new users.
-	createUserStmt *sql.Stmt
+
+	// Prepared statements for frequently used queries
+	stmtGetUserCredentials *sql.Stmt
+	stmtGetUserIDAndRole   *sql.Stmt
+	stmtUpdatePassword     *sql.Stmt
 )
 
-// InitDB initializes the database directory, opens the connection, sets performance pragmas,
-// and ensures all necessary tables and seed data exist.
+// InitDB sets up the database connection and prepares frequently used statements.
+// This includes enabling WAL mode for better performance and preparing queries for login, user lookup, and password updates.
 func InitDB() {
 	var err error
 
-	// Ensure the data directory exists.
 	if _, err := os.Stat(DB_DIR); os.IsNotExist(err) {
-		if err := os.Mkdir(DB_DIR, 0755); err != nil {
-			log.Fatal("Failed to create data directory: ", err)
-		}
+		log.Fatalf("[database] init failed: data directory '%s' does not exist", DB_DIR)
 	}
 	dbPath := filepath.Join(DB_DIR, "aegis.db")
 
-	// Open the SQLite database.
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		log.Fatalf("[database] init failed: aegis.db not found at %s", dbPath)
+	}
+
 	DB, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
-		log.Fatal("Failed to open database: ", err)
+		log.Fatalf("[database] init failed: unable to open database: %v", err)
 	}
 
-	// Enable Write-Ahead Logging (WAL) for better concurrency and performance.
 	if _, err := DB.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		log.Println("Warning: Failed to enable WAL mode:", err)
+		log.Printf("[database] warning: WAL mode not enabled: %v", err)
 	}
 
-	// Configure connection pooling settings.
-	DB.SetMaxOpenConns(1) // SQLite supports only one writer at a time.
+	if _, err := DB.Exec("PRAGMA foreign_keys = ON;"); err != nil {
+		log.Fatalf("[database] init failed: unable to enable foreign keys: %v", err)
+	}
+
+	DB.SetMaxOpenConns(1)
 	DB.SetMaxIdleConns(1)
 	DB.SetConnMaxLifetime(time.Hour)
 
-	// Enforce foreign key constraints.
-	if _, err := DB.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		log.Fatal("Failed to enable foreign keys: ", err)
-	}
-
-	// Create the roles table if it doesn't exist.
-	createRolesTable := `
-		CREATE TABLE IF NOT EXISTS roles (
-			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			"name" TEXT NOT NULL UNIQUE,
-			"description" TEXT
-		);`
-	if _, err := DB.Exec(createRolesTable); err != nil {
-		log.Fatal("Failed to create roles table: ", err)
-	}
-
-	// Seed default roles.
-	seedRoles := `INSERT OR IGNORE INTO roles (name, description) VALUES 
-		('admin', 'Administrator with full access'),
-		('user', 'Standard user access');`
-
-	if _, err := DB.Exec(seedRoles); err != nil {
-		log.Fatal("Failed to seed roles: ", err)
-	}
-
-	// Create the users table if it doesn't exist.
-	createUsersTable := `
-		CREATE TABLE IF NOT EXISTS users (
-			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-			"username" TEXT NOT NULL UNIQUE,
-			"password" TEXT NOT NULL,
-			"role_id" INTEGER NOT NULL DEFAULT 2,
-			FOREIGN KEY(role_id) REFERENCES roles(id)
-		);`
-
-	_, err = DB.Exec(createUsersTable)
+	stmtGetUserCredentials, err = DB.Prepare("SELECT password, is_active FROM users WHERE username = ?")
 	if err != nil {
-		log.Fatal("Failed to create users table: ", err)
+		log.Fatalf("[database] init failed: unable to prepare user credentials query: %v", err)
 	}
 
-	// Prepare the user creation statement for reuse.
-	createUserStmt, err = DB.Prepare(`
-		INSERT INTO users (username, password, role_id) 
-		VALUES (?, ?, (SELECT id FROM roles WHERE name = ?));`)
+	stmtGetUserIDAndRole, err = DB.Prepare("SELECT id, role_id FROM users WHERE username = ?")
 	if err != nil {
-		log.Fatal("Failed to prepare create user statement: ", err)
+		log.Fatalf("[database] init failed: unable to prepare user ID query: %v", err)
 	}
 
-	log.Println("Database successfully initialized at", dbPath)
+	stmtUpdatePassword, err = DB.Prepare("UPDATE users SET password = ? WHERE username = ?")
+	if err != nil {
+		log.Fatalf("[database] init failed: unable to prepare password update query: %v", err)
+	}
+
+	log.Printf("[database] initialized successfully at %s", dbPath)
 }
 
-// CreateUser inserts a new user into the database with the specified credentials and role.
-func CreateUser(user models.User) error {
-	_, err := createUserStmt.Exec(user.Creds.Username, user.Creds.Password, user.Role)
+// InitPreparedStatements prepares frequently used SQL statements for reuse.
+// This is exported for testing purposes.
+func InitPreparedStatements() error {
+	var err error
+
+	stmtGetUserCredentials, err = DB.Prepare("SELECT password, is_active FROM users WHERE username = ?")
 	if err != nil {
 		return err
 	}
+
+	stmtGetUserIDAndRole, err = DB.Prepare("SELECT id, role_id FROM users WHERE username = ?")
+	if err != nil {
+		return err
+	}
+
+	stmtUpdatePassword, err = DB.Prepare("UPDATE users SET password = ? WHERE username = ?")
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// GetUser retrieves the credentials and role for a given username.
-func GetUser(username string) (models.User, error) {
-	var user models.User
-
-	query := `
-		SELECT u.username, u.password, r.name 
-		FROM users u
-		INNER JOIN roles r ON u.role_id = r.id
-		WHERE u.username = ?`
-
-	err := DB.QueryRow(query, username).Scan(
-		&user.Creds.Username,
-		&user.Creds.Password,
-		&user.Role,
-	)
-
-	if err != nil {
-		return models.User{}, err
-	}
-
-	return user, nil
+// GetUserCredentials fetches the password hash and active status for login authentication.
+func GetUserCredentials(username string) (passwordHash string, isActive bool, err error) {
+	err = stmtGetUserCredentials.QueryRow(username).Scan(&passwordHash, &isActive)
+	return
 }
 
-// GetRole retrieves the role name associated with a specific username.
-func GetRole(username string) (string, error) {
-	var role string
-
-	query := `
-		SELECT r.name 
-		FROM users u
-		INNER JOIN roles r ON u.role_id = r.id
-		WHERE u.username = ?`
-
-	err := DB.QueryRow(query, username).Scan(
-		&role,
-	)
-
-	if err != nil {
-		return "", err
-	}
-
-	return role, nil
+// GetUserIDAndRole fetches the user ID and role ID for context resolution in requests.
+func GetUserIDAndRole(username string) (id int, roleID int, err error) {
+	err = stmtGetUserIDAndRole.QueryRow(username).Scan(&id, &roleID)
+	return
 }
 
-// SetupTestStmt prepares the createUserStmt for testing purposes.
-// This should only be called from tests after setting up a test database.
-func SetupTestStmt() error {
-	var err error
-	createUserStmt, err = DB.Prepare(`
-		INSERT INTO users (username, password, role_id) 
-		VALUES (?, ?, (SELECT id FROM roles WHERE name = ?));`)
-	return err
+// UpdateUserPassword changes a user's password hash and returns the number of affected rows.
+func UpdateUserPassword(username, newPasswordHash string) (int64, error) {
+	result, err := stmtUpdatePassword.Exec(newPasswordHash, username)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+// GetPasswordHash retrieves the password hash for verifying the current password.
+func GetPasswordHash(username string) (string, error) {
+	var hash string
+	err := DB.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&hash)
+	return hash, err
 }

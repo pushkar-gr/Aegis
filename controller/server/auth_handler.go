@@ -8,128 +8,50 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var (
-	// UsernameRE ensures usernames are alphanumeric and between 5 and 30 characters.
-	UsernameRE = regexp.MustCompile("^[a-zA-Z0-9_]{5,30}$")
-	jwtKey     []byte
-)
-
-// CreateUser handles the creation of new users. It requires Admin privileges.
-func CreateUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	val := r.Context().Value(UserKey)
-	username, ok := val.(string)
-
-	if !ok {
-		log.Println("Error: User context missing in CreateUser handler")
-		http.Error(w, "Internal server error: user context missing", http.StatusInternalServerError)
-		return
-	}
-
-	// Verify the requester has admin privileges.
-	role, err := database.GetRole(username)
-	if err != nil {
-		log.Printf("Database error fetching role for %s: %v", username, err)
-		http.Error(w, "Internal server error during authorization", http.StatusInternalServerError)
-		return
-	}
-
-	if role != "admin" {
-		log.Printf("Access denied: User %s attempted to create a user without admin privileges", username)
-		http.Error(w, "Forbidden: Admin privileges required", http.StatusForbidden)
-		return
-	}
-
-	var creatingUser models.User
-
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	err = decoder.Decode(&creatingUser)
-	if err != nil {
-		http.Error(w, "Invalid request body format", http.StatusBadRequest)
-		return
-	}
-
-	// Validation
-	if !UsernameRE.MatchString(creatingUser.Creds.Username) {
-		http.Error(w, "Invalid username format", http.StatusBadRequest)
-		return
-	}
-	if err := utils.ValidatePasswordComplexity(creatingUser.Creds.Password); err != nil {
-		http.Error(w, "Password too weak: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Securely hash the password before storage.
-	creatingUser.Creds.Password, err = utils.HashPassword(creatingUser.Creds.Password)
-	if err != nil {
-		log.Printf("Error hashing password for new user %s: %v", creatingUser.Creds.Username, err)
-		http.Error(w, "Internal server error processing credentials", http.StatusInternalServerError)
-		return
-	}
-
-	err = database.CreateUser(creatingUser)
-	if err != nil {
-		log.Printf("Database error creating user %s: %v", creatingUser.Creds.Username, err)
-		http.Error(w, "Failed to create user (might already exist)", http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("User '%s' created successfully by admin '%s'", creatingUser.Creds.Username, username)
-	w.WriteHeader(http.StatusCreated)
-	if _, err := w.Write([]byte("Logged out successfully")); err != nil {
-		log.Printf("Error writing response: %v", err)
-	}
-}
-
-// Login authenticates a user and issues a secure JWT cookie.
-func Login(w http.ResponseWriter, r *http.Request) {
-	// Limit body size to 1MB to prevent DOS attacks.
+// login validates user credentials and creates an authenticated session.
+// Request: {"username": "jdoe", "password": "secret_password"}
+// Response: 200 OK with auth cookie | 400 Bad Request | 401 Unauthorized | 403 Forbidden
+func login(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1048576)
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 
 	var creds models.Credentials
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-	err := decoder.Decode(&creds)
-	if err != nil {
+
+	if err := decoder.Decode(&creds); err != nil {
+		log.Printf("[auth] login failed for user '%s': invalid request body - %v", creds.Username, err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	var storedHash string
-	row := database.DB.QueryRow("SELECT password FROM users WHERE username = ?", creds.Username)
-	err = row.Scan(&storedHash)
+	storedHash, isActive, err := database.GetUserCredentials(creds.Username)
 
-	// If user is not found, still perform a dummy hash check to prevent timing attacks to prevent revealing valid usernames.
 	if err == sql.ErrNoRows {
+		// Run a dummy hash check to prevent timing attacks
 		utils.CheckPasswordHash(creds.Password, "$2a$12$DUMMYHASH0000000000000000000000000000000000000000")
-		log.Printf("Login failed: User %s not found", creds.Username)
+		log.Printf("[auth] login failed for user '%s': user not found", creds.Username)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	} else if err != nil {
-		log.Printf("Database error during login for %s: %v", creds.Username, err)
+		log.Printf("[auth] login failed for user '%s': database error - %v", creds.Username, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Verify the password.
 	if !utils.CheckPasswordHash(creds.Password, storedHash) {
-		log.Printf("Login failed: Incorrect password for user %s", creds.Username)
+		log.Printf("[auth] login failed for user '%s': incorrect password", creds.Username)
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	if !isActive {
+		log.Printf("[auth] login failed for user '%s': account is inactive", creds.Username)
+		http.Error(w, "Account is disabled", http.StatusForbidden)
 		return
 	}
 
@@ -142,40 +64,53 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtKey)
 	if err != nil {
-		log.Printf("Error signing token for user %s: %v", creds.Username, err)
-		http.Error(w, "Internal server error signing token", http.StatusInternalServerError)
+		log.Printf("[auth] login failed for user '%s': token generation error - %v", creds.Username, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Set the JWT as a secure, HTTP-only cookie.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
 		Value:    tokenString,
 		Expires:  expirationTime,
 		HttpOnly: true,
-		Secure:   true, // Requires HTTPS
+		Secure:   true,
 		Path:     "/",
 		SameSite: http.SameSiteStrictMode,
 	})
 
-	log.Printf("User %s logged in successfully", creds.Username)
+	log.Printf("[auth] login successful for user '%s'", creds.Username)
+
+	// Get user role name
+	var roleName string
+	err = database.DB.QueryRow(`
+		SELECT r.name FROM roles r
+		INNER JOIN users u ON u.role_id = r.id
+		WHERE u.username = ?`, creds.Username).Scan(&roleName)
+	if err != nil {
+		log.Printf("[auth] failed to get role for user '%s': %v", creds.Username, err)
+		// Continue without role in response
+		roleName = ""
+	}
+
+	// Return user info with role
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("Logged out successfully")); err != nil {
-		log.Printf("Error writing response: %v", err)
+	response := map[string]string{
+		"message": "Logged in successfully",
+		"role":    roleName,
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("[auth] failed to write response: %v", err)
 	}
 }
 
-// Logout clears the authentication cookie.
-func Logout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Invalidate the cookie by setting it to an expired time.
+// Logout clears the auth cookie.
+// Input:  Empty body (Cookie required in header)
+// Output: 200 OK (Set-Cookie: token=; Expires=1970...)
+func logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
 		Value:    "",
@@ -184,7 +119,116 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 	})
 
+	// Get user from context (set by middleware).
+	if username, ok := r.Context().Value(userKey).(string); ok {
+		log.Printf("[auth] user '%v' logged out", username)
+	} else {
+		log.Println("Logout called (no active user context found)")
+	}
+
 	if _, err := w.Write([]byte("Logged out successfully")); err != nil {
-		log.Printf("Error writing response: %v", err)
+		log.Printf("[auth] failed to write response: %v", err)
+	}
+}
+
+// updatePassword changes a user's password after verifying the old one.
+// Request: {"old_password": "current", "new_password": "new123"}
+// Response: 200 OK | 400 Bad Request | 401 Unauthorized
+func updatePassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("[auth] update password failed: invalid request body - %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := utils.ValidatePasswordComplexity(req.NewPassword); err != nil {
+		log.Printf("[auth] update password failed: password too weak - %v", err)
+		http.Error(w, "Password too weak: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	username, ok := r.Context().Value(userKey).(string)
+	if !ok {
+		log.Printf("[auth] update password failed: user context missing")
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	storedHash, err := database.GetPasswordHash(username)
+	if err != nil {
+		log.Printf("[auth] update password failed for user '%s': database error - %v", username, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if !utils.CheckPasswordHash(req.OldPassword, storedHash) {
+		log.Printf("[auth] update password failed for user '%s': incorrect old password", username)
+		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	newHash, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		log.Printf("[auth] update password failed for user '%s': hashing error - %v", username, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	rows, err := database.UpdateUserPassword(username, newHash)
+	if err != nil {
+		log.Printf("[auth] update password failed for user '%s': update error - %v", username, err)
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
+
+	if rows == 0 {
+		log.Printf("[auth] update password failed for user '%s': user not found", username)
+		http.Error(w, "User not found", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[auth] password updated successfully for user '%s'", username)
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("Password updated successfully")); err != nil {
+		log.Printf("[auth] failed to write response: %v", err)
+	}
+}
+
+// getCurrentUser returns the current user's info including role
+// Response: 200 OK with user info | 401 Unauthorized | 500 Internal Server Error
+func getCurrentUser(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	username, ok := r.Context().Value(userKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var user struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+		RoleId   int    `json:"role_id"`
+	}
+
+	err := database.DB.QueryRow(`
+		SELECT u.username, r.name, r.id
+		FROM users u
+		INNER JOIN roles r ON u.role_id = r.id
+		WHERE u.username = ?`, username).Scan(&user.Username, &user.Role, &user.RoleId)
+
+	if err != nil {
+		log.Printf("[auth] get current user failed for '%s': %v", username, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(user); err != nil {
+		log.Printf("[auth] failed to encode response: %v", err)
 	}
 }
