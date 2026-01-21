@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS user_active_services (
     user_id INTEGER NOT NULL,
     service_id INTEGER NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    time_left INTEGER DEFAULT 60,
     PRIMARY KEY (user_id, service_id),
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE CASCADE

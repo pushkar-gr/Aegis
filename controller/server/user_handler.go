@@ -112,12 +112,37 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 
 // DeleteUser removes a user by ID.
 // Input:  Path param {id}
-// Output: 200 OK | 400 Bad Request | 404 Not Found
+// Output: 200 OK | 400 Bad Request | 404 Not Found | 403 Forbidden
 func deleteUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "Invalid user ID", http.StatusBadRequest)
 		return
+	}
+
+	// Check if target user is root
+	var targetRoleName string
+	err = database.DB.QueryRow(`
+		SELECT r.name FROM users u
+		INNER JOIN roles r ON u.role_id = r.id
+		WHERE u.id = ?`, id).Scan(&targetRoleName)
+
+	if err == nil && targetRoleName == "root" {
+		// Get current user role
+		username, ok := r.Context().Value(userKey).(string)
+		if ok {
+			var currentRoleName string
+			database.DB.QueryRow(`
+				SELECT r.name FROM users u
+				INNER JOIN roles r ON u.role_id = r.id
+				WHERE u.username = ?`, username).Scan(&currentRoleName)
+
+			if currentRoleName != "root" {
+				log.Printf("[users] admin '%s' attempted to delete root user", username)
+				http.Error(w, "Forbidden: Cannot delete root user", http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	res, err := database.DB.Exec("DELETE FROM users WHERE id = ?", id)
@@ -142,7 +167,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 
 // UpdateUserRole modifies the role assigned to a user.
 // Input:  Path param {id} and {"role_id": 2}
-// Output: 200 OK | 400 Bad Request | 404 Not Found
+// Output: 200 OK | 400 Bad Request | 404 Not Found | 403 Forbidden
 func updateUserRole(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
@@ -157,6 +182,31 @@ func updateUserRole(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[users] update role failed: invalid request body. %v", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
+	}
+
+	// Check if target user is root
+	var targetRoleName string
+	err = database.DB.QueryRow(`
+		SELECT r.name FROM users u
+		INNER JOIN roles r ON u.role_id = r.id
+		WHERE u.id = ?`, id).Scan(&targetRoleName)
+
+	if err == nil && targetRoleName == "root" {
+		// Get current user role
+		username, ok := r.Context().Value(userKey).(string)
+		if ok {
+			var currentRoleName string
+			database.DB.QueryRow(`
+				SELECT r.name FROM users u
+				INNER JOIN roles r ON u.role_id = r.id
+				WHERE u.username = ?`, username).Scan(&currentRoleName)
+
+			if currentRoleName != "root" {
+				log.Printf("[users] admin '%s' attempted to modify root user role", username)
+				http.Error(w, "Forbidden: Cannot modify root user role", http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	res, err := database.DB.Exec("UPDATE users SET role_id = ? WHERE id = ?", req.RoleId, id)
@@ -181,7 +231,7 @@ func updateUserRole(w http.ResponseWriter, r *http.Request) {
 
 // ResetUserPassword forces a password change for a specific user.
 // Input:  Path param {id} and {"password": "new_secret_123"}
-// Output: 200 OK | 400 Bad Request | 404 Not Found
+// Output: 200 OK | 400 Bad Request | 404 Not Found | 403 Forbidden
 func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
@@ -196,6 +246,31 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[users] reset password failed: invalid request body. %v", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
+	}
+
+	// Check if target user is root
+	var targetRoleName string
+	err = database.DB.QueryRow(`
+		SELECT r.name FROM users u
+		INNER JOIN roles r ON u.role_id = r.id
+		WHERE u.id = ?`, id).Scan(&targetRoleName)
+
+	if err == nil && targetRoleName == "root" {
+		// Get current user role
+		username, ok := r.Context().Value(userKey).(string)
+		if ok {
+			var currentRoleName string
+			database.DB.QueryRow(`
+				SELECT r.name FROM users u
+				INNER JOIN roles r ON u.role_id = r.id
+				WHERE u.username = ?`, username).Scan(&currentRoleName)
+
+			if currentRoleName != "root" {
+				log.Printf("[users] admin '%s' attempted to reset root user password", username)
+				http.Error(w, "Forbidden: Cannot reset root user password", http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	if err := utils.ValidatePasswordComplexity(req.Password); err != nil {
@@ -287,12 +362,37 @@ func getUserServices(w http.ResponseWriter, r *http.Request) {
 
 // AddUserService grants an *extra* specific service permission to a user.
 // Input:  Path {id} and JSON body {"service_id": 5}
-// Output: 200 OK | 400 Bad Request
+// Output: 200 OK | 400 Bad Request | 403 Forbidden
 func addUserService(w http.ResponseWriter, r *http.Request) {
 	userID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "Invalid User ID in URL", http.StatusBadRequest)
 		return
+	}
+
+	// Check if target user is root
+	var targetRoleName string
+	err = database.DB.QueryRow(`
+		SELECT r.name FROM users u
+		INNER JOIN roles r ON u.role_id = r.id
+		WHERE u.id = ?`, userID).Scan(&targetRoleName)
+
+	if err == nil && targetRoleName == "root" {
+		// Get current user role
+		username, ok := r.Context().Value(userKey).(string)
+		if ok {
+			var currentRoleName string
+			database.DB.QueryRow(`
+				SELECT r.name FROM users u
+				INNER JOIN roles r ON u.role_id = r.id
+				WHERE u.username = ?`, username).Scan(&currentRoleName)
+
+			if currentRoleName != "root" {
+				log.Printf("[users] admin '%s' attempted to modify root user services", username)
+				http.Error(w, "Forbidden: Cannot modify root user services", http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	var req struct {
@@ -322,12 +422,37 @@ func addUserService(w http.ResponseWriter, r *http.Request) {
 
 // RemoveUserService revokes an *extra* service permission from a user.
 // Input:  Path {id} (User ID) and {svc_id} (Service ID)
-// Output: 200 OK | 400 Bad Request | 500 Internal Error
+// Output: 200 OK | 400 Bad Request | 403 Forbidden | 500 Internal Error
 func removeUserService(w http.ResponseWriter, r *http.Request) {
 	userID, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
 		http.Error(w, "Invalid User ID in URL", http.StatusBadRequest)
 		return
+	}
+
+	// Check if target user is root
+	var targetRoleName string
+	err = database.DB.QueryRow(`
+		SELECT r.name FROM users u
+		INNER JOIN roles r ON u.role_id = r.id
+		WHERE u.id = ?`, userID).Scan(&targetRoleName)
+
+	if err == nil && targetRoleName == "root" {
+		// Get current user role
+		username, ok := r.Context().Value(userKey).(string)
+		if ok {
+			var currentRoleName string
+			database.DB.QueryRow(`
+				SELECT r.name FROM users u
+				INNER JOIN roles r ON u.role_id = r.id
+				WHERE u.username = ?`, username).Scan(&currentRoleName)
+
+			if currentRoleName != "root" {
+				log.Printf("[users] admin '%s' attempted to modify root user services", username)
+				http.Error(w, "Forbidden: Cannot modify root user services", http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	svcID, err := strconv.Atoi(r.PathValue("svc_id"))

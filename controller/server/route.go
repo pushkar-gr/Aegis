@@ -33,12 +33,24 @@ func StartServer() {
 
 	mux := http.NewServeMux()
 
+	// --- Static Files ---
+	fs := http.FileServer(http.Dir("static"))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", fs))
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.ServeFile(w, r, "static/pages/login.html")
+			return
+		}
+		http.NotFound(w, r)
+	})
+
 	// --- API Routes ---
 
 	// 1. Authentication
 	mux.HandleFunc("POST /api/auth/login", login)
 	mux.Handle("POST /api/auth/logout", authMiddleware.ThenFunc(logout))
 	mux.Handle("POST /api/auth/password", authMiddleware.ThenFunc(updatePassword))
+	mux.Handle("GET /api/auth/me", authMiddleware.ThenFunc(getCurrentUser))
 
 	// 2. Roles (RBAC)
 	mux.Handle("GET /api/roles", adminOrRootOnly.ThenFunc(getRoles))

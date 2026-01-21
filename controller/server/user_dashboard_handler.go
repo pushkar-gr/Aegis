@@ -72,7 +72,7 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := database.DB.Query(`
-		SELECT s.id, s.name, s.ip_port, s.description, s.created_at
+		SELECT s.id, s.name, s.ip_port, s.description, s.created_at, uas.time_left, uas.updated_at
 		FROM services s
 		JOIN user_active_services uas ON s.id = uas.service_id
 		WHERE uas.user_id = ?
@@ -89,13 +89,13 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	services := make([]models.Service, 0, 5)
+	services := make([]models.ActiveService, 0, 5)
 	for rows.Next() {
-		var s models.Service
+		var as models.ActiveService
 		var desc sql.NullString
-		if err := rows.Scan(&s.Id, &s.Name, &s.IpPort, &desc, &s.CreatedAt); err == nil {
-			s.Description = desc.String
-			services = append(services, s)
+		if err := rows.Scan(&as.Id, &as.Name, &as.IpPort, &desc, &as.CreatedAt, &as.TimeLeft, &as.UpdatedAt); err == nil {
+			as.Description = desc.String
+			services = append(services, as)
 		}
 	}
 
@@ -137,8 +137,8 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = database.DB.Exec("INSERT OR REPLACE INTO user_active_services (user_id, service_id, updated_at) VALUES (?, ?, ?)",
-		userID, req.ServiceID, time.Now())
+	_, err = database.DB.Exec("INSERT OR REPLACE INTO user_active_services (user_id, service_id, updated_at, time_left) VALUES (?, ?, ?, ?)",
+		userID, req.ServiceID, time.Now(), 60)
 	if err != nil {
 		log.Printf("[dashboard] select service failed: database write error - %v", err)
 		http.Error(w, "Failed to update active status", http.StatusInternalServerError)

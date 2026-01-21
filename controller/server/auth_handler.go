@@ -82,8 +82,27 @@ func login(w http.ResponseWriter, r *http.Request) {
 	})
 
 	log.Printf("[auth] login successful for user '%s'", creds.Username)
+
+	// Get user role name
+	var roleName string
+	err = database.DB.QueryRow(`
+		SELECT r.name FROM roles r
+		INNER JOIN users u ON u.role_id = r.id
+		WHERE u.username = ?`, creds.Username).Scan(&roleName)
+	if err != nil {
+		log.Printf("[auth] failed to get role for user '%s': %v", creds.Username, err)
+		// Continue without role in response
+		roleName = ""
+	}
+
+	// Return user info with role
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("Logged in successfully")); err != nil {
+	response := map[string]string{
+		"message": "Logged in successfully",
+		"role":    roleName,
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("[auth] failed to write response: %v", err)
 	}
 }
@@ -102,7 +121,7 @@ func logout(w http.ResponseWriter, r *http.Request) {
 
 	// Get user from context (set by middleware).
 	if username, ok := r.Context().Value(userKey).(string); ok {
-		log.Printf("User '%v' logged out", username)
+		log.Printf("[auth] user '%v' logged out", username)
 	} else {
 		log.Println("Logout called (no active user context found)")
 	}
@@ -177,5 +196,39 @@ func updatePassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("Password updated successfully")); err != nil {
 		log.Printf("[auth] failed to write response: %v", err)
+	}
+}
+
+// getCurrentUser returns the current user's info including role
+// Response: 200 OK with user info | 401 Unauthorized | 500 Internal Server Error
+func getCurrentUser(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	username, ok := r.Context().Value(userKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var user struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+		RoleId   int    `json:"role_id"`
+	}
+
+	err := database.DB.QueryRow(`
+		SELECT u.username, r.name, r.id
+		FROM users u
+		INNER JOIN roles r ON u.role_id = r.id
+		WHERE u.username = ?`, username).Scan(&user.Username, &user.Role, &user.RoleId)
+
+	if err != nil {
+		log.Printf("[auth] get current user failed for '%s': %v", username, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(user); err != nil {
+		log.Printf("[auth] failed to encode response: %v", err)
 	}
 }
