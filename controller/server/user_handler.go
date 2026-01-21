@@ -132,10 +132,14 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		username, ok := r.Context().Value(userKey).(string)
 		if ok {
 			var currentRoleName string
-			database.DB.QueryRow(`
+			err = database.DB.QueryRow(`
 				SELECT r.name FROM users u
 				INNER JOIN roles r ON u.role_id = r.id
 				WHERE u.username = ?`, username).Scan(&currentRoleName)
+			if err != nil {
+				log.Printf("[users] failed to get role for user '%s': %v", username, err)
+				http.Error(w, "Failed to get user role", http.StatusInternalServerError)
+			}
 
 			if currentRoleName != "root" {
 				log.Printf("[users] admin '%s' attempted to delete root user", username)
@@ -196,10 +200,14 @@ func updateUserRole(w http.ResponseWriter, r *http.Request) {
 		username, ok := r.Context().Value(userKey).(string)
 		if ok {
 			var currentRoleName string
-			database.DB.QueryRow(`
+			err = database.DB.QueryRow(`
 				SELECT r.name FROM users u
 				INNER JOIN roles r ON u.role_id = r.id
 				WHERE u.username = ?`, username).Scan(&currentRoleName)
+			if err != nil {
+				log.Printf("[users] failed to get role for user '%s': %v", username, err)
+				http.Error(w, "Failed to get user role", http.StatusInternalServerError)
+			}
 
 			if currentRoleName != "root" {
 				log.Printf("[users] admin '%s' attempted to modify root user role", username)
@@ -260,10 +268,14 @@ func resetUserPassword(w http.ResponseWriter, r *http.Request) {
 		username, ok := r.Context().Value(userKey).(string)
 		if ok {
 			var currentRoleName string
-			database.DB.QueryRow(`
+			err = database.DB.QueryRow(`
 				SELECT r.name FROM users u
 				INNER JOIN roles r ON u.role_id = r.id
 				WHERE u.username = ?`, username).Scan(&currentRoleName)
+			if err != nil {
+				log.Printf("[users] failed to get role for user '%s': %v", username, err)
+				http.Error(w, "Failed to get user role", http.StatusInternalServerError)
+			}
 
 			if currentRoleName != "root" {
 				log.Printf("[users] admin '%s' attempted to reset root user password", username)
@@ -382,10 +394,14 @@ func addUserService(w http.ResponseWriter, r *http.Request) {
 		username, ok := r.Context().Value(userKey).(string)
 		if ok {
 			var currentRoleName string
-			database.DB.QueryRow(`
+			err = database.DB.QueryRow(`
 				SELECT r.name FROM users u
 				INNER JOIN roles r ON u.role_id = r.id
 				WHERE u.username = ?`, username).Scan(&currentRoleName)
+			if err != nil {
+				log.Printf("[users] failed to get role for user '%s': %v", username, err)
+				http.Error(w, "Failed to get user role", http.StatusInternalServerError)
+			}
 
 			if currentRoleName != "root" {
 				log.Printf("[users] admin '%s' attempted to modify root user services", username)
@@ -442,10 +458,14 @@ func removeUserService(w http.ResponseWriter, r *http.Request) {
 		username, ok := r.Context().Value(userKey).(string)
 		if ok {
 			var currentRoleName string
-			database.DB.QueryRow(`
+			err = database.DB.QueryRow(`
 				SELECT r.name FROM users u
 				INNER JOIN roles r ON u.role_id = r.id
 				WHERE u.username = ?`, username).Scan(&currentRoleName)
+			if err != nil {
+				log.Printf("[users] failed to get role for user '%s': %v", username, err)
+				http.Error(w, "Failed to get user role", http.StatusInternalServerError)
+			}
 
 			if currentRoleName != "root" {
 				log.Printf("[users] admin '%s' attempted to modify root user services", username)
