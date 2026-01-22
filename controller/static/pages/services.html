@@ -1,89 +1,215 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Services - Aegis Controller</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Services - Service Dash</title>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "primary-hover": "#0fb847",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                        "surface-dark": "#111813",
+                        "surface-highlight": "#28392e",
+                        "text-muted": "#9db9a6",
+                        "log-bg": "#0a110d",
+                        "log-text": "#d4d4d4",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .custom-scroll::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: #111813;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: #28392e;
+            border-radius: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: #13ec5b;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-gray-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center">
-                    <div class="text-white text-xl font-bold">Aegis</div>
-                    <div class="ml-10 flex items-baseline space-x-4" id="navigation"></div>
-                </div>
-                <div id="profileSection"></div>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white h-screen flex overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside class="w-64 h-full flex-col hidden md:flex bg-surface-dark border-r border-surface-highlight flex-shrink-0 z-20">
+        <div class="p-6 flex items-center gap-3">
+            <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-[0_0_10px_rgba(19,236,91,0.2)]" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuACmoSgB1qBq-DPKenfjridVaJFpFlsBLLqZxuUXAIwcKYmF7gxA8yPUbNJ_fuDo_xIJpgmluRIhaACm6zSFojQhnxJKk2GiyNFNT_MJPvJAXYrupDJ5-2rjk2_K3L1LUjhRiCGUC-DS1zG6mMCwSHRPTKBDemhq3dsIUB4s5pVg-OSdckm0OdaaM5UadVT9Oo7E2HQpD9wOhjbSv2RtKfLyrRF7s75q5a947f3FIMy00JnlLw7hxxZPEvcjKjDfr4M40VFlb-QCg");'></div>
+            <div class="flex flex-col">
+                <h1 class="text-white text-lg font-bold leading-tight tracking-tight">Service Dash</h1>
+                <p class="text-primary text-xs font-mono font-medium">v2.1.0-aegis</p>
             </div>
         </div>
-    </nav>
+        <nav class="flex flex-col gap-2 px-4 mt-4 flex-1">
+            <a id="nav-dashboard" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/dashboard.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">dashboard</span>
+                <p class="text-sm font-medium">Dashboard</p>
+            </a>
+            <a id="nav-users" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/users.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">group</span>
+                <p class="text-sm font-medium">User Management</p>
+            </a>
+            <a id="nav-services" class="flex items-center gap-3 px-3 py-3 rounded-lg bg-surface-highlight border-l-4 border-primary shadow-sm group transition-all" href="/static/pages/services.html">
+                <span class="material-symbols-outlined text-primary">dns</span>
+                <p class="text-white text-sm font-medium">Services</p>
+            </a>
+            <a id="nav-roles" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/roles.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">shield</span>
+                <p class="text-sm font-medium">Roles</p>
+            </a>
+        </nav>
+        
+        <!-- Profile Section -->
+        <div class="p-4 border-t border-surface-highlight">
+            <div id="userProfile" class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-highlight transition-colors cursor-pointer relative group">
+                <div class="w-8 h-8 rounded-full bg-surface-highlight flex items-center justify-center text-primary font-bold">
+                    <span class="material-symbols-outlined text-[18px]">person</span>
+                </div>
+                <div class="overflow-hidden flex-1">
+                    <p class="text-white text-sm font-medium truncate" id="userNameDisplay">Loading...</p>
+                    <p class="text-text-muted text-xs truncate" id="userRoleDisplay">...</p>
+                </div>
+                <!-- Updated Menu with Padding Fix -->
+                <div class="absolute bottom-full left-0 w-full pb-2 hidden group-hover:block z-50">
+                    <div class="bg-surface-highlight border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                        <a href="/static/pages/reset-password.html" class="w-full text-left px-4 py-3 text-xs text-white hover:bg-white/5 flex items-center gap-2 border-b border-white/5">
+                            <span class="material-symbols-outlined text-[14px]">lock_reset</span> Reset Password
+                        </a>
+                        <button onclick="API.logout().then(() => window.location.href = '/static/pages/login.html')" class="w-full text-left px-4 py-3 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[14px]">logout</span> Sign Out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
 
     <!-- Main Content -->
-    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div class="px-4 py-6 sm:px-0">
-            <div class="flex justify-between items-center mb-6">
-                <h1 class="text-3xl font-bold">Services Management</h1>
-                <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
-                    Add Service
-                </button>
+    <main class="flex-1 flex flex-col h-full overflow-hidden relative bg-background-dark">
+        <div class="relative w-full h-40 flex-shrink-0 bg-surface-dark overflow-hidden border-b border-surface-highlight">
+            <div class="absolute inset-0 bg-cover bg-center" style='background-image: linear-gradient(180deg, rgba(16, 34, 22, 0.5) 0%, rgba(16, 34, 22, 1) 100%), url("https://lh3.googleusercontent.com/aida-public/AB6AXuBiS7Ff2Ko2NL691oWPYtFrw_gi70teWCfTxXL1GQgfK9ypVCbvnKnpTP8XxPzlgyGaeMOvYaDhnmYWo7bZ128GUoYc8cwU6EbCd9TavrWqaIRyaJ751S2QGKB_cehFjCsdHVwDM-uIr5YPWhWxRnyyu4PUGIoazAVe3YmUmIZEt_tJt7ZcpEfxZTkxdIJPz3VJs46YYJgU6gtKbLS_xArg0pEDZC5i9Wvy6zN-258TlS7HaJTOmyQkLjzvo-t8lClsJqsRhMlsFw");'></div>
+            <div class="absolute inset-0 flex flex-col justify-end px-8 pb-10">
+                <h2 class="text-white tracking-tight text-3xl font-bold mb-2">Infrastructure Management</h2>
+                <p class="text-text-muted max-w-2xl text-sm">Manage global services, configure endpoints, and oversee system architecture from a central root console.</p>
             </div>
+        </div>
 
-            <!-- Services Table -->
-            <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP:Port</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+        <div class="px-8 py-6 flex flex-col gap-4">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-4 flex-1 w-full md:w-auto">
+                    <div class="relative flex-1 md:max-w-md w-full">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-text-muted text-[20px]">search</span>
+                        <input id="serviceSearch" class="w-full bg-surface-highlight border border-transparent focus:border-primary rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-text-muted focus:ring-0 transition-all shadow-sm" placeholder="Search services by Name or IP..." type="text"/>
+                    </div>
+                    <button onclick="loadServices()" class="h-10 w-10 flex items-center justify-center rounded-lg bg-surface-highlight text-text-muted hover:text-primary hover:bg-surface-highlight/80 transition-all border border-transparent hover:border-surface-highlight" title="Refresh">
+                        <span class="material-symbols-outlined text-[20px]">refresh</span>
+                    </button>
+                </div>
+                <button onclick="openAddModal()" class="w-full md:w-auto bg-primary hover:bg-primary-hover text-surface-dark font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm shadow-[0_0_15px_rgba(19,236,91,0.3)] hover:shadow-[0_0_20px_rgba(19,236,91,0.5)] transition-all">
+                    <span class="material-symbols-outlined text-[20px]">add</span>
+                    Add Service
+                 </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-auto custom-scroll px-8 pb-8">
+            <div class="bg-surface-dark border border-surface-highlight rounded-xl overflow-hidden shadow-lg">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-surface-highlight/50 border-b border-surface-highlight">
+                            <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider w-24">ID</th>
+                            <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider">Name</th>
+                            <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider">IP / Port</th>
+                            <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider">Description</th>
+                            <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="servicesTableBody" class="bg-white divide-y divide-gray-200">
+                    <tbody id="servicesTableBody" class="divide-y divide-surface-highlight text-sm">
                         <!-- Services will be populated here -->
                     </tbody>
                 </table>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- Add/Edit Service Modal -->
-    <div id="serviceModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div class="mt-3">
-                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4" id="modalTitle">Add Service</h3>
-                <form id="serviceForm" class="space-y-4">
-                    <input type="hidden" id="serviceId">
-                    <div>
-                        <label for="serviceName" class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                        <input type="text" id="serviceName" required
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label for="serviceIpPort" class="block text-sm font-medium text-gray-700 mb-1">IP:Port *</label>
-                        <input type="text" id="serviceIpPort" required placeholder="e.g., 192.168.1.10:8080"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label for="serviceDescription" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                        <textarea id="serviceDescription" rows="3"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-                    </div>
-                    <div class="flex justify-end space-x-3 mt-4">
-                        <button type="button" onclick="closeModal()" 
-                            class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
-                            Cancel
-                        </button>
-                        <button type="submit" 
-                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                            Save
-                        </button>
-                    </div>
-                </form>
+    <div id="serviceModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div class="relative bg-surface-dark border border-surface-highlight p-6 rounded-xl shadow-2xl w-[500px]">
+            <div class="flex items-center justify-between mb-6 pb-4 border-b border-surface-highlight">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">dns</span> 
+                    <span id="modalTitle">Add Service</span>
+                </h3>
+                <button onclick="closeModal()" class="text-text-muted hover:text-white transition-colors">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
             </div>
+            
+            <form id="serviceForm" class="space-y-4">
+                <input type="hidden" id="serviceId">
+                <div class="space-y-1.5">
+                    <label for="serviceName" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">Name *</label>
+                    <input type="text" id="serviceName" required
+                        class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all">
+                </div>
+                <div class="space-y-1.5">
+                    <label for="serviceIpPort" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">IP:Port *</label>
+                    <input type="text" id="serviceIpPort" required placeholder="e.g., 192.168.1.10:8080"
+                        class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all font-mono">
+                </div>
+                <div class="space-y-1.5">
+                    <label for="serviceDescription" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">Description</label>
+                    <textarea id="serviceDescription" rows="3"
+                        class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all resize-none"></textarea>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6 pt-4 border-t border-surface-highlight">
+                    <button type="button" onclick="closeModal()" 
+                        class="px-4 py-2 bg-surface-highlight text-text-muted hover:text-white rounded-lg hover:bg-surface-highlight/80 text-sm font-medium transition-all">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                        class="px-4 py-2 bg-primary text-surface-dark rounded-lg hover:bg-primary-hover text-sm font-bold transition-all shadow-lg shadow-primary/10">
+                        Save Service
+                    </button>
+                </div>
+            </form>
         </div>
+    </div>
+
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 pointer-events-none"></div>
+    <div id="loadingSpinner" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
     </div>
 
     <script src="/static/js/api.js"></script>
@@ -91,19 +217,44 @@
     <script>
         let services = [];
 
-        // Check authentication
-        if (!requireAuth()) {
-            // Will redirect in requireAuth
-        }
+        if (!requireAuth()) {}
 
-        // Initialize page
         document.addEventListener('DOMContentLoaded', async () => {
-            document.getElementById('navigation').innerHTML = createNavigation('services.html');
-            document.getElementById('profileSection').innerHTML = createProfileDropdown();
+             const user = getCurrentUser();
+            const role = getUserRole();
+
+            // RBAC
+            const currentRole = role ? role.toLowerCase() : '';
+            if (currentRole !== 'admin' && currentRole !== 'root') {
+                window.location.href = '/static/pages/dashboard.html';
+                return;
+            } else {
+                 const navUsers = document.getElementById('nav-users');
+                 const navServices = document.getElementById('nav-services');
+                 const navRoles = document.getElementById('nav-roles');
+                 if (currentRole !== 'admin' && currentRole !== 'root') {
+                   if(navUsers) navUsers.style.display = 'none';
+                   if(navServices) navServices.style.display = 'none';
+                   if(navRoles) navRoles.style.display = 'none';
+                }
+            }
+
+            if (user) {
+                document.getElementById('userNameDisplay').textContent = user;
+                document.getElementById('userRoleDisplay').textContent = (role || 'User').toUpperCase() + ' ACCESS';
+            }
             
             await loadServices();
 
-            // Event delegation for table buttons
+            document.getElementById('serviceSearch').addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                renderServices(services.filter(s => 
+                    s.name.toLowerCase().includes(query) || 
+                    s.ip_port.toLowerCase().includes(query) ||
+                    (s.description && s.description.toLowerCase().includes(query))
+                ));
+            });
+
             document.getElementById('servicesTableBody').addEventListener('click', (e) => {
                 const button = e.target.closest('button[data-action]');
                 if (!button) return;
@@ -111,11 +262,8 @@
                 const serviceId = parseInt(button.dataset.serviceId);
                 const action = button.dataset.action;
                 
-                if (action === 'edit') {
-                    openEditModal(serviceId);
-                } else if (action === 'delete') {
-                    deleteService(serviceId);
-                }
+                if (action === 'edit') openEditModal(serviceId);
+                else if (action === 'delete') deleteService(serviceId);
             });
         });
 
@@ -123,7 +271,7 @@
             try {
                 showLoading();
                 services = await API.getServices() || [];
-                renderServices();
+                renderServices(services);
             } catch (error) {
                 showToast('Failed to load services', 'error');
             } finally {
@@ -137,28 +285,30 @@
             return div.innerHTML;
         }
 
-        function renderServices() {
+        function renderServices(list) {
             const tbody = document.getElementById('servicesTableBody');
             
-            if (services.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="4" class="px-6 py-4 text-center text-gray-500">
-                            No services found. Click "Add Service" to create one.
-                        </td>
-                    </tr>
-                `;
+            if (list.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-text-muted"><div class="flex flex-col items-center"><span class="material-symbols-outlined text-4xl mb-2 opacity-50">dns</span><p>No services found.</p></div></td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = services.map(service => `
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(service.name)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${escapeHtml(service.ip_port)}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${escapeHtml(service.description || '-')}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button data-action="edit" data-service-id="${service.id}" class="text-blue-600 hover:text-blue-900">Edit</button>
-                        <button data-action="delete" data-service-id="${service.id}" class="text-red-600 hover:text-red-900">Delete</button>
+            tbody.innerHTML = list.map(service => `
+                <tr class="group hover:bg-surface-highlight/20 transition-colors border-b border-surface-highlight/50">
+                     <td class="px-6 py-4 font-mono text-xs text-text-muted group-hover:text-primary transition-colors">#${service.id}</td>
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_rgba(19,236,91,0.6)]"></div>
+                            <span class="font-medium text-white text-sm">${escapeHtml(service.name)}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 font-mono text-xs text-gray-400">${escapeHtml(service.ip_port)}</td>
+                    <td class="px-6 py-4 text-gray-400 text-sm max-w-xs truncate" title="${escapeHtml(service.description || '')}">${escapeHtml(service.description || '-')}</td>
+                    <td class="px-6 py-4 text-right whitespace-nowrap text-sm font-medium">
+                        <div class="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                            <button data-action="edit" data-service-id="${service.id}" class="p-1.5 rounded-md hover:bg-surface-highlight text-text-muted hover:text-white transition-colors"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+                            <button data-action="delete" data-service-id="${service.id}" class="p-1.5 rounded-md hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-colors"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+                        </div>
                     </td>
                 </tr>
             `).join('');
@@ -174,7 +324,6 @@
         function openEditModal(serviceId) {
             const service = services.find(s => s.id === serviceId);
             if (!service) return;
-
             document.getElementById('modalTitle').textContent = 'Edit Service';
             document.getElementById('serviceId').value = service.id;
             document.getElementById('serviceName').value = service.name;
@@ -183,53 +332,29 @@
             document.getElementById('serviceModal').classList.remove('hidden');
         }
 
-        function closeModal() {
-            document.getElementById('serviceModal').classList.add('hidden');
-        }
+        function closeModal() { document.getElementById('serviceModal').classList.add('hidden'); }
 
         document.getElementById('serviceForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
             const serviceId = document.getElementById('serviceId').value;
             const serviceData = {
                 name: document.getElementById('serviceName').value,
                 ip_port: document.getElementById('serviceIpPort').value,
                 description: document.getElementById('serviceDescription').value
             };
-
             try {
                 showLoading();
-                if (serviceId) {
-                    await API.updateService(serviceId, serviceData);
-                    showToast('Service updated successfully', 'success');
-                } else {
-                    await API.createService(serviceData);
-                    showToast('Service created successfully', 'success');
-                }
+                if (serviceId) { await API.updateService(serviceId, serviceData); showToast('Updated', 'success'); } 
+                else { await API.createService(serviceData); showToast('Created', 'success'); }
                 closeModal();
                 await loadServices();
-            } catch (error) {
-                showToast('Failed to save service: ' + error.message, 'error');
-            } finally {
-                hideLoading();
-            }
+            } catch (error) { showToast('Error: ' + error.message, 'error'); } finally { hideLoading(); }
         });
 
         async function deleteService(serviceId) {
-            if (!confirmDialog('Are you sure you want to delete this service?')) {
-                return;
-            }
-
-            try {
-                showLoading();
-                await API.deleteService(serviceId);
-                showToast('Service deleted successfully', 'success');
-                await loadServices();
-            } catch (error) {
-                showToast('Failed to delete service: ' + error.message, 'error');
-            } finally {
-                hideLoading();
-            }
+            if (!confirmDialog('Delete this service?')) return;
+            try { showLoading(); await API.deleteService(serviceId); showToast('Deleted', 'success'); await loadServices(); } 
+            catch (error) { showToast('Error: ' + error.message, 'error'); } finally { hideLoading(); }
         }
     </script>
 </body>

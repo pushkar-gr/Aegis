@@ -1,118 +1,172 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roles - Aegis Controller</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Roles - Service Dash</title>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "primary-hover": "#0fb847",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                        "surface-dark": "#111813",
+                        "surface-highlight": "#28392e",
+                        "text-muted": "#9db9a6",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        .custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #111813; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #28392e; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #13ec5b; }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-gray-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center">
-                    <div class="text-white text-xl font-bold">Aegis</div>
-                    <div class="ml-10 flex items-baseline space-x-4" id="navigation"></div>
-                </div>
-                <div id="profileSection"></div>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white h-screen flex overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside class="w-64 h-full flex-col hidden md:flex bg-surface-dark border-r border-surface-highlight flex-shrink-0 z-20">
+        <div class="p-6 flex items-center gap-3">
+            <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-[0_0_10px_rgba(19,236,91,0.2)]" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuACmoSgB1qBq-DPKenfjridVaJFpFlsBLLqZxuUXAIwcKYmF7gxA8yPUbNJ_fuDo_xIJpgmluRIhaACm6zSFojQhnxJKk2GiyNFNT_MJPvJAXYrupDJ5-2rjk2_K3L1LUjhRiCGUC-DS1zG6mMCwSHRPTKBDemhq3dsIUB4s5pVg-OSdckm0OdaaM5UadVT9Oo7E2HQpD9wOhjbSv2RtKfLyrRF7s75q5a947f3FIMy00JnlLw7hxxZPEvcjKjDfr4M40VFlb-QCg");'></div>
+            <div class="flex flex-col">
+                <h1 class="text-white text-lg font-bold leading-tight tracking-tight">Service Dash</h1>
+                <p class="text-primary text-xs font-mono font-medium">v2.1.0-aegis</p>
             </div>
         </div>
-    </nav>
+        <nav class="flex flex-col gap-2 px-4 mt-4 flex-1">
+            <a id="nav-dashboard" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/dashboard.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">dashboard</span>
+                <p class="text-sm font-medium">Dashboard</p>
+            </a>
+            <a id="nav-users" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/users.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">group</span>
+                <p class="text-sm font-medium">User Management</p>
+            </a>
+            <a id="nav-services" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/services.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">dns</span>
+                <p class="text-sm font-medium">Services</p>
+            </a>
+            <a id="nav-roles" class="flex items-center gap-3 px-3 py-3 rounded-lg bg-surface-highlight border-l-4 border-primary shadow-sm group transition-all" href="/static/pages/roles.html">
+                <span class="material-symbols-outlined text-primary">shield</span>
+                <p class="text-white text-sm font-medium">Roles</p>
+            </a>
+        </nav>
+        
+        <!-- Profile Section -->
+        <div class="p-4 border-t border-surface-highlight">
+            <div id="userProfile" class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-highlight transition-colors cursor-pointer relative group">
+                <div class="w-8 h-8 rounded-full bg-surface-highlight flex items-center justify-center text-primary font-bold">
+                    <span class="material-symbols-outlined text-[18px]">person</span>
+                </div>
+                <div class="overflow-hidden flex-1">
+                    <p class="text-white text-sm font-medium truncate" id="userNameDisplay">Loading...</p>
+                    <p class="text-text-muted text-xs truncate" id="userRoleDisplay">...</p>
+                </div>
+                <!-- Updated Menu with Padding Fix -->
+                <div class="absolute bottom-full left-0 w-full pb-2 hidden group-hover:block z-50">
+                    <div class="bg-surface-highlight border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                        <a href="/static/pages/reset-password.html" class="w-full text-left px-4 py-3 text-xs text-white hover:bg-white/5 flex items-center gap-2 border-b border-white/5">
+                            <span class="material-symbols-outlined text-[14px]">lock_reset</span> Reset Password
+                        </a>
+                        <button onclick="API.logout().then(() => window.location.href = '/static/pages/login.html')" class="w-full text-left px-4 py-3 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[14px]">logout</span> Sign Out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
 
     <!-- Main Content -->
-    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div class="px-4 py-6 sm:px-0">
-            <div class="flex justify-between items-center mb-6">
-                <h1 class="text-3xl font-bold">Roles Management</h1>
-                <button onclick="openAddModal()" id="addRoleBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md hidden">
-                    Add Role
+    <main class="flex-1 flex flex-col h-full overflow-hidden relative bg-background-dark">
+        <div class="relative w-full h-32 flex-shrink-0 bg-surface-dark overflow-hidden border-b border-surface-highlight">
+            <div class="absolute inset-0 bg-cover bg-center" style='background-image: linear-gradient(180deg, rgba(16, 34, 22, 0.3) 0%, rgba(16, 34, 22, 1) 100%), url("https://lh3.googleusercontent.com/aida-public/AB6AXuBiS7Ff2Ko2NL691oWPYtFrw_gi70teWCfTxXL1GQgfK9ypVCbvnKnpTP8XxPzlgyGaeMOvYaDhnmYWo7bZ128GUoYc8cwU6EbCd9TavrWqaIRyaJ751S2QGKB_cehFjCsdHVwDM-uIr5YPWhWxRnyyu4PUGIoazAVe3YmUmIZEt_tJt7ZcpEfxZTkxdIJPz3VJs46YYJgU6gtKbLS_xArg0pEDZC5i9Wvy6zN-258TlS7HaJTOmyQkLjzvo-t8lClsJqsRhMlsFw");'></div>
+            <div class="absolute inset-0 flex flex-col justify-end px-8 pb-6">
+                <h2 class="text-white tracking-tight text-2xl font-bold mb-1">Access Control</h2>
+                <p class="text-text-muted max-w-xl text-sm">Configure role-based access control and assign services.</p>
+            </div>
+        </div>
+
+        <!-- Updated Header Row -->
+        <div class="px-8 py-4 flex flex-row items-center justify-between bg-surface-dark/50 border-b border-surface-highlight sticky top-0 z-10 backdrop-blur-sm">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">tune</span>
+                Role Configuration
+            </h2>
+            <button onclick="openAddModal()" id="addRoleBtn" class="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-surface-dark font-bold text-sm rounded-lg transition-all shadow-[0_0_15px_rgba(19,236,91,0.2)] hover:shadow-[0_0_20px_rgba(19,236,91,0.4)] hidden">
+                <span class="material-symbols-outlined text-[20px]">add_circle</span>
+                Create Role
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-8 max-w-5xl mx-auto w-full custom-scroll" id="rolesContainer">
+            <!-- Roles will be populated here -->
+        </div>
+    </main>
+
+    <!-- Add Role Modal -->
+    <div id="roleModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div class="relative bg-surface-dark border border-surface-highlight p-6 rounded-xl shadow-2xl w-[450px]">
+             <div class="flex items-center justify-between mb-6 pb-4 border-b border-surface-highlight">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">security</span> 
+                    <span>Create New Role</span>
+                </h3>
+                <button onclick="closeRoleModal()" class="text-text-muted hover:text-white transition-colors">
+                    <span class="material-symbols-outlined">close</span>
                 </button>
             </div>
 
-            <!-- Roles Table -->
-            <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="rolesTableBody" class="bg-white divide-y divide-gray-200">
-                        <!-- Roles will be populated here -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- Add Role Modal -->
-    <div id="roleModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div class="mt-3">
-                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Add Role</h3>
-                <form id="roleForm" class="space-y-4">
-                    <div>
-                        <label for="roleName" class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                        <input type="text" id="roleName" required
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label for="roleDescription" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                        <textarea id="roleDescription" rows="3"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-                    </div>
-                    <div class="flex justify-end space-x-3 mt-4">
-                        <button type="button" onclick="closeRoleModal()" 
-                            class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
-                            Cancel
-                        </button>
-                        <button type="submit" 
-                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                            Create
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Role Services Modal -->
-    <div id="servicesModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div class="relative top-10 mx-auto p-5 border w-3/4 max-w-2xl shadow-lg rounded-md bg-white">
-            <div class="mt-3">
-                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4" id="servicesModalTitle">Edit Role Services</h3>
-                
-                <div class="grid grid-cols-1 gap-4">
-                    <!-- Already Added Services -->
-                    <div>
-                        <h4 class="font-medium text-gray-700 mb-2">Assigned Services</h4>
-                        <div id="assignedServices" class="border border-gray-300 rounded-md p-4 min-h-[150px] max-h-[200px] overflow-y-auto">
-                            <!-- Assigned services will be populated here -->
-                        </div>
-                    </div>
-
-                    <hr class="my-2">
-
-                    <!-- Available Services -->
-                    <div>
-                        <h4 class="font-medium text-gray-700 mb-2">Available Services</h4>
-                        <div id="availableServices" class="border border-gray-300 rounded-md p-4 min-h-[150px] max-h-[200px] overflow-y-auto">
-                            <!-- Available services will be populated here -->
-                        </div>
-                    </div>
+            <form id="roleForm" class="space-y-4">
+                <div class="space-y-1.5">
+                    <label for="roleName" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">Role Name *</label>
+                    <input type="text" id="roleName" required
+                        class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all">
                 </div>
-
-                <div class="flex justify-end mt-4">
-                    <button type="button" onclick="closeServicesModal()" 
-                        class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
-                        Close
+                <div class="space-y-1.5">
+                    <label for="roleDescription" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">Description</label>
+                    <textarea id="roleDescription" rows="3"
+                        class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all resize-none"></textarea>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6 pt-4 border-t border-surface-highlight">
+                    <button type="button" onclick="closeRoleModal()" 
+                        class="px-4 py-2 bg-surface-highlight text-text-muted hover:text-white rounded-lg hover:bg-surface-highlight/80 text-sm font-medium transition-all">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                        class="px-4 py-2 bg-primary text-surface-dark rounded-lg hover:bg-primary-hover text-sm font-bold transition-all shadow-lg shadow-primary/10">
+                        Create
                     </button>
                 </div>
-            </div>
+            </form>
         </div>
+    </div>
+
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 pointer-events-none"></div>
+    <div id="loadingSpinner" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
     </div>
 
     <script src="/static/js/api.js"></script>
@@ -120,48 +174,49 @@
     <script>
         let roles = [];
         let allServices = [];
-        let currentRoleId = null;
-        let roleServices = [];
+        let roleServicesMap = {}; 
 
-        // Check authentication
-        if (!requireAuth()) {
-            // Will redirect in requireAuth
-        }
+        if (!requireAuth()) {}
 
-        // Initialize page
         document.addEventListener('DOMContentLoaded', async () => {
-            document.getElementById('navigation').innerHTML = createNavigation('roles.html');
-            document.getElementById('profileSection').innerHTML = createProfileDropdown();
+            const user = getCurrentUser();
+            const role = getUserRole();
             
-            // Show add button only for root users
-            const userRole = getUserRole();
-            if (userRole === 'root') {
+             // RBAC
+            const currentRole = role ? role.toLowerCase() : '';
+            if (currentRole !== 'admin' && currentRole !== 'root') {
+                window.location.href = '/static/pages/dashboard.html';
+                return;
+            } else {
+                 const navUsers = document.getElementById('nav-users');
+                 const navServices = document.getElementById('nav-services');
+                 const navRoles = document.getElementById('nav-roles');
+                 if (currentRole !== 'admin' && currentRole !== 'root') {
+                   if(navUsers) navUsers.style.display = 'none';
+                   if(navServices) navServices.style.display = 'none';
+                   if(navRoles) navRoles.style.display = 'none';
+                }
+            }
+
+            if (user) {
+                document.getElementById('userNameDisplay').textContent = user;
+                document.getElementById('userRoleDisplay').textContent = (role || 'User').toUpperCase() + ' ACCESS';
+            }
+
+            if (role === 'root') {
                 document.getElementById('addRoleBtn').classList.remove('hidden');
             }
             
             await loadData();
-
-            // Event delegation for table buttons
-            document.getElementById('rolesTableBody').addEventListener('click', (e) => {
-                const button = e.target.closest('button[data-action]');
-                if (!button) return;
-                
-                const roleId = parseInt(button.dataset.roleId);
-                const action = button.dataset.action;
-                
-                if (action === 'edit-services') {
-                    openServicesModal(roleId);
-                } else if (action === 'delete') {
-                    deleteRole(roleId);
-                }
-            });
         });
 
         async function loadData() {
             try {
                 showLoading();
-                roles = await API.getRoles() || [];
-                allServices = await API.getServices() || [];
+                [roles, allServices] = await Promise.all([
+                    API.getRoles(),
+                    API.getServices()
+                ]);
                 renderRoles();
             } catch (error) {
                 showToast('Failed to load data', 'error');
@@ -177,31 +232,144 @@
         }
 
         function renderRoles() {
-            const tbody = document.getElementById('rolesTableBody');
+            const container = document.getElementById('rolesContainer');
             const userRole = getUserRole();
             const isRoot = userRole === 'root';
             
             if (roles.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="3" class="px-6 py-4 text-center text-gray-500">
-                            No roles found. Click "Add Role" to create one.
-                        </td>
-                    </tr>
-                `;
+                container.innerHTML = `<div class="flex flex-col items-center justify-center py-12 opacity-50 border-2 border-dashed border-white/5 rounded-xl"><span class="material-symbols-outlined text-4xl text-text-muted mb-2">shield_lock</span><p class="text-sm text-text-muted">No roles defined.</p></div>`;
                 return;
             }
 
-            tbody.innerHTML = roles.map(role => `
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(role.name)}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${escapeHtml(role.description || '-')}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button data-action="edit-services" data-role-id="${role.id}" class="text-blue-600 hover:text-blue-900">Edit Services</button>
-                        ${isRoot ? `<button data-action="delete" data-role-id="${role.id}" class="text-red-600 hover:text-red-900">Delete</button>` : ''}
-                    </td>
-                </tr>
-            `).join('');
+            container.innerHTML = roles.map(role => {
+                let icon = 'security';
+                let iconColor = 'text-primary';
+                let bgClass = 'bg-primary/10 border-primary/20';
+
+                if (role.name.toLowerCase().includes('admin')) {
+                    icon = 'admin_panel_settings';
+                    iconColor = 'text-blue-500';
+                    bgClass = 'bg-blue-500/10 border-blue-500/20';
+                } else if (role.name.toLowerCase().includes('root')) {
+                    icon = 'encrypted';
+                    iconColor = 'text-red-500';
+                    bgClass = 'bg-red-500/10 border-red-500/20';
+                } else if (role.name.toLowerCase().includes('user')) {
+                    icon = 'person';
+                    iconColor = 'text-text-muted';
+                    bgClass = 'bg-white/5 border-white/10';
+                }
+
+                return `
+                <details class="group bg-surface-highlight/10 border border-surface-highlight rounded-xl overflow-hidden mb-4 transition-all hover:border-surface-highlight/80" onontoggle="handleToggle(${role.id}, this)">
+                    <summary onclick="loadRoleServicesIfNeeded(${role.id})" class="flex items-center justify-between p-4 cursor-pointer select-none bg-surface-dark/40 group-open:bg-surface-highlight/20 transition-colors">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full ${bgClass} flex items-center justify-center ${iconColor} border">
+                                <span class="material-symbols-outlined">${icon}</span>
+                            </div>
+                            <div>
+                                <h3 class="text-white font-bold text-base">${escapeHtml(role.name)}</h3>
+                                <p class="text-text-muted text-xs">${escapeHtml(role.description || 'No description provided')}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            ${isRoot ? `
+                            <button onclick="event.preventDefault(); deleteRole(${role.id})" class="p-2 rounded-full hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-colors" title="Delete Role">
+                                <span class="material-symbols-outlined text-[20px]">delete</span>
+                            </button>
+                            ` : ''}
+                            <span class="material-symbols-outlined text-text-muted transition-transform duration-300 group-open:rotate-180">expand_more</span>
+                        </div>
+                    </summary>
+                    
+                    <div class="p-6 bg-surface-dark/30 border-t border-surface-highlight">
+                        <div class="mb-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h4 class="text-white text-sm font-bold flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-primary text-sm">lock_open</span>
+                                    Assigned Services
+                                </h4>
+                            </div>
+                            <div id="role-services-${role.id}" class="bg-surface-dark border border-surface-highlight rounded-lg overflow-hidden min-h-[60px]">
+                                <div class="flex items-center justify-center p-4">
+                                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-surface-highlight/5 border border-surface-highlight border-dashed rounded-lg p-5">
+                            <label class="block text-xs font-medium text-text-muted uppercase tracking-wider mb-3">Grant Access to Service</label>
+                            <div class="flex flex-col md:flex-row gap-3">
+                                <div class="relative flex-1 group">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <span class="material-symbols-outlined text-text-muted group-focus-within:text-primary transition-colors text-lg">search</span>
+                                    </div>
+                                    <select id="available-services-${role.id}" class="w-full bg-surface-dark border border-surface-highlight rounded-lg text-white text-sm h-10 pl-10 pr-10 focus:ring-1 focus:ring-primary focus:border-primary outline-none appearance-none cursor-pointer transition-shadow">
+                                        <option value="">Select Service...</option>
+                                    </select>
+                                    <span class="material-symbols-outlined absolute right-3 top-2.5 text-text-muted pointer-events-none text-lg">arrow_drop_down</span>
+                                </div>
+                                <button onclick="addRoleService(${role.id})" class="h-10 px-6 bg-surface-highlight hover:bg-primary hover:text-surface-dark text-white font-medium text-sm rounded-lg transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+                                    <span class="material-symbols-outlined text-lg">add_moderator</span>
+                                    Grant Access
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+                `;
+            }).join('');
+        }
+
+        async function loadRoleServicesIfNeeded(roleId) {
+            const container = document.getElementById(`role-services-${roleId}`);
+            if (!container) return; 
+            
+            try {
+                const services = await API.getRoleServices(roleId) || [];
+                roleServicesMap[roleId] = services;
+                renderRoleServices(roleId);
+            } catch (error) {
+                container.innerHTML = '<p class="p-4 text-red-400 text-xs">Failed to load services.</p>';
+            }
+        }
+
+        function renderRoleServices(roleId) {
+            const container = document.getElementById(`role-services-${roleId}`);
+            const availableSelect = document.getElementById(`available-services-${roleId}`);
+            
+            const roleServices = roleServicesMap[roleId] || [];
+            const assignedIds = roleServices.map(s => s.id);
+            
+            if (roleServices.length === 0) {
+                container.innerHTML = `<div class="p-4 text-center text-text-muted text-xs italic">No services assigned to this role.</div>`;
+            } else {
+                container.innerHTML = `
+                    <div class="grid grid-cols-12 gap-4 px-4 py-2 bg-surface-highlight/20 text-[11px] uppercase tracking-wider font-semibold text-text-muted border-b border-surface-highlight">
+                        <div class="col-span-8">Service Name</div>
+                        <div class="col-span-4 text-right">Action</div>
+                    </div>
+                ` + roleServices.map(service => `
+                    <div class="grid grid-cols-12 gap-4 px-4 py-3 items-center border-b border-surface-highlight/50 hover:bg-surface-highlight/10 transition-colors group/item">
+                        <div class="col-span-8 flex items-center gap-3">
+                            <div class="w-8 h-8 rounded bg-surface-highlight/30 flex items-center justify-center text-primary">
+                                <span class="material-symbols-outlined text-sm">dns</span>
+                            </div>
+                            <div>
+                                <p class="text-white text-sm font-medium">${escapeHtml(service.name)}</p>
+                                <p class="text-text-muted text-[10px] font-mono">${escapeHtml(service.ip_port)}</p>
+                            </div>
+                        </div>
+                        <div class="col-span-4 text-right">
+                            <button onclick="removeRoleService(${roleId}, ${service.id})" class="text-text-muted hover:text-red-400 hover:bg-red-400/10 px-2 py-1 rounded transition-colors text-xs font-medium">Remove</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            const availableServices = allServices.filter(s => !assignedIds.includes(s.id));
+            availableSelect.innerHTML = '<option value="">Select Service...</option>' + 
+                availableServices.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.ip_port})</option>`).join('');
         }
 
         function openAddModal() {
@@ -209,145 +377,36 @@
             document.getElementById('roleModal').classList.remove('hidden');
         }
 
-        function closeRoleModal() {
-            document.getElementById('roleModal').classList.add('hidden');
-        }
+        function closeRoleModal() { document.getElementById('roleModal').classList.add('hidden'); }
 
         document.getElementById('roleForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
             const roleData = {
                 name: document.getElementById('roleName').value,
                 description: document.getElementById('roleDescription').value
             };
-
             try {
                 showLoading();
                 await API.createRole(roleData);
-                showToast('Role created successfully', 'success');
+                showToast('Role created', 'success');
                 closeRoleModal();
                 await loadData();
-            } catch (error) {
-                showToast('Failed to create role: ' + error.message, 'error');
-            } finally {
-                hideLoading();
-            }
+            } catch (error) { showToast('Error: ' + error.message, 'error'); } finally { hideLoading(); }
         });
 
         async function deleteRole(roleId) {
-            if (!confirmDialog('Are you sure you want to delete this role?')) {
-                return;
-            }
-
-            try {
-                showLoading();
-                await API.deleteRole(roleId);
-                showToast('Role deleted successfully', 'success');
-                await loadData();
-            } catch (error) {
-                showToast('Failed to delete role: ' + error.message, 'error');
-            } finally {
-                hideLoading();
-            }
+            if (!confirmDialog('Delete this role?')) return;
+            try { showLoading(); await API.deleteRole(roleId); showToast('Role deleted', 'success'); await loadData(); } catch (error) { showToast('Error: ' + error.message, 'error'); } finally { hideLoading(); }
         }
 
-        async function openServicesModal(roleId) {
-            currentRoleId = roleId;
-            const role = roles.find(r => r.id === roleId);
-            
-            document.getElementById('servicesModalTitle').textContent = `Edit Services for "${role.name}"`;
-            document.getElementById('servicesModal').classList.remove('hidden');
-            
-            await loadRoleServices();
+        async function addRoleService(roleId) {
+            const select = document.getElementById(`available-services-${roleId}`);
+            if (!select.value) { showToast('Select a service', 'warning'); return; }
+            try { await API.addRoleService(roleId, parseInt(select.value)); showToast('Assigned', 'success'); await loadRoleServicesIfNeeded(roleId); } catch (error) { showToast(error.message, 'error'); }
         }
 
-        function closeServicesModal() {
-            document.getElementById('servicesModal').classList.add('hidden');
-        }
-
-        async function loadRoleServices() {
-            try {
-                showLoading();
-                roleServices = await API.getRoleServices(currentRoleId) || [];
-                renderRoleServices();
-            } catch (error) {
-                showToast('Failed to load role services', 'error');
-            } finally {
-                hideLoading();
-            }
-        }
-
-        function renderRoleServices() {
-            const assignedDiv = document.getElementById('assignedServices');
-            const availableDiv = document.getElementById('availableServices');
-            
-            const assignedServiceIds = roleServices.map(s => s.id);
-            const availableServicesList = allServices.filter(s => !assignedServiceIds.includes(s.id));
-            
-            if (roleServices.length === 0) {
-                assignedDiv.innerHTML = '<p class="text-gray-500 text-sm">No services assigned</p>';
-            } else {
-                assignedDiv.innerHTML = roleServices.map(service => `
-                    <div class="flex justify-between items-center py-2 px-3 bg-gray-50 rounded mb-2">
-                        <div>
-                            <span class="font-medium">${escapeHtml(service.name)}</span>
-                            <span class="text-sm text-gray-500 ml-2">${escapeHtml(service.ip_port)}</span>
-                        </div>
-                        <button data-action="remove-service" data-service-id="${service.id}"
-                            class="text-red-600 hover:text-red-900 font-bold">
-                            −
-                        </button>
-                    </div>
-                `).join('');
-            }
-
-            if (availableServicesList.length === 0) {
-                availableDiv.innerHTML = '<p class="text-gray-500 text-sm">No available services</p>';
-            } else {
-                availableDiv.innerHTML = availableServicesList.map(service => `
-                    <div class="flex justify-between items-center py-2 px-3 bg-gray-50 rounded mb-2">
-                        <div>
-                            <span class="font-medium">${escapeHtml(service.name)}</span>
-                            <span class="text-sm text-gray-500 ml-2">${escapeHtml(service.ip_port)}</span>
-                        </div>
-                        <button data-action="add-service" data-service-id="${service.id}"
-                            class="text-green-600 hover:text-green-900 font-bold">
-                            +
-                        </button>
-                    </div>
-                `).join('');
-            }
-            
-            // Add event delegation for service buttons
-            assignedDiv.onclick = (e) => {
-                const button = e.target.closest('button[data-action="remove-service"]');
-                if (button) removeRoleService(parseInt(button.dataset.serviceId));
-            };
-            
-            availableDiv.onclick = (e) => {
-                const button = e.target.closest('button[data-action="add-service"]');
-                if (button) addRoleService(parseInt(button.dataset.serviceId));
-            };
-        }
-
-        async function addRoleService(serviceId) {
-            try {
-                await API.addRoleService(currentRoleId, serviceId);
-                showToast('Service added to role', 'success');
-                await loadRoleServices();
-            } catch (error) {
-                showToast('Failed to add service: ' + error.message, 'error');
-            }
-        }
-
-        async function removeRoleService(serviceId) {
-            try {
-                await API.removeRoleService(currentRoleId, serviceId);
-                showToast('Service removed from role', 'success');
-                await loadRoleServices();
-            } catch (error) {
-                showToast('Failed to remove service: ' + error.message, 'error');
-            }
+        async function removeRoleService(roleId, serviceId) {
+            try { await API.removeRoleService(roleId, serviceId); showToast('Removed', 'success'); await loadRoleServicesIfNeeded(roleId); } catch (error) { showToast(error.message, 'error'); }
         }
     </script>
 </body>

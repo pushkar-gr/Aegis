@@ -1,64 +1,158 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Aegis Controller</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Service Dashboard - Aegis Controller</title>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "primary-hover": "#0fb847",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                        "surface-dark": "#111813",
+                        "surface-highlight": "#28392e",
+                        "text-muted": "#9db9a6",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .timer-circle circle { transition: stroke-dashoffset 1s linear; }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-gray-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center">
-                    <div class="text-white text-xl font-bold">Aegis</div>
-                    <div class="ml-10 flex items-baseline space-x-4" id="navigation"></div>
-                </div>
-                <div id="profileSection"></div>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white h-screen flex overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside class="w-64 h-full flex-col hidden md:flex bg-surface-dark border-r border-surface-highlight flex-shrink-0 z-20">
+        <div class="p-6 flex items-center gap-3">
+            <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-[0_0_10px_rgba(19,236,91,0.2)]" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuACmoSgB1qBq-DPKenfjridVaJFpFlsBLLqZxuUXAIwcKYmF7gxA8yPUbNJ_fuDo_xIJpgmluRIhaACm6zSFojQhnxJKk2GiyNFNT_MJPvJAXYrupDJ5-2rjk2_K3L1LUjhRiCGUC-DS1zG6mMCwSHRPTKBDemhq3dsIUB4s5pVg-OSdckm0OdaaM5UadVT9Oo7E2HQpD9wOhjbSv2RtKfLyrRF7s75q5a947f3FIMy00JnlLw7hxxZPEvcjKjDfr4M40VFlb-QCg");'></div>
+            <div class="flex flex-col">
+                <h1 class="text-white text-lg font-bold leading-tight tracking-tight">Service Dash</h1>
+                <p class="text-primary text-xs font-mono font-medium">v2.1.0-aegis</p>
             </div>
         </div>
-    </nav>
+        <nav class="flex flex-col gap-2 px-4 mt-4 flex-1">
+            <a id="nav-dashboard" class="flex items-center gap-3 px-3 py-3 rounded-lg bg-surface-highlight border-l-4 border-primary shadow-sm group transition-all" href="/static/pages/dashboard.html">
+                <span class="material-symbols-outlined text-primary group-hover:text-primary">dashboard</span>
+                <p class="text-white text-sm font-medium">Dashboard</p>
+            </a>
+            <a id="nav-users" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/users.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">group</span>
+                <p class="text-sm font-medium">User Management</p>
+            </a>
+            <a id="nav-services" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/services.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">dns</span>
+                <p class="text-sm font-medium">Services</p>
+            </a>
+            <a id="nav-roles" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/roles.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">shield</span>
+                <p class="text-sm font-medium">Roles</p>
+            </a>
+        </nav>
+        
+        <!-- Profile Section -->
+        <div class="p-4 border-t border-surface-highlight">
+            <div id="userProfile" class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-highlight transition-colors cursor-pointer relative group">
+                <div class="w-8 h-8 rounded-full bg-surface-highlight flex items-center justify-center text-primary font-bold">
+                    <span class="material-symbols-outlined text-[18px]">person</span>
+                </div>
+                <div class="overflow-hidden flex-1">
+                    <p class="text-white text-sm font-medium truncate" id="userNameDisplay">Loading...</p>
+                    <p class="text-text-muted text-xs truncate" id="userRoleDisplay">...</p>
+                </div>
+                <div class="absolute bottom-full left-0 w-full pb-2 hidden group-hover:block z-50">
+                    <div class="bg-surface-highlight border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                        <a href="/static/pages/reset-password.html" class="w-full text-left px-4 py-3 text-xs text-white hover:bg-white/5 flex items-center gap-2 border-b border-white/5">
+                            <span class="material-symbols-outlined text-[14px]">lock_reset</span> Reset Password
+                        </a>
+                        <button onclick="API.logout().then(() => window.location.href = '/static/pages/login.html')" class="w-full text-left px-4 py-3 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[14px]">logout</span> Sign Out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
 
     <!-- Main Content -->
-    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div class="px-4 py-6 sm:px-0">
-            <h1 class="text-3xl font-bold mb-6">Service Dashboard</h1>
-            
-            <!-- Tabs -->
-            <div class="mb-6">
-                <div class="border-b border-gray-200">
-                    <nav class="-mb-px flex space-x-8">
-                        <button onclick="switchTab('all')" id="tabAll"
-                            class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                            All Services
-                        </button>
-                        <button onclick="switchTab('selected')" id="tabSelected"
-                            class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                            Selected Services
-                        </button>
-                    </nav>
+    <main class="flex-1 flex flex-row h-full overflow-hidden relative">
+        <div class="flex flex-col h-full border-r border-surface-highlight relative w-full transition-[width] duration-300 ease-in-out">
+            <!-- Header Banner -->
+            <div class="relative w-full h-32 flex-shrink-0 bg-surface-dark overflow-hidden">
+                <div class="absolute inset-0 bg-cover bg-center" style='background-image: linear-gradient(180deg, rgba(16, 34, 22, 0.3) 0%, rgba(16, 34, 22, 1) 100%), url("https://lh3.googleusercontent.com/aida-public/AB6AXuBiS7Ff2Ko2NL691oWPYtFrw_gi70teWCfTxXL1GQgfK9ypVCbvnKnpTP8XxPzlgyGaeMOvYaDhnmYWo7bZ128GUoYc8cwU6EbCd9TavrWqaIRyaJ751S2QGKB_cehFjCsdHVwDM-uIr5YPWhWxRnyyu4PUGIoazAVe3YmUmIZEt_tJt7ZcpEfxZTkxdIJPz3VJs46YYJgU6gtKbLS_xArg0pEDZC5i9Wvy6zN-258TlS7HaJTOmyQkLjzvo-t8lClsJqsRhMlsFw");'></div>
+                <div class="absolute inset-0 flex flex-col justify-end px-6 pb-4">
+                    <h2 class="text-white tracking-tight text-2xl font-bold mb-1">Service Grid</h2>
+                    <p class="text-text-muted max-w-xl text-xs">Monitor and manage service lifecycle.</p>
                 </div>
             </div>
 
-            <!-- Search Box -->
-            <div class="mb-6">
-                <input type="text" id="searchBox" placeholder="Search services..."
-                    class="w-full max-w-md px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <!-- Controls Bar -->
+            <div class="px-6 py-4 flex flex-row gap-4 items-center bg-background-dark border-b border-surface-highlight z-10 sticky top-0">
+                <div class="flex-1">
+                    <label class="flex w-full items-center h-10 rounded-lg bg-surface-highlight focus-within:ring-2 focus-within:ring-primary/50 transition-all">
+                        <div class="text-text-muted pl-3 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-[20px]">search</span>
+                        </div>
+                        <input id="searchBox" class="w-full bg-transparent border-none text-white placeholder-text-muted focus:ring-0 h-full pl-2 text-sm font-normal" placeholder="Filter services..."/>
+                    </label>
+                </div>
+                <div class="flex h-10 bg-surface-highlight rounded-lg p-1">
+                    <label class="cursor-pointer px-4 flex items-center justify-center rounded-md transition-all" id="labelAll">
+                        <span class="text-xs font-medium">All</span>
+                        <input checked="" class="hidden" name="filter" type="radio" value="all" onchange="switchTab('all')"/>
+                    </label>
+                    <label class="cursor-pointer px-4 flex items-center justify-center rounded-md transition-all text-text-muted" id="labelSelected">
+                        <span class="text-xs font-medium">Active</span>
+                        <input class="hidden" name="filter" type="radio" value="selected" onchange="switchTab('selected')"/>
+                    </label>
+                </div>
+                <button onclick="loadServices()" class="h-10 w-10 flex items-center justify-center rounded-lg bg-surface-highlight text-text-muted hover:text-primary hover:bg-surface-highlight/80 transition-all" title="Refresh">
+                    <span class="material-symbols-outlined text-[20px]">refresh</span>
+                </button>
             </div>
 
-            <!-- Services List -->
-            <div id="servicesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            <!-- Content Grid -->
+            <div class="flex-1 overflow-y-auto scrollbar-hide p-6 bg-background-dark">
+                <div id="servicesList" class="grid grid-cols-1 lg:grid-cols-2 gap-4 pb-10">
+                    <!-- Services will be populated here -->
+                </div>
 
-            <!-- Empty State -->
-            <div id="emptyState" class="hidden text-center py-12">
-                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
-                </svg>
-                <h3 class="mt-2 text-sm font-medium text-gray-900">No services found</h3>
-                <p class="mt-1 text-sm text-gray-500">No services available or selected.</p>
+                <!-- Empty State -->
+                <div id="emptyState" class="hidden flex flex-col items-center justify-center py-20 opacity-50">
+                    <span class="material-symbols-outlined text-6xl text-text-muted mb-4">dns</span>
+                    <h3 class="text-lg font-bold text-white">No Services Found</h3>
+                    <p class="text-sm text-text-muted">Adjust filters or search query.</p>
+                </div>
             </div>
         </div>
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 pointer-events-none"></div>
+    
+    <!-- Loading Spinner (Hidden by default) -->
+    <div id="loadingSpinner" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
     </div>
 
     <script src="/static/js/api.js"></script>
@@ -68,28 +162,39 @@
         let allServices = [];
         let selectedServices = [];
         let searchQuery = '';
-        let countdownIntervals = {};
 
-        // Check authentication
         if (!requireAuth()) {
             // Will redirect in requireAuth
         }
 
-        // Initialize page
         document.addEventListener('DOMContentLoaded', async () => {
-            document.getElementById('navigation').innerHTML = createNavigation('dashboard.html');
-            document.getElementById('profileSection').innerHTML = createProfileDropdown();
+            const user = getCurrentUser();
+            const role = getUserRole();
+            
+            // RBAC: Hide Restricted Menu Items for non-admin/root
+            const currentRole = role ? role.toLowerCase() : '';
+            if (currentRole !== 'admin' && currentRole !== 'root') {
+                const navUsers = document.getElementById('nav-users');
+                const navServices = document.getElementById('nav-services');
+                const navRoles = document.getElementById('nav-roles');
+                if(navUsers) navUsers.style.display = 'none';
+                if(navServices) navServices.style.display = 'none';
+                if(navRoles) navRoles.style.display = 'none';
+            }
+
+            if (user) {
+                document.getElementById('userNameDisplay').textContent = user;
+                document.getElementById('userRoleDisplay').textContent = (role || 'User').toUpperCase() + ' ACCESS';
+            }
             
             await loadServices();
-            switchTab('all');
+            updateTabStyles();
 
-            // Search functionality
             document.getElementById('searchBox').addEventListener('input', (e) => {
                 searchQuery = e.target.value.toLowerCase();
                 renderServices();
             });
 
-            // Event delegation for service buttons
             document.getElementById('servicesList').addEventListener('click', (e) => {
                 const button = e.target.closest('button[data-action]');
                 if (!button) return;
@@ -105,7 +210,6 @@
                 }
             });
 
-            // Auto-refresh selected services every 10 seconds to update from backend
             setInterval(async () => {
                 if (currentTab === 'selected') {
                     await loadSelectedServices();
@@ -113,27 +217,27 @@
                 }
             }, 10000);
 
-            // Update countdown every second
             setInterval(() => {
-                if (currentTab === 'selected') {
-                    updateCountdowns();
-                }
+                updateCountdowns();
             }, 1000);
         });
 
         async function loadServices() {
             try {
+                showLoading();
                 allServices = await API.getMyServices() || [];
                 await loadSelectedServices();
+                renderServices();
             } catch (error) {
                 showToast('Failed to load services', 'error');
+            } finally {
+                hideLoading();
             }
         }
 
         async function loadSelectedServices() {
             try {
                 const services = await API.getMySelectedServices() || [];
-                // Calculate actual time left based on updated_at and time_left
                 selectedServices = services.map(service => {
                     const updatedAt = new Date(service.updated_at);
                     const now = new Date();
@@ -152,22 +256,24 @@
 
         function switchTab(tab) {
             currentTab = tab;
-            
-            // Update tab styling
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('border-blue-500', 'text-blue-600');
-                btn.classList.add('border-transparent', 'text-gray-500');
-            });
-            
-            if (tab === 'all') {
-                document.getElementById('tabAll').classList.remove('border-transparent', 'text-gray-500');
-                document.getElementById('tabAll').classList.add('border-blue-500', 'text-blue-600');
-            } else {
-                document.getElementById('tabSelected').classList.remove('border-transparent', 'text-gray-500');
-                document.getElementById('tabSelected').classList.add('border-blue-500', 'text-blue-600');
-            }
-            
+            updateTabStyles();
             renderServices();
+        }
+
+        function updateTabStyles() {
+            const labelAll = document.getElementById('labelAll');
+            const labelSelected = document.getElementById('labelSelected');
+            
+            const activeClass = "bg-background-dark shadow-sm text-white";
+            const inactiveClass = "text-text-muted hover:text-white hover:bg-white/5";
+            
+            if (currentTab === 'all') {
+                labelAll.className = `cursor-pointer px-4 flex items-center justify-center rounded-md transition-all ${activeClass}`;
+                labelSelected.className = `cursor-pointer px-4 flex items-center justify-center rounded-md transition-all ${inactiveClass}`;
+            } else {
+                labelAll.className = `cursor-pointer px-4 flex items-center justify-center rounded-md transition-all ${inactiveClass}`;
+                labelSelected.className = `cursor-pointer px-4 flex items-center justify-center rounded-md transition-all ${activeClass}`;
+            }
         }
 
         function escapeHtml(text) {
@@ -182,7 +288,6 @@
             
             let services = currentTab === 'all' ? allServices : selectedServices;
             
-            // Filter by search query
             if (searchQuery) {
                 services = services.filter(s => 
                     s.name.toLowerCase().includes(searchQuery) ||
@@ -202,48 +307,82 @@
             container.innerHTML = services.map(service => {
                 const isSelected = selectedServices.some(s => s.id === service.id);
                 const selectedService = selectedServices.find(s => s.id === service.id);
-                return `
-                    <div class="bg-white rounded-lg shadow p-4">
-                        <div class="flex justify-between items-start mb-2">
-                            <h3 class="text-lg font-semibold">${escapeHtml(service.name)}</h3>
-                            ${isSelected ? 
-                                '<span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Active</span>' : 
-                                '<span class="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">Inactive</span>'
-                            }
-                        </div>
-                        <p class="text-sm text-gray-600 mb-2">${escapeHtml(service.description || 'No description')}</p>
-                        <p class="text-sm text-gray-500 mb-3">
-                            <span class="font-medium">IP:Port:</span> ${escapeHtml(service.ip_port)}
-                        </p>
-                        ${currentTab === 'all' ? `
-                            <button data-service-id="${service.id}" data-is-selected="${isSelected}" data-action="toggle"
-                                class="${isSelected ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'} text-white px-4 py-2 rounded text-sm w-full">
-                                ${isSelected ? 'Deselect' : 'Select'}
-                            </button>
-                        ` : `
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm text-gray-500" id="timer-${service.id}">
-                                    Time left: ${selectedService ? selectedService.calculated_time_left : 60}s
-                                </span>
-                                <button data-service-id="${service.id}" data-action="deselect"
-                                    class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm">
-                                    Remove
-                                </button>
+                
+                if (isSelected) {
+                    const timeLeft = selectedService ? selectedService.calculated_time_left : 60;
+                    const dashOffset = 100 - ((timeLeft / 60) * 100);
+                    
+                    return `
+                    <div class="bg-surface-highlight/40 border border-surface-highlight rounded-xl p-4 flex flex-col gap-3 hover:border-primary/30 transition-all group relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-primary/20 group-hover:bg-primary transition-colors"></div>
+                        <div class="flex justify-between items-start pl-2">
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="relative flex h-2.5 w-2.5">
+                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                                    </div>
+                                    <h3 class="text-white font-bold text-base truncate">${escapeHtml(service.name)}</h3>
+                                </div>
+                                <p class="text-text-muted text-[10px] font-mono bg-black/20 px-1.5 py-0.5 rounded w-fit">${escapeHtml(service.ip_port)}</p>
                             </div>
-                        `}
+                            <div class="relative h-10 w-10 flex items-center justify-center">
+                                <svg class="transform -rotate-90 w-full h-full" viewBox="0 0 36 36">
+                                    <path class="text-surface-highlight" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
+                                    <path id="circle-${service.id}" class="text-primary timer-circle" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="100, 100" stroke-dashoffset="${dashOffset}" stroke-linecap="round" stroke-width="3"></path>
+                                </svg>
+                                <div id="timer-text-${service.id}" class="absolute inset-0 flex items-center justify-center text-[8px] font-mono font-bold text-primary">
+                                    ${timeLeft}s
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-400 leading-relaxed pl-2 line-clamp-2">${escapeHtml(service.description || 'No description provided.')}</p>
+                        <div class="mt-auto flex items-center justify-end pt-3 border-t border-white/5 pl-2">
+                            <button data-service-id="${service.id}" data-action="deselect" class="px-3 py-1.5 rounded-md border border-white/10 text-white text-[10px] font-medium hover:bg-white/5 hover:border-white/20 transition-all uppercase tracking-wider">
+                                Deselect
+                            </button>
+                        </div>
                     </div>
+                    `;
+                }
+                
+                return `
+                <div class="bg-surface-highlight/10 border border-surface-highlight rounded-xl p-4 flex flex-col gap-3 hover:border-white/10 transition-all group relative overflow-hidden opacity-80 hover:opacity-100">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-gray-600 transition-colors"></div>
+                    <div class="flex justify-between items-start pl-2">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-gray-600"></span>
+                                <h3 class="text-gray-300 font-bold text-base truncate">${escapeHtml(service.name)}</h3>
+                            </div>
+                            <p class="text-gray-500 text-[10px] font-mono bg-black/20 px-1.5 py-0.5 rounded w-fit">${escapeHtml(service.ip_port)}</p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-surface-highlight/30 flex items-center justify-center text-gray-500 border border-white/5">
+                            <span class="material-symbols-outlined text-[20px]">dns</span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 leading-relaxed pl-2 line-clamp-2">${escapeHtml(service.description || 'No description provided.')}</p>
+                    <div class="mt-auto flex items-center justify-end pt-3 border-t border-white/5 pl-2">
+                        <button data-service-id="${service.id}" data-is-selected="false" data-action="toggle" class="w-full px-3 py-1.5 rounded-md bg-primary text-surface-dark text-[10px] font-bold hover:bg-primary-hover shadow-[0_0_10px_rgba(19,236,91,0.1)] hover:shadow-[0_0_15px_rgba(19,236,91,0.3)] transition-all flex items-center justify-center gap-1 uppercase tracking-wider">
+                            <span class="material-symbols-outlined text-[14px]">bolt</span> Activate
+                        </button>
+                    </div>
+                </div>
                 `;
             }).join('');
         }
 
         function updateCountdowns() {
             selectedServices.forEach(service => {
-                const timerElement = document.getElementById(`timer-${service.id}`);
-                if (timerElement && service.calculated_time_left > 0) {
+                const timerText = document.getElementById(`timer-text-${service.id}`);
+                const circle = document.getElementById(`circle-${service.id}`);
+                
+                if (timerText && service.calculated_time_left > 0) {
                     service.calculated_time_left--;
-                    timerElement.textContent = `Time left: ${service.calculated_time_left}s`;
-                    
-                    // Auto-remove when time reaches 0
+                    timerText.textContent = `${service.calculated_time_left}s`;
+                    const percentage = (service.calculated_time_left / 60) * 100;
+                    const offset = 100 - percentage;
+                    if(circle) circle.style.strokeDashoffset = offset;
                     if (service.calculated_time_left <= 0) {
                         deselectService(service.id);
                     }
