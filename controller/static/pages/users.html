@@ -1,180 +1,318 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Users - Aegis Controller</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>User Management - Service Dash</title>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "primary-hover": "#0fb847",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                        "surface-dark": "#111813",
+                        "surface-highlight": "#28392e",
+                        "text-muted": "#9db9a6",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .custom-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #111813; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #28392e; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #13ec5b; }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-gray-800">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center">
-                    <div class="text-white text-xl font-bold">Aegis</div>
-                    <div class="ml-10 flex items-baseline space-x-4" id="navigation"></div>
-                </div>
-                <div id="profileSection"></div>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white h-screen flex overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside class="w-64 h-full flex-col hidden md:flex bg-surface-dark border-r border-surface-highlight flex-shrink-0 z-20">
+        <div class="p-6 flex items-center gap-3">
+            <div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-[0_0_10px_rgba(19,236,91,0.2)]" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuACmoSgB1qBq-DPKenfjridVaJFpFlsBLLqZxuUXAIwcKYmF7gxA8yPUbNJ_fuDo_xIJpgmluRIhaACm6zSFojQhnxJKk2GiyNFNT_MJPvJAXYrupDJ5-2rjk2_K3L1LUjhRiCGUC-DS1zG6mMCwSHRPTKBDemhq3dsIUB4s5pVg-OSdckm0OdaaM5UadVT9Oo7E2HQpD9wOhjbSv2RtKfLyrRF7s75q5a947f3FIMy00JnlLw7hxxZPEvcjKjDfr4M40VFlb-QCg");'></div>
+            <div class="flex flex-col">
+                <h1 class="text-white text-lg font-bold leading-tight tracking-tight">Service Dash</h1>
+                <p class="text-primary text-xs font-mono font-medium">v2.1.0-aegis</p>
             </div>
         </div>
-    </nav>
+        <nav class="flex flex-col gap-2 px-4 mt-4 flex-1">
+            <a id="nav-dashboard" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/dashboard.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">dashboard</span>
+                <p class="text-sm font-medium">Dashboard</p>
+            </a>
+            <a id="nav-users" class="flex items-center gap-3 px-3 py-3 rounded-lg bg-surface-highlight border-l-4 border-primary shadow-sm group transition-all" href="/static/pages/users.html">
+                <span class="material-symbols-outlined text-primary">group</span>
+                <p class="text-white text-sm font-medium">User Management</p>
+            </a>
+            <a id="nav-services" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/services.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">dns</span>
+                <p class="text-sm font-medium">Services</p>
+            </a>
+            <a id="nav-roles" class="flex items-center gap-3 px-3 py-3 rounded-lg text-text-muted hover:bg-surface-highlight hover:text-white transition-colors group" href="/static/pages/roles.html">
+                <span class="material-symbols-outlined group-hover:text-primary transition-colors">shield</span>
+                <p class="text-sm font-medium">Roles</p>
+            </a>
+        </nav>
+        
+        <!-- Profile Section -->
+        <div class="p-4 border-t border-surface-highlight">
+            <div id="userProfile" class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-highlight transition-colors cursor-pointer relative group">
+                <div class="w-8 h-8 rounded-full bg-surface-highlight flex items-center justify-center text-primary font-bold">
+                    <span class="material-symbols-outlined text-[18px]">person</span>
+                </div>
+                <div class="overflow-hidden flex-1">
+                    <p class="text-white text-sm font-medium truncate" id="userNameDisplay">Loading...</p>
+                    <p class="text-text-muted text-xs truncate" id="userRoleDisplay">...</p>
+                </div>
+                <!-- Updated Menu -->
+                <div class="absolute bottom-full left-0 w-full pb-2 hidden group-hover:block z-50">
+                    <div class="bg-surface-highlight border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                        <a href="/static/pages/reset-password.html" class="w-full text-left px-4 py-3 text-xs text-white hover:bg-white/5 flex items-center gap-2 border-b border-white/5">
+                            <span class="material-symbols-outlined text-[14px]">lock_reset</span> Reset Password
+                        </a>
+                        <button onclick="API.logout().then(() => window.location.href = '/static/pages/login.html')" class="w-full text-left px-4 py-3 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-[14px]">logout</span> Sign Out
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
 
     <!-- Main Content -->
-    <div class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div class="px-4 py-6 sm:px-0">
-            <h1 class="text-3xl font-bold mb-6">User Management</h1>
+    <main class="flex-1 flex flex-col h-full overflow-hidden relative bg-background-dark">
+        <!-- Banner Added -->
+        <div class="relative w-full h-32 flex-shrink-0 bg-surface-dark overflow-hidden border-b border-surface-highlight">
+            <div class="absolute inset-0 bg-cover bg-center" style='background-image: linear-gradient(180deg, rgba(16, 34, 22, 0.3) 0%, rgba(16, 34, 22, 1) 100%), url("https://lh3.googleusercontent.com/aida-public/AB6AXuBiS7Ff2Ko2NL691oWPYtFrw_gi70teWCfTxXL1GQgfK9ypVCbvnKnpTP8XxPzlgyGaeMOvYaDhnmYWo7bZ128GUoYc8cwU6EbCd9TavrWqaIRyaJ751S2QGKB_cehFjCsdHVwDM-uIr5YPWhWxRnyyu4PUGIoazAVe3YmUmIZEt_tJt7ZcpEfxZTkxdIJPz3VJs46YYJgU6gtKbLS_xArg0pEDZC5i9Wvy6zN-258TlS7HaJTOmyQkLjzvo-t8lClsJqsRhMlsFw");'></div>
+            <div class="absolute inset-0 flex flex-col justify-end px-8 pb-4">
+                <h2 class="text-white tracking-tight text-2xl font-bold mb-1">User Management</h2>
+                <p class="text-text-muted max-w-xl text-xs">Manage user access, assign roles, and configure security policies.</p>
+            </div>
+        </div>
+
+        <!-- Controls / Tabs Header -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between px-8 py-4 border-b border-surface-highlight bg-surface-dark/50 backdrop-blur-sm z-10">
+            <div class="flex flex-wrap gap-4 items-center flex-1">
+                 <!-- Search (Only in List View) -->
+                <div id="searchContainer" class="relative flex-1 min-w-[200px] max-w-md">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-text-muted">
+                        <span class="material-symbols-outlined text-[20px]">search</span>
+                    </span>
+                    <input id="userSearch" class="w-full h-10 bg-surface-highlight border-none rounded-lg pl-10 pr-4 text-sm text-white placeholder-text-muted focus:ring-1 focus:ring-primary transition-all" placeholder="Search by username..." type="text"/>
+                </div>
+            </div>
             
-            <!-- Tabs -->
-            <div class="mb-6">
-                <div class="border-b border-gray-200">
-                    <nav class="-mb-px flex space-x-8">
-                        <button onclick="switchTab('list')" id="tabList"
-                            class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                            All Users
-                        </button>
-                        <button onclick="switchTab('edit')" id="tabEdit"
-                            class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                            Add/Edit User
-                        </button>
-                    </nav>
-                </div>
+            <div class="mt-4 sm:mt-0 flex h-10 bg-surface-highlight rounded-lg p-1 ml-4">
+                <label class="cursor-pointer px-4 flex items-center justify-center rounded-md transition-all bg-background-dark shadow-sm text-white" id="tabList">
+                    <span class="text-xs font-medium flex items-center gap-2"><span class="material-symbols-outlined text-[16px]">list</span> All Users</span>
+                    <input checked="" class="hidden" name="viewTab" type="radio" value="list" onchange="switchTab('list')"/>
+                </label>
+                <label class="cursor-pointer px-4 flex items-center justify-center rounded-md transition-all text-text-muted hover:text-white hover:bg-white/5" id="tabEdit">
+                    <span class="text-xs font-medium flex items-center gap-2"><span class="material-symbols-outlined text-[16px]">edit</span> Add / Edit User</span>
+                    <input class="hidden" name="viewTab" type="radio" value="edit" onchange="switchTab('edit')"/>
+                </label>
             </div>
+        </div>
 
-            <!-- Tab Content -->
-            <div id="listTab" class="hidden">
-                <!-- Users Table -->
-                <div class="bg-white shadow-md rounded-lg overflow-hidden">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role ID</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="usersTableBody" class="bg-white divide-y divide-gray-200">
-                            <!-- Users will be populated here -->
-                        </tbody>
-                    </table>
-                </div>
+        <!-- List View -->
+        <div id="listView" class="flex-1 overflow-auto custom-scroll px-8 py-6">
+            <div class="bg-surface-dark border border-surface-highlight rounded-xl overflow-hidden shadow-lg">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-surface-highlight/50 text-text-muted text-xs uppercase font-semibold tracking-wider border-b border-surface-highlight">
+                            <th class="px-6 py-4 w-24">ID</th>
+                            <th class="px-6 py-4">Username</th>
+                            <th class="px-6 py-4">Role</th>
+                            <th class="px-6 py-4">Status</th>
+                            <th class="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody" class="divide-y divide-surface-highlight text-sm">
+                        <!-- Users populated here -->
+                    </tbody>
+                </table>
             </div>
+        </div>
 
-            <div id="editTab" class="hidden">
-                <div class="grid grid-cols-2 gap-6">
-                    <!-- Column 1: User Details -->
-                    <div class="bg-white shadow-md rounded-lg p-6">
-                        <h2 class="text-xl font-semibold mb-4">User Details</h2>
-                        <form id="userForm" class="space-y-4">
-                            <input type="hidden" id="userId">
-                            <input type="hidden" id="isEditMode">
-                            
-                            <div>
-                                <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-                                <input type="text" id="username" required
-                                    onblur="checkUserExists()"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <p class="text-xs text-gray-500 mt-1">5-30 characters, alphanumeric and underscore only</p>
-                            </div>
-
-                            <div>
-                                <label for="roleId" class="block text-sm font-medium text-gray-700 mb-1">Role *</label>
-                                <select id="roleId" required
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="">Select a role</option>
-                                </select>
-                            </div>
-
-                            <div id="passwordSection">
-                                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                                <input type="password" id="password"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-
-                            <div id="resetPasswordSection" class="hidden">
-                                <button type="button" onclick="openResetPasswordModal()" 
-                                    class="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md">
-                                    Reset Password
-                                </button>
-                            </div>
-
-                            <div class="flex space-x-3">
-                                <button type="submit" id="saveUserBtn"
-                                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
-                                    Save User
-                                </button>
-                                <button type="button" onclick="clearForm()" 
-                                    class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-md">
-                                    Clear
-                                </button>
-                            </div>
-                        </form>
+        <!-- Edit View -->
+        <div id="editView" class="hidden flex-1 overflow-auto custom-scroll px-8 py-6">
+            <div class="max-w-5xl mx-auto space-y-6">
+                <!-- User Details Section -->
+                <div class="bg-surface-dark border border-surface-highlight rounded-xl p-6 shadow-lg">
+                    <div class="flex items-center gap-3 mb-6 pb-4 border-b border-surface-highlight">
+                        <div class="p-2 rounded-lg bg-primary/10 text-primary">
+                            <span class="material-symbols-outlined text-[24px]">person_edit</span>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold text-white">User Configuration</h2>
+                            <p class="text-text-muted text-xs">Configure authentication and role settings.</p>
+                        </div>
                     </div>
 
-                    <!-- Column 2: User Services -->
-                    <div class="bg-white shadow-md rounded-lg p-6">
-                        <h2 class="text-xl font-semibold mb-4">Extra User Services</h2>
-                        <p class="text-sm text-gray-600 mb-4">Manage additional services for this user beyond their role permissions.</p>
+                    <form id="userForm" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <input type="hidden" id="userId">
+                        <input type="hidden" id="isEditMode">
                         
-                        <div id="userServicesContainer">
-                            <p class="text-gray-500 text-sm">Select or create a user first</p>
+                        <div class="space-y-1.5 md:col-span-2">
+                            <label for="username" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">Username *</label>
+                            <input type="text" id="username" required
+                                class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all">
+                            <p class="text-xs text-text-muted ml-1">Unique identifier for the user. Type to search/create.</p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="roleId" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">Role *</label>
+                            <select id="roleId" required
+                                class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white bg-black/20 focus:bg-black/40 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm transition-all">
+                                <option value="">Select a role</option>
+                            </select>
+                        </div>
+
+                        <div id="passwordSection" class="space-y-1.5">
+                            <label for="password" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">Password *</label>
+                            <input type="password" id="password"
+                                class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all">
+                        </div>
+
+                        <div class="md:col-span-2 flex flex-wrap gap-3 pt-4 border-t border-surface-highlight items-center">
+                            <button type="submit" id="saveUserBtn"
+                                class="flex-1 bg-primary hover:bg-primary-hover text-surface-dark font-bold py-3 px-6 rounded-lg transition-all shadow-lg shadow-primary/10">
+                                Create User
+                            </button>
+                            
+                            <button type="button" id="resetPasswordBtn" onclick="openResetPasswordModal()" 
+                                class="hidden px-4 py-3 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/20 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2">
+                                <span class="material-symbols-outlined text-[18px]">key</span> Reset Password
+                            </button>
+
+                            <button type="button" onclick="clearForm()" 
+                                class="px-6 py-3 bg-surface-highlight hover:bg-surface-highlight/80 text-white font-medium rounded-lg transition-all border border-white/5">
+                                Clear
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Services Section (Full Width) -->
+                <div class="bg-surface-dark border border-surface-highlight rounded-xl p-6 shadow-lg">
+                    <div class="flex items-center gap-3 mb-6 pb-4 border-b border-surface-highlight">
+                        <div class="p-2 rounded-lg bg-blue-500/10 text-blue-400">
+                            <span class="material-symbols-outlined text-[24px]">dns</span>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold text-white">Service Assignments</h2>
+                            <p class="text-text-muted text-xs">Manage explicit service access for this user.</p>
+                        </div>
+                    </div>
+
+                    <div id="userServicesContainer" class="min-h-[200px]">
+                        <div class="flex flex-col items-center justify-center py-12 opacity-50 border-2 border-dashed border-white/5 rounded-xl">
+                            <span class="material-symbols-outlined text-4xl text-text-muted mb-2">person_add</span>
+                            <p class="text-sm text-text-muted">Save the user first to manage services.</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 
     <!-- Reset Password Modal -->
-    <div id="resetPasswordModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div class="mt-3">
-                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Reset Password</h3>
-                <form id="resetPasswordForm" class="space-y-4">
-                    <div>
-                        <label for="newPassword" class="block text-sm font-medium text-gray-700 mb-1">New Password *</label>
-                        <input type="password" id="newPassword" required
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div class="flex justify-end space-x-3 mt-4">
-                        <button type="button" onclick="closeResetPasswordModal()" 
-                            class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">
-                            Cancel
-                        </button>
-                        <button type="submit" 
-                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                            Reset
-                        </button>
-                    </div>
-                </form>
-            </div>
+    <div id="resetPasswordModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div class="relative bg-surface-dark border border-surface-highlight p-6 rounded-xl shadow-2xl w-96">
+            <h3 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span class="material-symbols-outlined text-yellow-500">lock_reset</span> Reset Password
+            </h3>
+            <form id="resetPasswordForm" class="space-y-4">
+                <div class="space-y-1.5">
+                    <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">New Password *</label>
+                    <input type="password" id="newPassword" required
+                        class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all">
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" onclick="closeResetPasswordModal()" 
+                        class="px-4 py-2 bg-surface-highlight text-text-muted hover:text-white rounded-lg hover:bg-surface-highlight/80 text-sm font-medium transition-all">
+                        Cancel
+                    </button>
+                    <button type="submit" 
+                        class="px-4 py-2 bg-primary text-surface-dark rounded-lg hover:bg-primary-hover text-sm font-bold transition-all">
+                        Reset
+                    </button>
+                </div>
+            </form>
         </div>
+    </div>
+
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 pointer-events-none"></div>
+    <div id="loadingSpinner" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 hidden">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
     </div>
 
     <script src="/static/js/api.js"></script>
     <script src="/static/js/components.js"></script>
     <script>
-        let users = [];
-        let roles = [];
-        let allServices = [];
-        let currentUserServices = [];
+        let users = [], roles = [], allServices = [], currentUserServices = [];
         let currentTab = 'list';
 
-        // Check authentication
-        if (!requireAuth()) {
-            // Will redirect in requireAuth
-        }
+        if (!requireAuth()) {}
 
-        // Initialize page
         document.addEventListener('DOMContentLoaded', async () => {
-            document.getElementById('navigation').innerHTML = createNavigation('users.html');
-            document.getElementById('profileSection').innerHTML = createProfileDropdown();
+             const user = getCurrentUser();
+            const role = getUserRole();
+            
+            // RBAC
+            const currentRole = role ? role.toLowerCase() : '';
+            if (currentRole !== 'admin' && currentRole !== 'root') {
+                window.location.href = '/static/pages/dashboard.html';
+                return;
+            } else {
+                 // Even if on this page, hide navigation links for consistency if logic changes
+                const navUsers = document.getElementById('nav-users');
+                const navServices = document.getElementById('nav-services');
+                const navRoles = document.getElementById('nav-roles');
+                // Admins see everything, so no hiding needed if logic is strict, but for safety:
+                if (currentRole !== 'admin' && currentRole !== 'root') {
+                   if(navUsers) navUsers.style.display = 'none';
+                   if(navServices) navServices.style.display = 'none';
+                   if(navRoles) navRoles.style.display = 'none';
+                }
+            }
+
+            if (user) {
+                document.getElementById('userNameDisplay').textContent = user;
+                document.getElementById('userRoleDisplay').textContent = (role || 'User').toUpperCase() + ' ACCESS';
+            }
             
             await loadData();
             switchTab('list');
 
-            // Event delegation for table buttons
+            document.getElementById('userSearch').addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                const filtered = users.filter(u => u.username.toLowerCase().includes(query));
+                renderUsers(filtered);
+            });
+
+            document.getElementById('username').addEventListener('input', (e) => {
+                checkUserExists();
+            });
+
             document.getElementById('usersTableBody').addEventListener('click', (e) => {
                 const button = e.target.closest('button[data-action]');
                 if (!button) return;
@@ -182,11 +320,8 @@
                 const userId = parseInt(button.dataset.userId);
                 const action = button.dataset.action;
                 
-                if (action === 'edit') {
-                    editUser(userId);
-                } else if (action === 'delete') {
-                    deleteUser(userId);
-                }
+                if (action === 'edit') editUser(userId);
+                else if (action === 'delete') deleteUser(userId);
             });
         });
 
@@ -199,12 +334,11 @@
                     API.getServices()
                 ]);
                 
-                // Populate role dropdown
                 const roleSelect = document.getElementById('roleId');
                 roleSelect.innerHTML = '<option value="">Select a role</option>' +
                     roles.map(role => `<option value="${role.id}">${role.name}</option>`).join('');
                 
-                renderUsers();
+                renderUsers(users);
             } catch (error) {
                 showToast('Failed to load data', 'error');
             } finally {
@@ -214,25 +348,24 @@
 
         function switchTab(tab) {
             currentTab = tab;
+            const tabList = document.getElementById('tabList');
+            const tabEdit = document.getElementById('tabEdit');
             
-            // Update tab styling
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('border-blue-500', 'text-blue-600');
-                btn.classList.add('border-transparent', 'text-gray-500');
-            });
-            
-            // Hide all tabs
-            document.getElementById('listTab').classList.add('hidden');
-            document.getElementById('editTab').classList.add('hidden');
+            const activeClass = "cursor-pointer px-4 flex items-center justify-center rounded-md transition-all bg-background-dark shadow-sm text-white border border-white/5";
+            const inactiveClass = "cursor-pointer px-4 flex items-center justify-center rounded-md transition-all text-text-muted hover:text-white hover:bg-white/5";
             
             if (tab === 'list') {
-                document.getElementById('tabList').classList.remove('border-transparent', 'text-gray-500');
-                document.getElementById('tabList').classList.add('border-blue-500', 'text-blue-600');
-                document.getElementById('listTab').classList.remove('hidden');
+                document.getElementById('listView').classList.remove('hidden');
+                document.getElementById('editView').classList.add('hidden');
+                document.getElementById('searchContainer').classList.remove('invisible');
+                tabList.className = activeClass;
+                tabEdit.className = inactiveClass;
             } else {
-                document.getElementById('tabEdit').classList.remove('border-transparent', 'text-gray-500');
-                document.getElementById('tabEdit').classList.add('border-blue-500', 'text-blue-600');
-                document.getElementById('editTab').classList.remove('hidden');
+                document.getElementById('listView').classList.add('hidden');
+                document.getElementById('editView').classList.remove('hidden');
+                document.getElementById('searchContainer').classList.add('invisible'); // Hide search in edit
+                tabList.className = inactiveClass;
+                tabEdit.className = activeClass;
             }
         }
 
@@ -242,32 +375,46 @@
             return div.innerHTML;
         }
 
-        function renderUsers() {
+        function getRoleName(roleId) {
+            const role = roles.find(r => r.id === roleId);
+            return role ? escapeHtml(role.name) : `ID: ${roleId}`;
+        }
+
+        function renderUsers(userList) {
             const tbody = document.getElementById('usersTableBody');
             
-            if (users.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="4" class="px-6 py-4 text-center text-gray-500">
-                            No users found.
-                        </td>
-                    </tr>
-                `;
+            if (userList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-text-muted"><p>No users found.</p></td></tr>`;
                 return;
             }
 
-            tbody.innerHTML = users.map(user => `
-                <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escapeHtml(user.username)}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${user.role_id}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm">
-                        <span class="${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} px-2 py-1 rounded text-xs">
+            tbody.innerHTML = userList.map(user => `
+                <tr class="hover:bg-surface-highlight/20 transition-colors group border-b border-surface-highlight/50">
+                    <td class="px-6 py-4 font-mono text-text-muted text-xs">#${user.id}</td>
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-surface-highlight flex items-center justify-center text-primary font-bold text-xs border border-white/5 uppercase">
+                                ${user.username.substring(0, 2)}
+                            </div>
+                            <p class="font-medium text-white text-sm">${escapeHtml(user.username)}</p>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-text-muted text-sm">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-highlight border border-white/10 text-gray-300 text-xs font-medium">
+                            ${getRoleName(user.role_id)}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full ${user.is_active ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'} text-xs font-medium">
+                            <span class="w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-green-400 animate-pulse' : 'bg-red-400'}"></span>
                             ${user.is_active ? 'Active' : 'Inactive'}
                         </span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <button data-action="edit" data-user-id="${user.id}" class="text-blue-600 hover:text-blue-900">Edit</button>
-                        <button data-action="delete" data-user-id="${user.id}" class="text-red-600 hover:text-red-900">Delete</button>
+                    <td class="px-6 py-4 text-right">
+                        <div class="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                            <button data-action="edit" data-user-id="${user.id}" class="p-1.5 rounded-md hover:bg-surface-highlight text-text-muted hover:text-white transition-colors"><span class="material-symbols-outlined text-[20px]">edit</span></button>
+                            <button data-action="delete" data-user-id="${user.id}" class="p-1.5 rounded-md hover:bg-red-900/20 text-text-muted hover:text-red-400 transition-colors"><span class="material-symbols-outlined text-[20px]">delete</span></button>
+                        </div>
                     </td>
                 </tr>
             `).join('');
@@ -275,49 +422,55 @@
 
         async function checkUserExists() {
             const username = document.getElementById('username').value.trim();
-            if (!username) return;
+            const currentMode = document.getElementById('isEditMode').value;
+            
+            if (!username) {
+               if(currentMode === 'true') clearForm(true); 
+               return;
+            }
 
             const existingUser = users.find(u => u.username === username);
-            
             if (existingUser) {
-                // Edit mode
-                document.getElementById('isEditMode').value = 'true';
-                document.getElementById('userId').value = existingUser.id;
-                document.getElementById('roleId').value = existingUser.role_id;
-                document.getElementById('passwordSection').classList.add('hidden');
-                document.getElementById('resetPasswordSection').classList.remove('hidden');
-                document.getElementById('saveUserBtn').textContent = 'Update User';
-                
-                // Load user services
-                await loadUserServices(existingUser.id);
-            } else {
-                // Add mode
-                document.getElementById('isEditMode').value = 'false';
-                document.getElementById('userId').value = '';
-                document.getElementById('passwordSection').classList.remove('hidden');
-                document.getElementById('resetPasswordSection').classList.add('hidden');
-                document.getElementById('password').required = true;
-                document.getElementById('saveUserBtn').textContent = 'Create User';
-                
-                // Clear user services
-                document.getElementById('userServicesContainer').innerHTML = '<p class="text-gray-500 text-sm">User will be created first</p>';
+                const currentId = document.getElementById('userId').value;
+                if (currentId != existingUser.id) await switchToEditMode(existingUser);
+            } else if (currentMode === 'true') {
+                const enteredName = document.getElementById('username').value;
+                clearForm(true);
+                document.getElementById('username').value = enteredName;
             }
         }
+        
+        async function switchToEditMode(user) {
+            document.getElementById('isEditMode').value = 'true';
+            document.getElementById('userId').value = user.id;
+            document.getElementById('roleId').value = user.role_id;
+            document.getElementById('passwordSection').classList.add('hidden');
+            document.getElementById('resetPasswordBtn').classList.remove('hidden');
+            document.getElementById('saveUserBtn').textContent = 'Update User';
+            await loadUserServices(user.id);
+        }
 
-        function clearForm() {
+        function clearForm(keepUsername = false) {
+            const usernameField = document.getElementById('username');
+            const currentUsername = usernameField.value;
             document.getElementById('userForm').reset();
+            if (keepUsername) usernameField.value = currentUsername;
             document.getElementById('userId').value = '';
             document.getElementById('isEditMode').value = 'false';
             document.getElementById('passwordSection').classList.remove('hidden');
-            document.getElementById('resetPasswordSection').classList.add('hidden');
+            document.getElementById('resetPasswordBtn').classList.add('hidden');
             document.getElementById('password').required = true;
             document.getElementById('saveUserBtn').textContent = 'Create User';
-            document.getElementById('userServicesContainer').innerHTML = '<p class="text-gray-500 text-sm">Select or create a user first</p>';
+            document.getElementById('userServicesContainer').innerHTML = `
+                <div class="flex flex-col items-center justify-center py-12 opacity-50 border-2 border-dashed border-white/5 rounded-xl">
+                    <span class="material-symbols-outlined text-4xl text-text-muted mb-2">person_add</span>
+                    <p class="text-sm text-text-muted">Save the user first to manage services.</p>
+                </div>`;
+            currentUserServices = [];
         }
 
         document.getElementById('userForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
             const isEdit = document.getElementById('isEditMode').value === 'true';
             const userId = document.getElementById('userId').value;
             const username = document.getElementById('username').value;
@@ -326,25 +479,17 @@
 
             try {
                 showLoading();
-                
                 if (isEdit) {
-                    // Update user role
                     await API.updateUserRole(userId, roleId);
                     showToast('User updated successfully', 'success');
                 } else {
-                    // Create new user
-                    const userData = {
-                        credentials: {
-                            username: username,
-                            password: password
-                        },
-                        role_id: roleId
-                    };
-                    await API.createUser(userData);
+                    await API.createUser({ credentials: { username, password }, role_id: roleId });
                     showToast('User created successfully', 'success');
+                    await loadData(); 
+                    const newUser = users.find(u => u.username === username);
+                    if(newUser) { await switchToEditMode(newUser); return; }
                     clearForm();
                 }
-                
                 await loadData();
             } catch (error) {
                 showToast('Failed to save user: ' + error.message, 'error');
@@ -356,163 +501,81 @@
         async function editUser(userId) {
             const user = users.find(u => u.id === userId);
             if (!user) return;
-
             switchTab('edit');
-            
-            document.getElementById('userId').value = user.id;
             document.getElementById('username').value = user.username;
-            document.getElementById('roleId').value = user.role_id;
-            document.getElementById('isEditMode').value = 'true';
-            document.getElementById('passwordSection').classList.add('hidden');
-            document.getElementById('resetPasswordSection').classList.remove('hidden');
-            document.getElementById('saveUserBtn').textContent = 'Update User';
-            
-            await loadUserServices(userId);
+            await switchToEditMode(user);
         }
 
         async function deleteUser(userId) {
-            if (!confirmDialog('Are you sure you want to delete this user?')) {
-                return;
-            }
-
+            if (!confirmDialog('Delete user?')) return;
             try {
                 showLoading();
                 await API.deleteUser(userId);
-                showToast('User deleted successfully', 'success');
+                showToast('User deleted', 'success');
                 await loadData();
-            } catch (error) {
-                showToast('Failed to delete user: ' + error.message, 'error');
-            } finally {
-                hideLoading();
-            }
+            } catch (error) { showToast('Error: ' + error.message, 'error'); } finally { hideLoading(); }
         }
 
         async function loadUserServices(userId) {
             try {
                 currentUserServices = await API.getUserServices(userId) || [];
                 renderUserServices(userId);
-            } catch (error) {
-                showToast('Failed to load user services', 'error');
-            }
+            } catch (error) { console.error(error); }
         }
 
         function renderUserServices(userId) {
             const container = document.getElementById('userServicesContainer');
-            
-            const assignedServiceIds = currentUserServices.map(s => s.id);
-            const availableServicesList = allServices.filter(s => !assignedServiceIds.includes(s.id));
+            const assignedIds = currentUserServices.map(s => s.id);
+            const available = allServices.filter(s => !assignedIds.includes(s.id));
             
             container.innerHTML = `
-                <div class="space-y-4">
-                    <!-- Assigned Services -->
-                    <div>
-                        <h3 class="font-medium text-gray-700 mb-2">Assigned Services</h3>
-                        <div id="assignedUserServices" class="border border-gray-300 rounded-md p-3 min-h-[100px] max-h-[200px] overflow-y-auto">
-                            ${currentUserServices.length === 0 ? 
-                                '<p class="text-gray-500 text-sm">No extra services assigned</p>' :
-                                currentUserServices.map(service => `
-                                    <div class="flex justify-between items-center py-2 px-3 bg-gray-50 rounded mb-2">
-                                        <div>
-                                            <span class="font-medium text-sm">${escapeHtml(service.name)}</span>
-                                            <span class="text-xs text-gray-500 ml-2">${escapeHtml(service.ip_port)}</span>
-                                        </div>
-                                        <button data-action="remove-user-service" data-user-id="${userId}" data-service-id="${service.id}"
-                                            class="text-red-600 hover:text-red-900 font-bold">
-                                            −
-                                        </button>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+                    <div class="flex flex-col h-full">
+                        <div class="flex items-center justify-between mb-2 px-1"><h3 class="font-bold text-white text-sm">Assigned Services <span class="ml-2 px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-xs">${currentUserServices.length}</span></h3></div>
+                        <div id="assignedUserServices" class="bg-black/20 rounded-xl p-3 border border-white/5 flex-1 min-h-[250px] overflow-y-auto custom-scroll space-y-2">
+                            ${currentUserServices.length === 0 ? '<div class="text-text-muted text-xs italic">No services</div>' : currentUserServices.map(s => `
+                                <div class="flex justify-between items-center p-3 bg-surface-highlight/30 hover:bg-surface-highlight/50 border border-white/5 rounded-lg group transition-all">
+                                    <div class="flex items-center gap-3">
+                                        <div class="p-1.5 rounded bg-primary/10 text-primary"><span class="material-symbols-outlined text-[16px]">check_circle</span></div>
+                                        <div><p class="font-medium text-white text-sm">${escapeHtml(s.name)}</p><p class="text-xs text-text-muted font-mono">${escapeHtml(s.ip_port)}</p></div>
                                     </div>
-                                `).join('')
-                            }
+                                    <button data-action="remove-user-service" data-user-id="${userId}" data-service-id="${s.id}" class="p-1.5 rounded bg-surface-dark border border-white/10 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/10"><span class="material-symbols-outlined text-[16px]">remove</span></button>
+                                </div>`).join('')}
                         </div>
                     </div>
-
-                    <hr>
-
-                    <!-- Available Services -->
-                    <div>
-                        <h3 class="font-medium text-gray-700 mb-2">Available Services</h3>
-                        <div id="availableUserServices" class="border border-gray-300 rounded-md p-3 min-h-[100px] max-h-[200px] overflow-y-auto">
-                            ${availableServicesList.length === 0 ?
-                                '<p class="text-gray-500 text-sm">No available services</p>' :
-                                availableServicesList.map(service => `
-                                    <div class="flex justify-between items-center py-2 px-3 bg-gray-50 rounded mb-2">
-                                        <div>
-                                            <span class="font-medium text-sm">${escapeHtml(service.name)}</span>
-                                            <span class="text-xs text-gray-500 ml-2">${escapeHtml(service.ip_port)}</span>
-                                        </div>
-                                        <button data-action="add-user-service" data-user-id="${userId}" data-service-id="${service.id}"
-                                            class="text-green-600 hover:text-green-900 font-bold">
-                                            +
-                                        </button>
+                    <div class="flex flex-col h-full">
+                        <div class="flex items-center justify-between mb-2 px-1"><h3 class="font-bold text-white text-sm">Available Services <span class="ml-2 px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-xs">${available.length}</span></h3></div>
+                        <div id="availableUserServices" class="bg-black/20 rounded-xl p-3 border border-white/5 flex-1 min-h-[250px] overflow-y-auto custom-scroll space-y-2">
+                            ${available.length === 0 ? '<div class="text-text-muted text-xs italic">No services available</div>' : available.map(s => `
+                                <div class="flex justify-between items-center p-3 bg-surface-highlight/10 hover:bg-surface-highlight/30 border border-white/5 rounded-lg group transition-all">
+                                    <div class="flex items-center gap-3 opacity-60 group-hover:opacity-100">
+                                        <div class="p-1.5 rounded bg-white/5 text-text-muted"><span class="material-symbols-outlined text-[16px]">dns</span></div>
+                                        <div><p class="font-medium text-white text-sm">${escapeHtml(s.name)}</p><p class="text-xs text-text-muted font-mono">${escapeHtml(s.ip_port)}</p></div>
                                     </div>
-                                `).join('')
-                            }
+                                    <button data-action="add-user-service" data-user-id="${userId}" data-service-id="${s.id}" class="p-1.5 rounded bg-surface-dark border border-white/10 text-primary opacity-0 group-hover:opacity-100 hover:bg-primary/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
+                                </div>`).join('')}
                         </div>
                     </div>
-                </div>
-            `;
+                </div>`;
             
-            // Add event delegation for service buttons
             document.getElementById('assignedUserServices').onclick = (e) => {
-                const button = e.target.closest('button[data-action="remove-user-service"]');
-                if (button) {
-                    removeUserService(parseInt(button.dataset.userId), parseInt(button.dataset.serviceId));
-                }
+                const b = e.target.closest('button[data-action="remove-user-service"]');
+                if (b) { e.preventDefault(); removeUserService(parseInt(b.dataset.userId), parseInt(b.dataset.serviceId)); }
             };
-            
             document.getElementById('availableUserServices').onclick = (e) => {
-                const button = e.target.closest('button[data-action="add-user-service"]');
-                if (button) {
-                    addUserService(parseInt(button.dataset.userId), parseInt(button.dataset.serviceId));
-                }
+                const b = e.target.closest('button[data-action="add-user-service"]');
+                if (b) { e.preventDefault(); addUserService(parseInt(b.dataset.userId), parseInt(b.dataset.serviceId)); }
             };
         }
 
-        async function addUserService(userId, serviceId) {
-            try {
-                await API.addUserService(userId, serviceId);
-                showToast('Service added to user', 'success');
-                await loadUserServices(userId);
-            } catch (error) {
-                showToast('Failed to add service: ' + error.message, 'error');
-            }
-        }
+        async function addUserService(userId, sId) { try { await API.addUserService(userId, sId); showToast('Added', 'success'); await loadUserServices(userId); } catch(e){ showToast(e.message, 'error'); }}
+        async function removeUserService(userId, sId) { try { await API.removeUserService(userId, sId); showToast('Removed', 'success'); await loadUserServices(userId); } catch(e){ showToast(e.message, 'error'); }}
 
-        async function removeUserService(userId, serviceId) {
-            try {
-                await API.removeUserService(userId, serviceId);
-                showToast('Service removed from user', 'success');
-                await loadUserServices(userId);
-            } catch (error) {
-                showToast('Failed to remove service: ' + error.message, 'error');
-            }
-        }
-
-        function openResetPasswordModal() {
-            document.getElementById('resetPasswordModal').classList.remove('hidden');
-        }
-
-        function closeResetPasswordModal() {
-            document.getElementById('resetPasswordModal').classList.add('hidden');
-            document.getElementById('resetPasswordForm').reset();
-        }
-
+        function openResetPasswordModal() { document.getElementById('resetPasswordModal').classList.remove('hidden'); }
+        function closeResetPasswordModal() { document.getElementById('resetPasswordModal').classList.add('hidden'); document.getElementById('resetPasswordForm').reset(); }
         document.getElementById('resetPasswordForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
-            const userId = document.getElementById('userId').value;
-            const newPassword = document.getElementById('newPassword').value;
-
-            try {
-                showLoading();
-                await API.resetUserPassword(userId, newPassword);
-                showToast('Password reset successfully', 'success');
-                closeResetPasswordModal();
-            } catch (error) {
-                showToast('Failed to reset password: ' + error.message, 'error');
-            } finally {
-                hideLoading();
-            }
+            try { showLoading(); await API.resetUserPassword(document.getElementById('userId').value, document.getElementById('newPassword').value); showToast('Password reset', 'success'); closeResetPasswordModal(); } catch(e){ showToast(e.message, 'error'); } finally { hideLoading(); }
         });
     </script>
 </body>

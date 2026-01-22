@@ -1,31 +1,151 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Aegis Controller</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Service Dash Authentication Login V2</title>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "primary-hover": "#0fb847",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                        "surface-dark": "#111813",
+                        "surface-highlight": "#28392e",
+                        "text-muted": "#9db9a6",
+                        "log-bg": "#0a110d",
+                        "log-text": "#d4d4d4",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="bg-white p-8 rounded-lg shadow-md w-96">
-        <h1 class="text-2xl font-bold mb-6 text-center">Aegis Controller</h1>
-        <form id="loginForm" class="space-y-4">
-            <div>
-                <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                <input type="text" id="username" name="username" required
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+<body class="bg-surface-dark h-screen w-full flex overflow-hidden">
+    <div class="hidden lg:flex w-1/2 bg-surface-dark relative items-center justify-center overflow-hidden border-r border-surface-highlight">
+        <div class="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-overlay" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBiS7Ff2Ko2NL691oWPYtFrw_gi70teWCfTxXL1GQgfK9ypVCbvnKnpTP8XxPzlgyGaeMOvYaDhnmYWo7bZ128GUoYc8cwU6EbCd9TavrWqaIRyaJ751S2QGKB_cehFjCsdHVwDM-uIr5YPWhWxRnyyu4PUGIoazAVe3YmUmIZEt_tJt7ZcpEfxZTkxdIJPz3VJs46YYJgU6gtKbLS_xArg0pEDZC5i9Wvy6zN-258TlS7HaJTOmyQkLjzvo-t8lClsJqsRhMlsFw");'></div>
+        <div class="absolute inset-0 bg-gradient-to-tr from-background-dark via-surface-dark to-surface-highlight/30"></div>
+        <div class="relative z-10 flex flex-col items-center max-w-lg text-center p-8">
+            <div class="mb-8 p-6 rounded-full bg-surface-highlight/20 border border-white/5 shadow-[0_0_50px_rgba(19,236,91,0.15)] backdrop-blur-sm">
+                <div class="bg-center bg-no-repeat bg-cover rounded-full size-24 shadow-inner" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuACmoSgB1qBq-DPKenfjridVaJFpFlsBLLqZxuUXAIwcKYmF7gxA8yPUbNJ_fuDo_xIJpgmluRIhaACm6zSFojQhnxJKk2GiyNFNT_MJPvJAXYrupDJ5-2rjk2_K3L1LUjhRiCGUC-DS1zG6mMCwSHRPTKBDemhq3dsIUB4s5pVg-OSdckm0OdaaM5UadVT9Oo7E2HQpD9wOhjbSv2RtKfLyrRF7s75q5a947f3FIMy00JnlLw7hxxZPEvcjKjDfr4M40VFlb-QCg");'></div>
             </div>
-            <div>
-                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input type="password" id="password" name="password" required
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <h1 class="text-5xl font-bold text-white tracking-tight mb-4">Service Dash</h1>
+            <p class="text-text-muted text-base font-mono tracking-wide mb-12">Infrastructure Management System</p>
+            <div class="grid grid-cols-2 gap-4 w-full opacity-80">
+                <div class="bg-surface-highlight/40 border border-white/5 rounded-xl p-4 backdrop-blur-sm flex items-center gap-3">
+                    <div class="p-2 rounded-lg bg-primary/10 text-primary">
+                        <span class="material-symbols-outlined text-[20px]">shield</span>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-white text-sm font-bold">Aegis Secure</div>
+                        <div class="text-xs text-text-muted">Enterprise Grade</div>
+                    </div>
+                </div>
+                <div class="bg-surface-highlight/40 border border-white/5 rounded-xl p-4 backdrop-blur-sm flex items-center gap-3">
+                    <div class="p-2 rounded-lg bg-primary/10 text-primary">
+                        <span class="material-symbols-outlined text-[20px]">speed</span>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-white text-sm font-bold">Real-time</div>
+                        <div class="text-xs text-text-muted">Low Latency</div>
+                    </div>
+                </div>
             </div>
-            <div id="errorMessage" class="text-red-500 text-sm hidden"></div>
-            <button type="submit" 
-                class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                Sign In
-            </button>
-        </form>
+        </div>
+        <div class="absolute bottom-8 text-white/20 text-xs font-mono">
+            Protected by Service Dash Aegis Protocol
+        </div>
+    </div>
+    <div class="w-full lg:w-1/2 flex flex-col items-center justify-center bg-surface-dark p-6 lg:p-12 relative overflow-hidden">
+        <div class="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute bottom-0 left-0 -ml-20 -mb-20 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute top-0 right-0 p-6 lg:p-10 hidden lg:block z-10">
+            <a class="text-sm font-medium text-text-muted hover:text-primary transition-colors flex items-center gap-1" href="#">
+                <span class="material-symbols-outlined text-[18px]">help</span>
+                Need assistance?
+            </a>
+        </div>
+        <div class="w-full max-w-md relative z-10">
+            <div class="lg:hidden flex justify-center mb-8">
+                <div class="bg-center bg-no-repeat bg-cover rounded-full size-16 shadow-lg border-4 border-surface-highlight" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuACmoSgB1qBq-DPKenfjridVaJFpFlsBLLqZxuUXAIwcKYmF7gxA8yPUbNJ_fuDo_xIJpgmluRIhaACm6zSFojQhnxJKk2GiyNFNT_MJPvJAXYrupDJ5-2rjk2_K3L1LUjhRiCGUC-DS1zG6mMCwSHRPTKBDemhq3dsIUB4s5pVg-OSdckm0OdaaM5UadVT9Oo7E2HQpD9wOhjbSv2RtKfLyrRF7s75q5a947f3FIMy00JnlLw7hxxZPEvcjKjDfr4M40VFlb-QCg");'></div>
+            </div>
+            <div class="text-center mb-10">
+                <h2 class="text-3xl font-bold text-white tracking-tight">Welcome back</h2>
+                <p class="text-sm text-text-muted mt-2">Enter your credentials to access the dashboard.</p>
+            </div>
+            <div class="bg-surface-highlight/40 backdrop-blur-md rounded-2xl shadow-[0_0_40px_-10px_rgba(0,0,0,0.5)] p-8 md:p-10 border border-white/10">
+                <form id="loginForm" class="space-y-6">
+                    <div id="errorContainer" class="hidden flex items-start gap-3 p-4 rounded-lg bg-red-900/20 border border-red-500/20 text-red-400 text-sm animate-pulse">
+                        <span class="material-symbols-outlined text-[20px]">error</span>
+                        <div class="flex flex-col">
+                            <span class="font-bold">Authentication Failed</span>
+                            <span id="errorMessage" class="text-xs text-red-400/80 mt-0.5">Please check your username and password.</span>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1" for="username">Username</label>
+                        <div class="relative group">
+                            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                <span class="material-symbols-outlined text-gray-500 group-focus-within:text-primary transition-colors text-[20px]">person</span>
+                            </div>
+                            <input autocomplete="username" class="block w-full pl-11 pr-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 sm:text-sm sm:leading-6 bg-black/20 focus:bg-black/40 transition-all duration-200" id="username" name="username" placeholder="admin@servicedash.io" type="text"/>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1" for="password">Password</label>
+                        <div class="relative group">
+                            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                <span class="material-symbols-outlined text-gray-500 group-focus-within:text-primary transition-colors text-[20px]">lock</span>
+                            </div>
+                            <input autocomplete="current-password" class="block w-full pl-11 pr-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 sm:text-sm sm:leading-6 bg-black/20 focus:bg-black/40 transition-all duration-200" id="password" name="password" placeholder="••••••••" type="password"/>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between pt-2">
+                        <div class="flex items-center">
+                            <input class="h-4 w-4 rounded border-gray-600 bg-black/20 text-primary focus:ring-primary focus:ring-offset-surface-dark" id="remember-me" name="remember-me" type="checkbox"/>
+                            <label class="ml-2 block text-sm text-text-muted select-none" for="remember-me">Remember me</label>
+                        </div>
+                        <div class="text-sm">
+                            <a class="font-semibold text-primary hover:text-primary-hover transition-colors" href="#">Forgot password?</a>
+                        </div>
+                    </div>
+                    <button class="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg shadow-lg shadow-primary/20 text-sm font-bold text-surface-dark bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface-dark focus:ring-primary transition-all duration-200 transform active:scale-[0.99] uppercase tracking-wider mt-2" type="submit">
+                        Sign In
+                    </button>
+                </form>
+                <div class="mt-8">
+                    <div class="relative">
+                        <div class="absolute inset-0 flex items-center">
+                            <div class="w-full border-t border-white/10"></div>
+                        </div>
+                        <div class="relative flex justify-center text-sm">
+                            <span class="px-3 bg-transparent text-gray-500 text-xs font-medium backdrop-blur-md rounded-md">System Status: <span class="text-primary">Operational</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="text-center text-xs text-gray-600 mt-8 font-mono">
+                v2.1.0-auth • Service Dash Inc.
+            </p>
+        </div>
     </div>
 
     <script src="/static/js/api.js"></script>
@@ -40,16 +160,17 @@
             
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
+            const errorContainer = document.getElementById('errorContainer');
             const errorMessage = document.getElementById('errorMessage');
             
-            errorMessage.classList.add('hidden');
+            errorContainer.classList.add('hidden');
             
             try {
                 await API.login(username, password);
                 window.location.href = '/static/pages/dashboard.html';
             } catch (error) {
                 errorMessage.textContent = 'Invalid credentials. Please try again.';
-                errorMessage.classList.remove('hidden');
+                errorContainer.classList.remove('hidden');
             }
         });
     </script>
