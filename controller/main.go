@@ -23,6 +23,7 @@ func main() {
 	// Start the server in a goroutine so the main thread can listen for signals.
 	go server.StartServer()
 
+	proto.Init()
 	go proto.MonitorStream(func(list *proto.SessionList) {
 		log.Printf("Received update with %d sessions", len(list.Sessions))
 		for _, s := range list.Sessions {
