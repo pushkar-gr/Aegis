@@ -31,6 +31,12 @@ fn main() {
         .build_and_generate(&out)
         .unwrap();
 
-    // Instruct Cargo to re-run this build script only if the BPF source changes.
-    println!("cargo:rerun-if-changed={SRC}");
+    // Compile protobuf definitions for gRPC
+    tonic_prost_build::configure()
+        .build_server(true)
+        .build_client(false)
+        .compile_protos(&["../proto/session.proto"], &["../proto"])
+        .expect("Failed to compile protobuf definitions. Ensure protoc is installed and session.proto is valid.");
+
+    println!("cargo:rerun-if-changed=../proto/session.proto");
 }

@@ -6,6 +6,7 @@
 //! 1. Loading the compiled BPF skeleton.
 //! 2. Parsing runtime configuration (Interface, Controller IP/Port).
 //! 3. Attaching the XDP program to the network interface.
+//! 4. Running a gRPC server to accept session management requests from the controller.
 //!
 //! ## Usage
 //!
@@ -17,6 +18,7 @@
 #[rustfmt::skip]
 mod agent_skel;
 mod config;
+mod grpc_server;
 
 use crate::{
     agent_skel::{
@@ -24,6 +26,7 @@ use crate::{
         types::{session_key, session_val},
     },
     config::Config,
+    grpc_server::start_grpc_server,
 };
 use anyhow::{Context, Result, anyhow};
 use bytemuck::{Pod, Zeroable};
@@ -36,10 +39,11 @@ use nix::net::if_::if_nametoindex;
 use std::{
     env,
     mem::MaybeUninit,
-    net::Ipv4Addr,
-    thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    net::{Ipv4Addr, SocketAddr},
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
 };
+use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 
 unsafe impl Zeroable for session_key {}
@@ -57,8 +61,9 @@ const REQUIRED_CAPS: [(Capability, &str); 2] = [
 /// Entry point for the Aegis Agent.
 ///
 /// This function initializes logging, parses CLI arguments, validates privileges,
-/// and manages the BPF lifecycle.
-fn main() -> Result<()> {
+/// manages the BPF lifecycle, and starts the gRPC server.
+#[tokio::main]
+async fn main() -> Result<()> {
     // 1. Initialize Logging
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -89,8 +94,10 @@ fn main() -> Result<()> {
     // 5. BPF Skeleton Lifecycle
     debug!("Building and mapping BPF skeleton...");
     let skel_builder = AegisSkelBuilder::default();
-    let mut open_object = MaybeUninit::uninit();
-    let mut open_skel = skel_builder.open(&mut open_object)?;
+
+    // Leak open_object upfront to get 'static lifetime
+    let open_object_static = Box::leak(Box::new(MaybeUninit::uninit()));
+    let mut open_skel = skel_builder.open(open_object_static)?;
 
     // Map global variables before loading
     let rodata = open_skel
@@ -129,18 +136,31 @@ fn main() -> Result<()> {
         config.controller_ip, config.controller_port
     );
 
-    // 8. Keep Alive Loop
-    loop {
-        thread::sleep(Duration::from_secs(3600));
-        debug!("Heartbeat: Aegis Agent is still running...");
-    }
+    // 8. Start gRPC Server
+    let grpc_addr = SocketAddr::from(([0, 0, 0, 0], 50001));
+    info!("Preparing to start gRPC server on {}", grpc_addr);
+
+    // Leak skeleton to get 'static reference
+    let skel_static: &'static AegisSkel = Box::leak(Box::new(skel));
+
+    let add_rule_fn = Arc::new(Mutex::new(
+        move |dest_ip: u32, src_ip: u32, dest_port: u16| -> Result<()> {
+            add_rule(skel_static, dest_ip, src_ip, dest_port)
+        },
+    ));
+
+    // Start the gRPC server
+    let _keep_link = _link;
+    start_grpc_server(grpc_addr, config.controller_ip, add_rule_fn).await?;
+
+    Ok(())
 }
 
-#[allow(dead_code)]
-fn add_rule(skel: AegisSkel, dest_ip: Ipv4Addr, src_ip: Ipv4Addr, dest_port: u16) -> Result<()> {
+/// Adds a rule to the BPF session map
+pub fn add_rule(skel: &AegisSkel, dest_ip: u32, src_ip: u32, dest_port: u16) -> Result<()> {
     let key = session_key {
-        dest_ip: u32::from(dest_ip).to_be(),
-        src_ip: u32::from(src_ip).to_be(),
+        dest_ip,
+        src_ip,
         dest_port,
     };
     let val = session_val {
