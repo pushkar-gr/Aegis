@@ -39,7 +39,7 @@ use nix::net::if_::if_nametoindex;
 use std::{
     env,
     mem::MaybeUninit,
-    net::{Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
