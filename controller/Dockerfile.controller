@@ -14,4 +14,5 @@ WORKDIR /app
 RUN apk add --no-cache openssl ca-certificates
 ENV JWT_SECRET="$(run: openssl rand -base64 32)"
 COPY --from=builder /app/controller .
+COPY data ./data
 CMD ["./controller"]

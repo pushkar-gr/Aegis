@@ -11,13 +11,19 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     pkg-config \
     bpftool \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 RUN rustup component add rustfmt
 
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-COPY build.rs ./build.rs
+# Copy proto files to /proto
+COPY proto /proto
+
+# Set up agent workspace
+WORKDIR /app
+COPY agent/Cargo.toml agent/Cargo.lock ./
+COPY agent/src ./src
+COPY agent/build.rs ./build.rs
 
 # Generate vmlinux.h
 RUN bpftool btf dump file /sys/kernel/btf/vmlinux format c > src/bpf/vmlinux.h

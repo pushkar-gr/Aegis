@@ -11,6 +11,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 nix = { version = "0.27", features = ["net"] }
 caps = "0.5"
 bytemuck = "1.24"
+tokio = { version = "1.49", features = ["macros", "rt-multi-thread", "sync"] }
+tokio-stream = { version = "0.1.18", features = ["sync"] }
+tonic = "0.14"
+tonic-prost = "0.14"
+prost = "0.14"
 
 [build-dependencies]
 libbpf-cargo = "0.25"
+tonic-build = "0.14"
+tonic-prost-build = "0.14"

@@ -2,6 +2,8 @@ package main
 
 import (
 	"Aegis/controller/database"
+	"Aegis/controller/internal/utils"
+	"Aegis/controller/proto"
 	"Aegis/controller/server"
 	"log"
 	"os"
@@ -20,6 +22,24 @@ func main() {
 	}()
 	// Start the server in a goroutine so the main thread can listen for signals.
 	go server.StartServer()
+
+	err := proto.Init()
+	if err != nil {
+		log.Printf("Error starting grpc server: %v", err)
+		return
+	}
+
+	go func() {
+		if err := proto.MonitorStream(func(list *proto.SessionList) {
+			log.Printf("Received update with %d sessions", len(list.Sessions))
+			for _, s := range list.Sessions {
+				log.Printf("Session: %v -> %v left: %ds",
+					utils.Uint32ToIp(s.SrcIp), s.DstPort, s.TimeLeft)
+			}
+		}); err != nil {
+			log.Printf("MonitorStream stopped with error: %v", err)
+		}
+	}()
 
 	// Create a channel to listen for OS interrupt signals (Ctrl+C).
 	quit := make(chan os.Signal, 1)

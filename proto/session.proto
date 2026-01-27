@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package session;
+option go_package = "Aegis/controller/proto";
+
+service SessionManager {
+  rpc SubmitSession (LoginEvent) returns (Ack);
+
+  rpc MonitorSessions (Empty) returns (stream SessionList);
+}
+
+message LoginEvent {
+  uint32 src_ip = 1;
+  uint32 dst_ip = 2;
+  uint32 dst_port = 3;
+  bool activate = 4;
+}
+
+message Ack {
+  bool success = 1;
+}
+
+message Empty {}
+
+message SessionList {
+  repeated Session sessions = 1;
+}
+
+message Session {
+  uint32 src_ip = 1;
+  uint32 dst_ip = 2;
+  uint32 dst_port = 3;
+  int32 time_left = 4;
+}

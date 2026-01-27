@@ -3,9 +3,12 @@ package server
 import (
 	"Aegis/controller/database"
 	"Aegis/controller/internal/models"
+	"Aegis/controller/internal/utils"
+	"Aegis/controller/proto"
 	"database/sql"
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -137,6 +140,31 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse service IP and port
+	dstIP, dstPort, err := parseServiceIPPort(req.ServiceID)
+	if err != nil {
+		log.Printf("[dashboard] select service failed: service lookup/parse error - %v", err)
+		http.Error(w, "Service not found or invalid configuration", http.StatusInternalServerError)
+		return
+	}
+
+	// Get client IP
+	clientIP := utils.GetClientIP(r)
+	log.Printf("[dashboard] activating service ID %d for user ID %d from IP %s to %s:%d", req.ServiceID, userID, clientIP, dstIP, dstPort)
+
+	// Call SendSessionData to activate the session
+	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, true)
+	if err != nil {
+		log.Printf("[dashboard] SendSessionData failed for service ID %d: %v", req.ServiceID, err)
+		http.Error(w, "Failed to activate session", http.StatusInternalServerError)
+		return
+	}
+	if !success {
+		log.Printf("[dashboard] SendSessionData returned false for service ID %d", req.ServiceID)
+		http.Error(w, "Session activation failed", http.StatusInternalServerError)
+		return
+	}
+
 	_, err = database.DB.Exec("INSERT OR REPLACE INTO user_active_services (user_id, service_id, updated_at, time_left) VALUES (?, ?, ?, ?)",
 		userID, req.ServiceID, time.Now(), 60)
 	if err != nil {
@@ -165,6 +193,26 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse service IP and port
+	dstIP, dstPort, err := parseServiceIPPort(svcID)
+	if err != nil {
+		log.Printf("[dashboard] deselect service failed: service lookup/parse error - %v", err)
+		http.Error(w, "Service not found or invalid configuration", http.StatusInternalServerError)
+		return
+	}
+
+	// Get client IP
+	clientIP := utils.GetClientIP(r)
+	log.Printf("[dashboard] deactivating service ID %d for user ID %d from IP %s to %s:%d", svcID, userID, clientIP, dstIP, dstPort)
+
+	// Call SendSessionData to deactivate the session
+	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, false)
+	if err != nil {
+		log.Printf("[dashboard] SendSessionData failed for service ID %d deactivation: %v", svcID, err)
+	} else if !success {
+		log.Printf("[dashboard] SendSessionData returned false for service ID %d deactivation", svcID)
+	}
+
 	_, err = database.DB.Exec("DELETE FROM user_active_services WHERE user_id = ? AND service_id = ?", userID, svcID)
 	if err != nil {
 		log.Printf("[dashboard] deselect service failed: database error - %v", err)
@@ -186,4 +234,27 @@ func resolveCurrentUser(r *http.Request) (int, int, error) {
 
 	id, roleID, err := database.GetUserIDAndRole(username)
 	return id, roleID, err
+}
+
+// parseServiceIPPort retrieves and parses service IP and port from database.
+// Returns destination IP, port.
+func parseServiceIPPort(serviceID int) (string, uint32, error) {
+	var ipPort string
+	err := database.DB.QueryRow("SELECT ip_port FROM services WHERE id = ?", serviceID).Scan(&ipPort)
+	if err != nil {
+		return "", 0, err
+	}
+
+	// Use net.SplitHostPort to properly handle both IPv4:port and [IPv6]:port formats
+	host, portStr, err := net.SplitHostPort(ipPort)
+	if err != nil {
+		return "", 0, err
+	}
+
+	port, err := strconv.ParseUint(portStr, 10, 32)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return host, uint32(port), nil
 }

@@ -8,6 +8,8 @@ services:
     hostname: controller
     cap_add:
       - NET_ADMIN
+    volumes:
+      - ./certs:/app/certs
     networks:
       private_net:
         ipv4_address: 172.21.0.5
@@ -17,11 +19,13 @@ services:
   # 2. Data Plane and router
   agent:
     build:
-      context: ../agent
-      dockerfile: Dockerfile.agent
+      context: ..
+      dockerfile: agent/Dockerfile.agent
     container_name: aegis-agent
     hostname: gateway
     privileged: true
+    environment:
+      - RUST_LOG=debug
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
@@ -41,11 +45,13 @@ services:
     image: alpine:latest
     container_name: aegis-client
     cap_add: [NET_ADMIN]
+    volumes:
+      - ./aegis-cli.sh:/usr/local/bin/app
     networks:
       public_net:
         ipv4_address: 172.20.0.5
     command: >
-      sh -c "ip route add 172.21.0.0/24 via 172.20.0.10 && sleep infinity"
+      sh -c "apk add --no-cache bash wget && chmod +x /usr/local/bin/app && ip route add 172.21.0.0/24 via 172.20.0.10 && sleep infinity"
 
   # 4. Zone B - Private
   protected_service:
