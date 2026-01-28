@@ -3,18 +3,43 @@ package proto
 import (
 	"Aegis/controller/internal/utils"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"io"
 	"log"
+	"os"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 )
 
 var c SessionManagerClient
 
 func Init() error {
-	conn, err := grpc.NewClient("172.21.0.10:50001", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cert, err := tls.LoadX509KeyPair("certs/controller.pem", "certs/controller.key")
+	if err != nil {
+		return fmt.Errorf("failed to load client cert/key: %v", err)
+	}
+
+	caCert, err := os.ReadFile("certs/ca.pem")
+	if err != nil {
+		return fmt.Errorf("failed to read CA cert: %v", err)
+	}
+	caCertPool := x509.NewCertPool()
+	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
+		return fmt.Errorf("failed to append CA cert")
+	}
+
+	creds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+		// ServerName must match the Common Name (CN) in the Agent's certificate
+		ServerName: "aegis-agent",
+	})
+
+	conn, err := grpc.NewClient("172.21.0.10:50001", grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return err
 	}

@@ -16,6 +16,10 @@ pub struct Config<'a> {
     pub controller_port: u16,
     /// Time before re updating last_seen_ns in session_val (ns).
     pub lazy_update_timeout: u64,
+    /// agent sertificates
+    pub cert_file: String,
+    pub key_file: String,
+    pub ca_file: String,
 }
 
 impl<'a> Default for Config<'a> {
@@ -25,6 +29,9 @@ impl<'a> Default for Config<'a> {
             controller_ip: Ipv4Addr::new(172, 21, 0, 5),
             controller_port: 443,
             lazy_update_timeout: 1000000000, // 1s
+            cert_file: "certs/agent.pem".to_string(),
+            key_file: "certs/agent.key".to_string(),
+            ca_file: "certs/ca.pem".to_string(),
         }
     }
 }
@@ -88,6 +95,26 @@ impl<'a> Config<'a> {
                     }
                 }
 
+                "--cert-pem" => {
+                    if i + 1 < args.len() {
+                        let certs_path = &args[i + 1];
+                        config.cert_file = certs_path.to_string();
+                    }
+                }
+
+                "--cert-key" => {
+                    if i + 1 < args.len() {
+                        let certs_path = &args[i + 1];
+                        config.key_file = certs_path.to_string();
+                    }
+                }
+                "--cert-ca" => {
+                    if i + 1 < args.len() {
+                        let certs_path = &args[i + 1];
+                        config.ca_file = certs_path.to_string();
+                    }
+                }
+
                 // Handle unknown arguments or help
                 "-h" | "--help" => {
                     Self::print_help();
@@ -108,10 +135,13 @@ impl<'a> Config<'a> {
     fn print_help() {
         println!("Usage: program [OPTIONS]");
         println!("Options:");
-        println!("  -i, --iface <NAME>      Set interface name (default: eth0)");
-        println!("  -c, --ip <IP>           Set controller IP (default: 172.21.0.5)");
-        println!("  -p, --port <PORT>       Set controller port (default: 443)");
-        println!("  -n, update-time <TIME>  Set update-time (default: 1000000000ns)");
+        println!("  -i, --iface <NAME>          Set interface name (default: eth0)");
+        println!("  -c, --ip <IP>               Set controller IP (default: 172.21.0.5)");
+        println!("  -p, --port <PORT>           Set controller port (default: 443)");
+        println!("  -n, --update-time <TIME>    Set update-time (default: 1000000000ns)");
+        println!("  --cert-pem <FILE>           Set cert_file (default: certs/agent.pem)");
+        println!("  --cert-key <FILE>           Set key_file (default: certs/agent.key)");
+        println!("  --cert-ca <FILE>            Set ca_file (default: certs/ca.pem)");
         std::process::exit(0);
     }
 }
