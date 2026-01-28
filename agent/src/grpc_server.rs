@@ -8,17 +8,21 @@ pub mod session {
     tonic::include_proto!("session");
 }
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use session::{
     Ack, Empty, LoginEvent, SessionList,
     session_manager_server::{SessionManager, SessionManagerServer},
 };
 use std::{
+    fs,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
 use tokio::sync::Mutex;
-use tonic::{Request, Response, Status, transport::Server};
+use tonic::{
+    Request, Response, Status,
+    transport::{Certificate, Identity, Server, ServerTlsConfig},
+};
 use tracing::{debug, error, info, warn};
 
 /// Type alias for the add rule callback
@@ -144,13 +148,29 @@ pub async fn start_grpc_server(
     addr: SocketAddr,
     controller_ip: Ipv4Addr,
     add_rule: AddRuleFn,
+    cert_path: &str,
+    key_path: &str,
+    ca_path: &str,
 ) -> Result<()> {
     let service = SessionManagerService::new(controller_ip, add_rule);
 
-    info!("Starting gRPC server on {}", addr);
+    debug!("Loading mTLS certificates...");
+    let cert = fs::read_to_string(cert_path).context("Failed to read cert file")?;
+    let key = fs::read_to_string(key_path).context("Failed to read key file")?;
+    let server_identity = Identity::from_pem(cert, key);
+
+    let ca_pem = fs::read_to_string(ca_path).context("Failed to read CA file")?;
+    let client_ca_cert = Certificate::from_pem(ca_pem);
+
+    let tls_config = ServerTlsConfig::new()
+        .identity(server_identity)
+        .client_ca_root(client_ca_cert);
+
+    info!("Starting gRPC server with mTLS on {}", addr);
     debug!("Only accepting requests from controller: {}", controller_ip);
 
     Server::builder()
+        .tls_config(tls_config)?
         .add_service(SessionManagerServer::new(service))
         .serve(addr)
         .await

@@ -145,13 +145,21 @@ async fn main() -> Result<()> {
 
     let add_rule_fn = Arc::new(Mutex::new(
         move |dest_ip: u32, src_ip: u32, dest_port: u16| -> Result<()> {
-            add_rule(skel_static, dest_ip, src_ip, dest_port)
+            add_rule(skel_static, dest_ip.to_be(), src_ip.to_be(), dest_port)
         },
     ));
 
     // Start the gRPC server
     let _keep_link = _link;
-    start_grpc_server(grpc_addr, config.controller_ip, add_rule_fn).await?;
+    start_grpc_server(
+        grpc_addr,
+        config.controller_ip,
+        add_rule_fn,
+        &config.cert_file,
+        &config.key_file,
+        &config.ca_file,
+    )
+    .await?;
 
     Ok(())
 }
