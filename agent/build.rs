@@ -1,42 +1,38 @@
-//! # Build Script for Aegis Agent
+//! # Build Script
 //!
-//! This script is responsible for the build-time generation of the eBPF skeleton.
-//! It uses `libbpf-cargo` to:
-//! 1. Compile the C-based BPF program (`src/bpf/aegis.bpf.c`).
-//! 2. Generate the Rust skeleton bindings (`src/bpf/aegis.skel.rs`).
-//!
-//! This allows the main Rust binary to include the BPF bytecode directly and
-//! interact with it using safe Rust types.
+//! Compiles eBPF program and generates Rust bindings at build time:
+//! 1. Compiles C eBPF code to BPF bytecode
+//! 2. Generates Rust skeleton for safe interaction
+//! 3. Compiles protobuf definitions for gRPC
 
 use std::{env, ffi::OsStr, path::PathBuf};
 
 use libbpf_cargo::SkeletonBuilder;
 
-/// Path to the source C file containing the eBPF program logic.
-const SRC: &str = "src/bpf/aegis.bpf.c";
+const BPF_SOURCE: &str = "src/bpf/aegis.bpf.c";
 
 fn main() {
-    // Determine the output path for the generated skeleton file.
+    // Generate BPF skeleton
     let out = PathBuf::from(
-        env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set in build script"),
+        env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set in build environment"),
     )
     .join("src")
     .join("bpf")
     .join("aegis.skel.rs");
 
-    // Use libbpf-cargo to compile the source and generate the Rust skeleton.
     SkeletonBuilder::new()
-        .source(SRC)
+        .source(BPF_SOURCE)
         .clang_args([OsStr::new("-I"), OsStr::new("src/bpf")])
         .build_and_generate(&out)
-        .unwrap();
+        .expect("Failed to build BPF skeleton");
 
-    // Compile protobuf definitions for gRPC
+    // Generate gRPC service code from protobuf
     tonic_prost_build::configure()
         .build_server(true)
         .build_client(false)
         .compile_protos(&["../proto/session.proto"], &["../proto"])
-        .expect("Failed to compile protobuf definitions. Ensure protoc is installed and session.proto is valid.");
+        .expect("Failed to compile protobuf. Ensure protoc is installed.");
 
     println!("cargo:rerun-if-changed=../proto/session.proto");
+    println!("cargo:rerun-if-changed={}", BPF_SOURCE);
 }
