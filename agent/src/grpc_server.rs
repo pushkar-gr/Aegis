@@ -1,7 +1,8 @@
-//! # gRPC Server for Aegis Agent
+//! # gRPC Server
 //!
-//! This module implements the SessionManager gRPC service that allows
-//! the controller to submit session events and monitor active sessions.
+//! Implements the SessionManager service for the controller to:
+//! - Submit session authentication events
+//! - Monitor active sessions
 
 // Include the generated protobuf code
 pub mod session {
@@ -25,10 +26,10 @@ use tonic::{
 };
 use tracing::{debug, error, info, warn};
 
-/// Type alias for the add rule callback
+/// Callback function type for adding firewall rules
 type AddRuleFn = Arc<Mutex<dyn Fn(u32, u32, u16) -> Result<()> + Send + Sync>>;
 
-/// SessionManagerService implements the gRPC service
+/// SessionManager service implementation
 pub struct SessionManagerService {
     controller_ip: Ipv4Addr,
     add_rule: AddRuleFn,
@@ -42,7 +43,7 @@ impl SessionManagerService {
         }
     }
 
-    /// Validates that the request comes from the controller
+    /// Verifies the request originates from the authorized controller.
     fn validate_controller_ip(&self, remote_addr: Option<SocketAddr>) -> Result<(), Status> {
         match remote_addr {
             Some(addr) => {
@@ -61,19 +62,17 @@ impl SessionManagerService {
                     Ok(())
                 } else {
                     warn!(
-                        "Rejected request from unauthorized IP: {} (expected: {})",
+                        "ected unauthorized IP: {} (expected {})",
                         ip, self.controller_ip
                     );
                     Err(Status::permission_denied(
-                        "Only requests from controller are accepted",
+                        "Only controller requests are accepted",
                     ))
                 }
             }
             None => {
-                warn!("Rejected request with no remote address");
-                Err(Status::permission_denied(
-                    "Unable to determine remote address",
-                ))
+                warn!("Rejected request - no remote address");
+                Err(Status::permission_denied("Cannot determine remote address"))
             }
         }
     }
@@ -82,37 +81,36 @@ impl SessionManagerService {
 #[tonic::async_trait]
 impl SessionManager for SessionManagerService {
     async fn submit_session(&self, request: Request<LoginEvent>) -> Result<Response<Ack>, Status> {
-        // Validate controller IP
+        // Verify request is from controller
         self.validate_controller_ip(request.remote_addr())?;
 
         let event = request.into_inner();
-
         let dst_port = event.dst_port as u16;
 
         debug!(
-            "Incoming SubmitSession Request (activate: {}). {} -> {}:{}",
+            "Session request (activate={}): {} → {}:{}",
             event.activate, event.src_ip, event.dst_ip, dst_port
         );
 
-        // Add or remove session rule in BPF map
+        // Add or remove session rule
         let success = if event.activate {
             let add_rule = self.add_rule.lock().await;
             match add_rule(event.dst_ip, event.src_ip, dst_port) {
                 Ok(_) => {
                     debug!(
-                        "Successfully added session rule: {} -> {}:{}",
+                        "Session authorized: {} → {}:{}",
                         event.src_ip, event.dst_ip, dst_port
                     );
                     true
                 }
                 Err(e) => {
-                    error!("Failed to add session rule: {}", e);
+                    error!("Failed to add session: {}", e);
                     false
                 }
             }
         } else {
-            // TODO: Implement rule removal when activate=false
-            info!("Session deactivation not yet implemented");
+            // TODO: Implement session deactivation
+            info!("Session deactivation not implemented yet");
             true
         };
 
@@ -127,15 +125,14 @@ impl SessionManager for SessionManagerService {
         &self,
         request: Request<Empty>,
     ) -> Result<Response<Self::MonitorSessionsStream>, Status> {
-        // Validate controller IP
+        // Verify request is from controller
         self.validate_controller_ip(request.remote_addr())?;
 
         debug!("Starting session monitoring stream");
 
-        // Create a channel for streaming responses
         let (_tx, rx) = tokio::sync::mpsc::channel(4);
 
-        // TODO: Implement session monitoring from BPF map
+        // TODO: Stream active sessions from BPF map
 
         Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
             rx,
@@ -143,7 +140,7 @@ impl SessionManager for SessionManagerService {
     }
 }
 
-/// Starts the gRPC server on the specified address
+/// Starts the gRPC server with mTLS authentication.
 pub async fn start_grpc_server(
     addr: SocketAddr,
     controller_ip: Ipv4Addr,
@@ -154,20 +151,20 @@ pub async fn start_grpc_server(
 ) -> Result<()> {
     let service = SessionManagerService::new(controller_ip, add_rule);
 
-    debug!("Loading mTLS certificates...");
-    let cert = fs::read_to_string(cert_path).context("Failed to read cert file")?;
-    let key = fs::read_to_string(key_path).context("Failed to read key file")?;
+    debug!("Loading TLS certificates...");
+    let cert = fs::read_to_string(cert_path).context("Failed to read certificate")?;
+    let key = fs::read_to_string(key_path).context("Failed to read private key")?;
     let server_identity = Identity::from_pem(cert, key);
 
-    let ca_pem = fs::read_to_string(ca_path).context("Failed to read CA file")?;
+    let ca_pem = fs::read_to_string(ca_path).context("Failed to read CA certificate")?;
     let client_ca_cert = Certificate::from_pem(ca_pem);
 
     let tls_config = ServerTlsConfig::new()
         .identity(server_identity)
         .client_ca_root(client_ca_cert);
 
-    info!("Starting gRPC server with mTLS on {}", addr);
-    debug!("Only accepting requests from controller: {}", controller_ip);
+    info!("gRPC server starting with mTLS on {}", addr);
+    debug!("Only accepting requests from: {}", controller_ip);
 
     Server::builder()
         .tls_config(tls_config)?
@@ -177,4 +174,69 @@ pub async fn start_grpc_server(
         .map_err(|e| anyhow!("gRPC server error: {}", e))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    #[test]
+    fn test_validate_controller_ip_success() {
+        let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
+        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, add_rule);
+
+        let remote_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 1234);
+        let result = service.validate_controller_ip(Some(remote_addr));
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_controller_ip_unauthorized() {
+        let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
+        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, add_rule);
+
+        let remote_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)), 1234);
+        let result = service.validate_controller_ip(Some(remote_addr));
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
+    }
+
+    #[test]
+    fn test_validate_controller_ip_no_address() {
+        let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
+        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, add_rule);
+
+        let result = service.validate_controller_ip(None);
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
+    }
+
+    #[test]
+    fn test_validate_controller_ip_ipv6_rejected() {
+        let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
+        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, add_rule);
+
+        let remote_addr = SocketAddr::new(IpAddr::V6("::1".parse().unwrap()), 1234);
+        let result = service.validate_controller_ip(Some(remote_addr));
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::PermissionDenied);
+    }
+
+    #[test]
+    fn test_session_manager_service_creation() {
+        let controller_ip = Ipv4Addr::new(192, 168, 1, 1);
+        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, add_rule);
+
+        assert_eq!(service.controller_ip, controller_ip);
+    }
 }

@@ -3,20 +3,18 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 use tracing::{debug, warn};
 
-/// Configuration for the Aegis Agent.
-///
-/// Holds the configuration loaded from command line arguments.
+/// Agent configuration loaded from command-line arguments.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Config<'a> {
-    /// The network interface to attach the XDP program to.
+    /// Network interface to attach XDP program to
     pub iface_name: &'a str,
-    /// The IP address of the remote controller.
+    /// Controller IP address
     pub controller_ip: Ipv4Addr,
-    /// The port number of the remote controller.
+    /// Controller port number
     pub controller_port: u16,
-    /// Time before re updating last_seen_ns in session_val (ns).
+    /// Delay before updating session timestamp (nanoseconds)
     pub lazy_update_timeout: u64,
-    /// agent sertificates
+    /// TLS certificate paths
     pub cert_file: String,
     pub key_file: String,
     pub ca_file: String,
@@ -37,16 +35,9 @@ impl<'a> Default for Config<'a> {
 }
 
 impl<'a> Config<'a> {
-    /// Loads configuration from command-line arguments.
+    /// Parses configuration from command-line arguments.
     ///
-    /// # Arguments
-    ///
-    /// * `args` - A slice of strings representing command line arguments.
-    ///
-    /// # Returns
-    ///
-    /// Returns a `Result` containing the `Config` struct if parsing is successful,
-    /// or an error if invalid IP addresses or ports are provided.
+    /// Returns the loaded configuration or an error if parsing fails.
     pub fn load(args: &'a [String]) -> Result<Self> {
         let mut config = Self::default();
 
@@ -55,7 +46,7 @@ impl<'a> Config<'a> {
 
         while i < args.len() {
             match args[i].as_str() {
-                // Parse Interface Name
+                // Interface name
                 "-i" | "--iface" => {
                     if i + 1 < args.len() {
                         config.iface_name = &args[i + 1];
@@ -63,7 +54,7 @@ impl<'a> Config<'a> {
                     }
                 }
 
-                // Parse Controller IP
+                // Controller IP
                 "-c" | "--ip" => {
                     if i + 1 < args.len() {
                         let ip_str = &args[i + 1];
@@ -73,7 +64,7 @@ impl<'a> Config<'a> {
                     }
                 }
 
-                // Parse Controller Port
+                // Controller port
                 "-p" | "--port" => {
                     if i + 1 < args.len() {
                         let port_str = &args[i + 1];
@@ -84,7 +75,7 @@ impl<'a> Config<'a> {
                     }
                 }
 
-                // Parse Lazy Update Time
+                // Session update timeout
                 "-n" | "--update-time" => {
                     if i + 1 < args.len() {
                         let time_str = &args[i + 1];
@@ -115,33 +106,36 @@ impl<'a> Config<'a> {
                     }
                 }
 
-                // Handle unknown arguments or help
+                // Help
                 "-h" | "--help" => {
                     Self::print_help();
                 }
 
+                // Unknown argument
                 _ => {
-                    warn!("Unknown argument '{}' detected and ignored.", args[i]);
+                    warn!("Unknown argument '{}' - ignoring", args[i]);
                 }
             }
             i += 1;
         }
 
-        debug!("Configuration loaded successfully: {:?}", config);
+        debug!("Configuration loaded: {:?}", config);
         Ok(config)
     }
 
-    /// Prints the help message and exits the program.
+    /// Prints usage information and exits.
     fn print_help() {
-        println!("Usage: program [OPTIONS]");
-        println!("Options:");
-        println!("  -i, --iface <NAME>          Set interface name (default: eth0)");
-        println!("  -c, --ip <IP>               Set controller IP (default: 172.21.0.5)");
-        println!("  -p, --port <PORT>           Set controller port (default: 443)");
-        println!("  -n, --update-time <TIME>    Set update-time (default: 1000000000ns)");
-        println!("  --cert-pem <FILE>           Set cert_file (default: certs/agent.pem)");
-        println!("  --cert-key <FILE>           Set key_file (default: certs/agent.key)");
-        println!("  --cert-ca <FILE>            Set ca_file (default: certs/ca.pem)");
+        println!("Aegis Agent - Zero Trust Network Firewall");
+        println!("\nUsage: aegis-agent [OPTIONS]");
+        println!("\nOptions:");
+        println!("  -i, --iface <NAME>       Network interface (default: eth0)");
+        println!("  -c, --ip <IP>            Controller IP (default: 172.21.0.5)");
+        println!("  -p, --port <PORT>        Controller port (default: 443)");
+        println!("  -n, --update-time <NS>   Session update timeout in ns (default: 1000000000)");
+        println!("  --cert-pem <FILE>        Certificate file (default: certs/agent.pem)");
+        println!("  --cert-key <FILE>        Private key file (default: certs/agent.key)");
+        println!("  --cert-ca <FILE>         CA certificate (default: certs/ca.pem)");
+        println!("  -h, --help               Show this help message");
         std::process::exit(0);
     }
 }
@@ -216,5 +210,81 @@ mod tests {
         ];
         let result = Config::load(&args);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_certificate_paths() {
+        let args = vec![
+            "aegis".to_string(),
+            "--cert-pem".to_string(),
+            "/custom/cert.pem".to_string(),
+            "--cert-key".to_string(),
+            "/custom/key.pem".to_string(),
+            "--cert-ca".to_string(),
+            "/custom/ca.pem".to_string(),
+        ];
+        let config = Config::load(&args).expect("Failed to load cert paths");
+
+        assert_eq!(config.cert_file, "/custom/cert.pem");
+        assert_eq!(config.key_file, "/custom/key.pem");
+        assert_eq!(config.ca_file, "/custom/ca.pem");
+    }
+
+    #[test]
+    fn test_update_timeout() {
+        let args = vec![
+            "aegis".to_string(),
+            "-n".to_string(),
+            "5000000000".to_string(),
+        ];
+        let config = Config::load(&args).expect("Failed to load update timeout");
+
+        assert_eq!(config.lazy_update_timeout, 5000000000);
+    }
+
+    #[test]
+    fn test_mixed_flags() {
+        let args = vec![
+            "aegis".to_string(),
+            "-i".to_string(),
+            "eth2".to_string(),
+            "--ip".to_string(),
+            "10.1.1.1".to_string(),
+            "-p".to_string(),
+            "8443".to_string(),
+            "--update-time".to_string(),
+            "2000000000".to_string(),
+        ];
+        let config = Config::load(&args).expect("Failed to load mixed flags");
+
+        assert_eq!(config.iface_name, "eth2");
+        assert_eq!(config.controller_ip, Ipv4Addr::new(10, 1, 1, 1));
+        assert_eq!(config.controller_port, 8443);
+        assert_eq!(config.lazy_update_timeout, 2000000000);
+    }
+
+    #[test]
+    fn test_invalid_update_timeout() {
+        let args = vec![
+            "aegis".to_string(),
+            "--update-time".to_string(),
+            "not_a_number".to_string(),
+        ];
+        let result = Config::load(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unknown_args_ignored() {
+        let args = vec![
+            "aegis".to_string(),
+            "--unknown-flag".to_string(),
+            "value".to_string(),
+            "-i".to_string(),
+            "eth0".to_string(),
+        ];
+        // Should not panic, just log a warning
+        let config = Config::load(&args).expect("Should handle unknown args");
+        assert_eq!(config.iface_name, "eth0");
     }
 }
