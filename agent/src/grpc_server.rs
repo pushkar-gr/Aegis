@@ -26,20 +26,20 @@ use tonic::{
 };
 use tracing::{debug, error, info, warn};
 
-/// Callback function type for adding firewall rules
-type AddRuleFn = Arc<Mutex<dyn Fn(u32, u32, u16) -> Result<()> + Send + Sync>>;
+/// Callback function type for adding/removing firewall rules
+type ModifyRulesFn = Arc<Mutex<dyn Fn(bool, u32, u32, u16) -> Result<()> + Send + Sync>>;
 
 /// SessionManager service implementation
 pub struct SessionManagerService {
     controller_ip: Ipv4Addr,
-    add_rule: AddRuleFn,
+    modify_rules: ModifyRulesFn,
 }
 
 impl SessionManagerService {
-    pub fn new(controller_ip: Ipv4Addr, add_rule: AddRuleFn) -> Self {
+    pub fn new(controller_ip: Ipv4Addr, modify_rules: ModifyRulesFn) -> Self {
         Self {
             controller_ip,
-            add_rule,
+            modify_rules,
         }
     }
 
@@ -93,25 +93,19 @@ impl SessionManager for SessionManagerService {
         );
 
         // Add or remove session rule
-        let success = if event.activate {
-            let add_rule = self.add_rule.lock().await;
-            match add_rule(event.dst_ip, event.src_ip, dst_port) {
-                Ok(_) => {
-                    debug!(
-                        "Session authorized: {} → {}:{}",
-                        event.src_ip, event.dst_ip, dst_port
-                    );
-                    true
-                }
-                Err(e) => {
-                    error!("Failed to add session: {}", e);
-                    false
-                }
+        let add_rule = self.modify_rules.lock().await;
+        let success = match add_rule(event.activate, event.dst_ip, event.src_ip, dst_port) {
+            Ok(_) => {
+                debug!(
+                    "Session Modified (is_active: {}): {} → {}:{}",
+                    event.activate, event.src_ip, event.dst_ip, dst_port
+                );
+                true
             }
-        } else {
-            // TODO: Implement session deactivation
-            info!("Session deactivation not implemented yet");
-            true
+            Err(e) => {
+                error!("Failed to modify session: {}", e);
+                false
+            }
         };
 
         let reply = Ack { success };
@@ -144,12 +138,12 @@ impl SessionManager for SessionManagerService {
 pub async fn start_grpc_server(
     addr: SocketAddr,
     controller_ip: Ipv4Addr,
-    add_rule: AddRuleFn,
+    modify_rules: ModifyRulesFn,
     cert_path: &str,
     key_path: &str,
     ca_path: &str,
 ) -> Result<()> {
-    let service = SessionManagerService::new(controller_ip, add_rule);
+    let service = SessionManagerService::new(controller_ip, modify_rules);
 
     debug!("Loading TLS certificates...");
     let cert = fs::read_to_string(cert_path).context("Failed to read certificate")?;
@@ -184,8 +178,8 @@ mod tests {
     #[test]
     fn test_validate_controller_ip_success() {
         let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
-        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, add_rule);
+        let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, modify_rules);
 
         let remote_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 1234);
         let result = service.validate_controller_ip(Some(remote_addr));
@@ -196,8 +190,8 @@ mod tests {
     #[test]
     fn test_validate_controller_ip_unauthorized() {
         let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
-        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, add_rule);
+        let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, modify_rules);
 
         let remote_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)), 1234);
         let result = service.validate_controller_ip(Some(remote_addr));
@@ -209,8 +203,8 @@ mod tests {
     #[test]
     fn test_validate_controller_ip_no_address() {
         let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
-        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, add_rule);
+        let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, modify_rules);
 
         let result = service.validate_controller_ip(None);
 
@@ -221,8 +215,8 @@ mod tests {
     #[test]
     fn test_validate_controller_ip_ipv6_rejected() {
         let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
-        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, add_rule);
+        let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, modify_rules);
 
         let remote_addr = SocketAddr::new(IpAddr::V6("::1".parse().unwrap()), 1234);
         let result = service.validate_controller_ip(Some(remote_addr));
@@ -234,8 +228,8 @@ mod tests {
     #[test]
     fn test_session_manager_service_creation() {
         let controller_ip = Ipv4Addr::new(192, 168, 1, 1);
-        let add_rule: AddRuleFn = Arc::new(Mutex::new(|_, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, add_rule);
+        let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
+        let service = SessionManagerService::new(controller_ip, modify_rules);
 
         assert_eq!(service.controller_ip, controller_ip);
     }

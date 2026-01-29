@@ -71,16 +71,20 @@ async fn main() -> Result<()> {
     let server_addr = SocketAddr::from(([0, 0, 0, 0], 50001));
     info!("Starting gRPC server on {}", server_addr);
 
-    let add_rule_handler = Arc::new(Mutex::new(
-        move |dest_ip: u32, src_ip: u32, dest_port: u16| -> Result<()> {
-            bpf.add_rule(dest_ip.to_be(), src_ip.to_be(), dest_port)
+    let modify_rule_handler = Arc::new(Mutex::new(
+        move |is_add: bool, dest_ip: u32, src_ip: u32, dest_port: u16| -> Result<()> {
+            if is_add {
+                bpf.add_rule(dest_ip.to_be(), src_ip.to_be(), dest_port)
+            } else {
+                bpf.remove_rule(dest_ip.to_be(), src_ip.to_be(), dest_port)
+            }
         },
     ));
 
     start_grpc_server(
         server_addr,
         config.controller_ip,
-        add_rule_handler,
+        modify_rule_handler,
         &config.cert_file,
         &config.key_file,
         &config.ca_file,

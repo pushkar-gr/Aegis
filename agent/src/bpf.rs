@@ -93,4 +93,18 @@ impl<'a> Bpf<'a> {
         )?;
         Ok(())
     }
+
+    /// Removes a firewall rule from the map.
+    pub fn remove_rule(&self, dest_ip: u32, src_ip: u32, dest_port: u16) -> Result<()> {
+        let key = session_key {
+            dest_ip,
+            src_ip,
+            dest_port,
+        };
+        self.skel
+            .maps
+            .session
+            .delete(bytemuck::bytes_of(&key))
+            .map_err(|e| anyhow!(e))
+    }
 }
