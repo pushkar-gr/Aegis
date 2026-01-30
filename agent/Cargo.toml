@@ -8,7 +8,7 @@ anyhow = "1.0"
 libbpf-rs = "0.25"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-nix = { version = "0.27", features = ["net"] }
+nix = { version = "0.31", features = ["net", "time"] }
 caps = "0.5"
 bytemuck = "1.24"
 tokio = { version = "1.49", features = ["macros", "rt-multi-thread", "sync"] }

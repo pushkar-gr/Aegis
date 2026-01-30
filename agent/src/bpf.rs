@@ -13,7 +13,7 @@ use libbpf_rs::{
     Link, MapCore, MapFlags,
     skel::{OpenSkel, SkelBuilder},
 };
-use std::time::{SystemTime, UNIX_EPOCH};
+use nix::time::{ClockId, clock_gettime};
 use tracing::{debug, error};
 
 /// BPF program manager - handles loading and interacting with the XDP firewall..
@@ -71,10 +71,7 @@ impl<'a> Bpf<'a> {
 
     /// Adds a firewall rule to allow traffic for a specific session.
     pub fn add_rule(&self, dest_ip: u32, src_ip: u32, dest_port: u16) -> Result<()> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_nanos() as u64;
+        let now = Self::get_ktime_ns();
 
         let key = session_key {
             dest_ip,
@@ -110,10 +107,7 @@ impl<'a> Bpf<'a> {
 
     /// Removes all ideal firewall rules from the map.
     pub fn cleanup_ebpf_rules(&self, timeout_ns: u64) -> Result<Vec<Vec<u8>>> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .context("Time went backwards")?
-            .as_nanos() as u64;
+        let now = Self::get_ktime_ns();
 
         let stale_keys: Vec<Vec<u8>> = self
             .skel
@@ -128,6 +122,12 @@ impl<'a> Bpf<'a> {
                         return false;
                     }
                     let val: &session_val = bytemuck::from_bytes(&val_bytes);
+                    println!(
+                        "lastseen: {:?}, time: {:?}, removing: {:?}",
+                        val.last_seen_ns,
+                        now.saturating_sub(val.last_seen_ns),
+                        now.saturating_sub(val.last_seen_ns) > timeout_ns
+                    );
                     now.saturating_sub(val.last_seen_ns) > timeout_ns
                 } else {
                     false
@@ -150,5 +150,10 @@ impl<'a> Bpf<'a> {
             debug!("Reaped {} stale session rules", count);
         }
         Ok(stale_keys)
+    }
+
+    fn get_ktime_ns() -> u64 {
+        let now = clock_gettime(ClockId::CLOCK_MONOTONIC).expect("Failed to get time");
+        (now.tv_sec() as u64) * 1_000_000_000 + (now.tv_nsec() as u64)
     }
 }

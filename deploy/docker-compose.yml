@@ -62,8 +62,14 @@ services:
     networks:
       private_net:
         ipv4_address: 172.21.0.20
-    command: >
-      sh -c "ip route add 172.20.0.0/24 via 172.21.0.10 && sleep infinity"
+    command: 
+      - sh
+      - -c
+      - |
+        ip route add 172.20.0.0/24 via 172.21.0.10
+        while true; do 
+          echo -e "HTTP/1.1 200 OK\n\nHello" | nc -l -p 8080
+        done
 
 networks:
   public_net:
