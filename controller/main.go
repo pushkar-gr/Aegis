@@ -5,6 +5,7 @@ import (
 	"Aegis/controller/internal/utils"
 	"Aegis/controller/proto"
 	"Aegis/controller/server"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -34,18 +35,70 @@ func main() {
 		for {
 			if err := proto.MonitorStream(func(list *proto.SessionList) {
 				log.Printf("Received update with %d sessions", len(list.Sessions))
-				for _, s := range list.Sessions {
-					log.Printf("Session: %v -> %v left: %ds",
-						utils.Uint32ToIp(s.SrcIp), s.DstPort, s.TimeLeft)
+
+				// Fetch current mappings from DB to resolve IDs
+				serviceMap, err := database.GetServiceMap() // ip:port -> id
+				if err != nil {
+					log.Printf("Sync skipped: failed to get service map: %v", err)
+					return
 				}
+
+				activeUsersMap, err := database.GetActiveServiceUsers() // service_id -> []user_id
+				if err != nil {
+					log.Printf("Sync skipped: failed to get active users: %v", err)
+					return
+				}
+
+				// Prepare the list of sessions to keep/update
+				type key struct {
+					uID int
+					sID int
+				}
+				syncMap := make(map[key]int)
+
+				for _, s := range list.Sessions {
+					// Format BPF Dst IP:Port to match DB "ip:port" string
+					dstIpStr := utils.Uint32ToIp(s.DstIp)
+					serviceKey := fmt.Sprintf("%s:%d", dstIpStr, s.DstPort)
+
+					if svcID, ok := serviceMap[serviceKey]; ok {
+						if userIDs, exists := activeUsersMap[svcID]; exists {
+							for _, uID := range userIDs {
+								k := key{uID, svcID}
+								if t, exists := syncMap[k]; !exists || int(s.TimeLeft) > t {
+									syncMap[k] = int(s.TimeLeft)
+								}
+							}
+						}
+					} else {
+						log.Printf("Warning: Unknown service traffic %s", serviceKey)
+					}
+				}
+
+				// Convert map to slice for the DB transaction
+				sessionsToSync := make([]database.ActiveSessionSync, 0, len(syncMap))
+				for k, timeLeft := range syncMap {
+					sessionsToSync = append(sessionsToSync, database.ActiveSessionSync{
+						UserID:    k.uID,
+						ServiceID: k.sID,
+						TimeLeft:  timeLeft,
+					})
+				}
+
+				// Perform the Sync (Update existing, Delete missing)
+				if err := database.SyncActiveSessions(sessionsToSync); err != nil {
+					log.Printf("Error syncing active sessions to DB: %v", err)
+				} else {
+					log.Printf("Synced %d active sessions to database", len(sessionsToSync))
+				}
+
 			}); err != nil {
-				log.Printf("MonitorStream stopped with error: %v. Retrying in 5 sec", err)
+				log.Printf("MonitorStream stopped with error: %v\nRetrying in 5 secs", err)
 				time.Sleep(5 * time.Second)
 			}
 		}
 	}()
 
-	// Create a channel to listen for OS interrupt signals (Ctrl+C).
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
 

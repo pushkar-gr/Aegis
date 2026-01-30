@@ -171,7 +171,6 @@ impl<'a> Bpf<'a> {
                 }
             })
             .collect();
-        println!("{:?}", sessions);
         Ok(sessions)
     }
 

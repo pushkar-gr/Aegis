@@ -139,7 +139,6 @@ impl SessionManager for SessionManagerService {
                         if tx.send(msg).await.is_err() {
                             break;
                         }
-                        println!("HERE SENT");
                     }
                     Err(broadcast::error::RecvError::Lagged(skipped)) => {
                         warn!("Monitor stream lagged, skipped {} messages", skipped);
