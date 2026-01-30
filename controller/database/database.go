@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -20,6 +21,8 @@ var (
 	stmtGetUserCredentials *sql.Stmt
 	stmtGetUserIDAndRole   *sql.Stmt
 	stmtUpdatePassword     *sql.Stmt
+	stmtGetServiceMap      *sql.Stmt
+	stmtGetActiveUsers     *sql.Stmt
 )
 
 // ActiveSessionSync represents the data required to synchronize a session
@@ -31,7 +34,7 @@ type ActiveSessionSync struct {
 
 // InitDB sets up the database connection and prepares frequently used statements.
 // This includes enabling WAL mode for better performance and preparing queries for login, user lookup, and password updates.
-func InitDB() {
+func InitDB(maxOpen, maxIdle int, connMaxLifetime time.Duration) {
 	var err error
 
 	if _, err := os.Stat(DB_DIR); os.IsNotExist(err) {
@@ -56,23 +59,12 @@ func InitDB() {
 		log.Fatalf("[database] init failed: unable to enable foreign keys: %v", err)
 	}
 
-	DB.SetMaxOpenConns(1)
-	DB.SetMaxIdleConns(1)
-	DB.SetConnMaxLifetime(time.Hour)
+	DB.SetMaxOpenConns(maxOpen)
+	DB.SetMaxIdleConns(maxIdle)
+	DB.SetConnMaxLifetime(connMaxLifetime)
 
-	stmtGetUserCredentials, err = DB.Prepare("SELECT password, is_active FROM users WHERE username = ?")
-	if err != nil {
-		log.Fatalf("[database] init failed: unable to prepare user credentials query: %v", err)
-	}
-
-	stmtGetUserIDAndRole, err = DB.Prepare("SELECT id, role_id FROM users WHERE username = ?")
-	if err != nil {
-		log.Fatalf("[database] init failed: unable to prepare user ID query: %v", err)
-	}
-
-	stmtUpdatePassword, err = DB.Prepare("UPDATE users SET password = ? WHERE username = ?")
-	if err != nil {
-		log.Fatalf("[database] init failed: unable to prepare password update query: %v", err)
+	if err := InitPreparedStatements(); err != nil {
+		log.Fatalf("[database] init failed: unable to prepare statements: %v", err)
 	}
 
 	log.Printf("[database] initialized successfully at %s", dbPath)
@@ -85,17 +77,27 @@ func InitPreparedStatements() error {
 
 	stmtGetUserCredentials, err = DB.Prepare("SELECT password, is_active FROM users WHERE username = ?")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to prepare user credentials query: %w", err)
 	}
 
 	stmtGetUserIDAndRole, err = DB.Prepare("SELECT id, role_id FROM users WHERE username = ?")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to prepare user ID query: %w", err)
 	}
 
 	stmtUpdatePassword, err = DB.Prepare("UPDATE users SET password = ? WHERE username = ?")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to prepare password update query: %w", err)
+	}
+
+	stmtGetServiceMap, err = DB.Prepare("SELECT id, ip_port FROM services")
+	if err != nil {
+		return fmt.Errorf("failed to prepare service map query: %w", err)
+	}
+
+	stmtGetActiveUsers, err = DB.Prepare("SELECT user_id, service_id FROM user_active_services")
+	if err != nil {
+		return fmt.Errorf("failed to prepare active users query: %w", err)
 	}
 
 	return nil
@@ -194,7 +196,7 @@ func SyncActiveSessions(sessions []ActiveSessionSync) error {
 
 // GetServiceMap returns a map of "ip:port" -> service_id for all services.
 func GetServiceMap() (map[string]int, error) {
-	rows, err := DB.Query("SELECT id, ip_port FROM services")
+	rows, err := stmtGetServiceMap.Query()
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +215,7 @@ func GetServiceMap() (map[string]int, error) {
 
 // GetActiveServiceUsers returns a map of service_id -> []user_id for currently active sessions in DB.
 func GetActiveServiceUsers() (map[int][]int, error) {
-	rows, err := DB.Query("SELECT user_id, service_id FROM user_active_services")
+	rows, err := stmtGetActiveUsers.Query()
 	if err != nil {
 		return nil, err
 	}

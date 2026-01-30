@@ -17,13 +17,13 @@ import (
 
 var c SessionManagerClient
 
-func Init() error {
-	cert, err := tls.LoadX509KeyPair("certs/controller.pem", "certs/controller.key")
+func Init(agentAddr, certFile, keyFile, caFile, serverName string) error {
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		return fmt.Errorf("failed to load client cert/key: %v", err)
 	}
 
-	caCert, err := os.ReadFile("certs/ca.pem")
+	caCert, err := os.ReadFile(caFile)
 	if err != nil {
 		return fmt.Errorf("failed to read CA cert: %v", err)
 	}
@@ -35,11 +35,10 @@ func Init() error {
 	creds := credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      caCertPool,
-		// ServerName must match the Common Name (CN) in the Agent's certificate
-		ServerName: "aegis-agent",
+		ServerName:   serverName,
 	})
 
-	conn, err := grpc.NewClient("172.21.0.10:50001", grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(agentAddr, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		return err
 	}
@@ -48,8 +47,8 @@ func Init() error {
 }
 
 // SendSessionData sends a login event to the server
-func SendSessionData(srcIp, dstIp string, port uint32, active bool) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+func SendSessionData(srcIp, dstIp string, port uint32, active bool, timeout time.Duration) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	req := &LoginEvent{

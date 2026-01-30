@@ -153,7 +153,7 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[dashboard] activating service ID %d for user ID %d from IP %s to %s:%d", req.ServiceID, userID, clientIP, dstIP, dstPort)
 
 	// Call SendSessionData to activate the session
-	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, true)
+	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, true, time.Second)
 	if err != nil {
 		log.Printf("[dashboard] SendSessionData failed for service ID %d: %v", req.ServiceID, err)
 		http.Error(w, "Failed to activate session", http.StatusInternalServerError)
@@ -206,7 +206,7 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[dashboard] deactivating service ID %d for user ID %d from IP %s to %s:%d", svcID, userID, clientIP, dstIP, dstPort)
 
 	// Call SendSessionData to deactivate the session
-	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, false)
+	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, false, time.Second)
 	if err != nil {
 		log.Printf("[dashboard] SendSessionData failed for service ID %d deactivation: %v", svcID, err)
 	} else if !success {

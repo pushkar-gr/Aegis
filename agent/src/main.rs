@@ -68,22 +68,23 @@ async fn main() -> Result<()> {
         config.controller_ip, config.controller_port
     );
 
-    let (monitor_tx, _) = broadcast::channel(16);
+    let (monitor_tx, _) = broadcast::channel(config.broadcast_channel_size);
     let monitor_tx_loop = monitor_tx.clone();
     let bpf_cleanup = bpf.clone();
-    const RULE_TIMEOUT_NS: u64 = 60_000_000_000;
+    let rule_timeout_ns = config.rule_timeout_ns;
+    let cleanup_interval_sec = config.cleanup_interval_sec;
 
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        let mut interval = tokio::time::interval(Duration::from_secs(cleanup_interval_sec));
         loop {
             interval.tick().await;
             debug!("Running periodic eBPF rule cleanup...");
             match bpf_cleanup.lock() {
                 Ok(bpf) => {
-                    if let Err(e) = bpf.cleanup_ebpf_rules(RULE_TIMEOUT_NS) {
+                    if let Err(e) = bpf.cleanup_ebpf_rules(rule_timeout_ns) {
                         error!("Failed to cleanup stale rules: {}", e);
                     }
-                    match bpf.list_rules(RULE_TIMEOUT_NS) {
+                    match bpf.list_rules(rule_timeout_ns) {
                         Ok(rules) => {
                             let proto_sessions: Vec<Session> = rules
                                 .into_iter()
@@ -115,7 +116,7 @@ async fn main() -> Result<()> {
     });
 
     // Start gRPC server
-    let server_addr = SocketAddr::from(([0, 0, 0, 0], 50001));
+    let server_addr = SocketAddr::from(([0, 0, 0, 0], config.grpc_server_port));
     info!("Starting gRPC server on {}", server_addr);
 
     let bpf_grpc = bpf.clone();

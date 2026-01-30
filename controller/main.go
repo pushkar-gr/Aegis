@@ -1,6 +1,7 @@
 package main
 
 import (
+	"Aegis/controller/config"
 	"Aegis/controller/database"
 	"Aegis/controller/internal/utils"
 	"Aegis/controller/proto"
@@ -15,19 +16,22 @@ import (
 // main initializes the database, starts the HTTP server in a separate goroutine,
 // and handles graceful shutdown upon receiving an interrupt signal.
 func main() {
+	// Load configuration
+	cfg := config.Load()
+
 	// Initialize the SQLite database connection and schema.
-	database.InitDB()
+	database.InitDB(cfg.MaxOpenConns, cfg.MaxIdleConns, cfg.ConnMaxLifetime)
 	defer func() {
 		if err := database.DB.Close(); err != nil {
 			log.Printf("Error closing database: %v", err)
 		}
 	}()
 	// Start the server in a goroutine so the main thread can listen for signals.
-	go server.StartServer()
+	go server.StartServer(cfg.ServerPort, cfg.CertFile, cfg.KeyFile)
 
-	err := proto.Init()
+	err := proto.Init(cfg.AgentAddress, cfg.AgentCertFile, cfg.AgentKeyFile, cfg.AgentCAFile, cfg.AgentServerName)
 	if err != nil {
-		log.Printf("Error starting grpc server: %v", err)
+		log.Printf("Error starting grpc client: %v", err)
 		return
 	}
 
@@ -37,13 +41,13 @@ func main() {
 				log.Printf("Received update with %d sessions", len(list.Sessions))
 
 				// Fetch current mappings from DB to resolve IDs
-				serviceMap, err := database.GetServiceMap() // ip:port -> id
+				serviceMap, err := database.GetServiceMap()
 				if err != nil {
 					log.Printf("Sync skipped: failed to get service map: %v", err)
 					return
 				}
 
-				activeUsersMap, err := database.GetActiveServiceUsers() // service_id -> []user_id
+				activeUsersMap, err := database.GetActiveServiceUsers()
 				if err != nil {
 					log.Printf("Sync skipped: failed to get active users: %v", err)
 					return
@@ -93,8 +97,8 @@ func main() {
 				}
 
 			}); err != nil {
-				log.Printf("MonitorStream stopped with error: %v\nRetrying in 5 secs", err)
-				time.Sleep(5 * time.Second)
+				log.Printf("MonitorStream stopped with error: %v\nRetrying in %v", err, cfg.MonitorRetryDelay)
+				time.Sleep(cfg.MonitorRetryDelay)
 			}
 		}
 	}()
