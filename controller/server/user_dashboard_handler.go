@@ -153,7 +153,7 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[dashboard] activating service ID %d for user ID %d from IP %s to %s:%d", req.ServiceID, userID, clientIP, dstIP, dstPort)
 
 	// Call SendSessionData to activate the session
-	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, true)
+	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, true, time.Second)
 	if err != nil {
 		log.Printf("[dashboard] SendSessionData failed for service ID %d: %v", req.ServiceID, err)
 		http.Error(w, "Failed to activate session", http.StatusInternalServerError)
@@ -165,8 +165,7 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = database.DB.Exec("INSERT OR REPLACE INTO user_active_services (user_id, service_id, updated_at, time_left) VALUES (?, ?, ?, ?)",
-		userID, req.ServiceID, time.Now(), 60)
+	err = database.InsertActiveService(userID, req.ServiceID, 60)
 	if err != nil {
 		log.Printf("[dashboard] select service failed: database write error - %v", err)
 		http.Error(w, "Failed to update active status", http.StatusInternalServerError)
@@ -206,14 +205,14 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[dashboard] deactivating service ID %d for user ID %d from IP %s to %s:%d", svcID, userID, clientIP, dstIP, dstPort)
 
 	// Call SendSessionData to deactivate the session
-	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, false)
+	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, false, time.Second)
 	if err != nil {
 		log.Printf("[dashboard] SendSessionData failed for service ID %d deactivation: %v", svcID, err)
 	} else if !success {
 		log.Printf("[dashboard] SendSessionData returned false for service ID %d deactivation", svcID)
 	}
 
-	_, err = database.DB.Exec("DELETE FROM user_active_services WHERE user_id = ? AND service_id = ?", userID, svcID)
+	err = database.DeleteActiveService(userID, svcID)
 	if err != nil {
 		log.Printf("[dashboard] deselect service failed: database error - %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -239,8 +238,7 @@ func resolveCurrentUser(r *http.Request) (int, int, error) {
 // parseServiceIPPort retrieves and parses service IP and port from database.
 // Returns destination IP, port.
 func parseServiceIPPort(serviceID int) (string, uint32, error) {
-	var ipPort string
-	err := database.DB.QueryRow("SELECT ip_port FROM services WHERE id = ?", serviceID).Scan(&ipPort)
+	ipPort, err := database.GetServiceIPPort(serviceID)
 	if err != nil {
 		return "", 0, err
 	}

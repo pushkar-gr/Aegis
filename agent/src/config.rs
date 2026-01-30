@@ -18,6 +18,14 @@ pub struct Config<'a> {
     pub cert_file: String,
     pub key_file: String,
     pub ca_file: String,
+    /// Rule timeout in nanoseconds before cleanup
+    pub rule_timeout_ns: u64,
+    /// Cleanup interval in seconds
+    pub cleanup_interval_sec: u64,
+    /// Broadcast channel size for monitoring
+    pub broadcast_channel_size: usize,
+    /// gRPC server port
+    pub grpc_server_port: u16,
 }
 
 impl<'a> Default for Config<'a> {
@@ -30,6 +38,10 @@ impl<'a> Default for Config<'a> {
             cert_file: "certs/agent.pem".to_string(),
             key_file: "certs/agent.key".to_string(),
             ca_file: "certs/ca.pem".to_string(),
+            rule_timeout_ns: 60_000_000_000, // 60s
+            cleanup_interval_sec: 30,
+            broadcast_channel_size: 16,
+            grpc_server_port: 50001,
         }
     }
 }
@@ -106,6 +118,51 @@ impl<'a> Config<'a> {
                     }
                 }
 
+                // Rule timeout in nanoseconds
+                "-r" | "--rule-timeout" => {
+                    if i + 1 < args.len() {
+                        let timeout_str = &args[i + 1];
+                        config.rule_timeout_ns = timeout_str
+                            .parse::<u64>()
+                            .with_context(|| format!("Invalid rule-timeout: {}", timeout_str))?;
+                        i += 1;
+                    }
+                }
+
+                // Cleanup interval in seconds
+                "--cleanup-interval" => {
+                    if i + 1 < args.len() {
+                        let interval_str = &args[i + 1];
+                        config.cleanup_interval_sec =
+                            interval_str.parse::<u64>().with_context(|| {
+                                format!("Invalid cleanup-interval: {}", interval_str)
+                            })?;
+                        i += 1;
+                    }
+                }
+
+                // Broadcast channel size
+                "--channel-size" => {
+                    if i + 1 < args.len() {
+                        let size_str = &args[i + 1];
+                        config.broadcast_channel_size = size_str
+                            .parse::<usize>()
+                            .with_context(|| format!("Invalid channel-size: {}", size_str))?;
+                        i += 1;
+                    }
+                }
+
+                // gRPC server port
+                "-g" | "--grpc-port" => {
+                    if i + 1 < args.len() {
+                        let port_str = &args[i + 1];
+                        config.grpc_server_port = port_str
+                            .parse::<u16>()
+                            .with_context(|| format!("Invalid grpc-port: {}", port_str))?;
+                        i += 1;
+                    }
+                }
+
                 // Help
                 "-h" | "--help" => {
                     Self::print_help();
@@ -128,14 +185,20 @@ impl<'a> Config<'a> {
         println!("Aegis Agent - Zero Trust Network Firewall");
         println!("\nUsage: aegis-agent [OPTIONS]");
         println!("\nOptions:");
-        println!("  -i, --iface <NAME>       Network interface (default: eth0)");
-        println!("  -c, --ip <IP>            Controller IP (default: 172.21.0.5)");
-        println!("  -p, --port <PORT>        Controller port (default: 443)");
-        println!("  -n, --update-time <NS>   Session update timeout in ns (default: 1000000000)");
-        println!("  --cert-pem <FILE>        Certificate file (default: certs/agent.pem)");
-        println!("  --cert-key <FILE>        Private key file (default: certs/agent.key)");
-        println!("  --cert-ca <FILE>         CA certificate (default: certs/ca.pem)");
-        println!("  -h, --help               Show this help message");
+        println!("  -i, --iface <NAME>          Network interface (default: eth0)");
+        println!("  -c, --ip <IP>               Controller IP (default: 172.21.0.5)");
+        println!("  -p, --port <PORT>           Controller port (default: 443)");
+        println!(
+            "  -n, --update-time <NS>      Session update timeout in ns (default: 1000000000)"
+        );
+        println!("  -r, --rule-timeout <NS>     Rule timeout in ns (default: 60000000000)");
+        println!("  -g, --grpc-port <PORT>      gRPC server port (default: 50001)");
+        println!("  --cleanup-interval <SEC>    Cleanup interval in seconds (default: 30)");
+        println!("  --channel-size <SIZE>       Broadcast channel size (default: 16)");
+        println!("  --cert-pem <FILE>           Certificate file (default: certs/agent.pem)");
+        println!("  --cert-key <FILE>           Private key file (default: certs/agent.key)");
+        println!("  --cert-ca <FILE>            CA certificate (default: certs/ca.pem)");
+        println!("  -h, --help                  Show this help message");
         std::process::exit(0);
     }
 }

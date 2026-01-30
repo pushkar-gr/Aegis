@@ -1,7 +1,6 @@
 package server
 
 import (
-	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -24,13 +23,7 @@ func init() {
 }
 
 // StartServer configures and starts the TLS-enabled HTTP server.
-func StartServer() {
-	port := flag.String("port", ":443", "Server port")
-	certFile := flag.String("cert", "/app/certs/server.crt", "Path to certificate file")
-	keyFile := flag.String("key", "/app/certs/server.key", "Path to key file")
-
-	flag.Parse()
-
+func StartServer(port, certFile, keyFile string) {
 	mux := http.NewServeMux()
 
 	// --- Static Files ---
@@ -82,8 +75,8 @@ func StartServer() {
 	mux.Handle("POST /api/me/selected", authMiddleware.ThenFunc(selectActiveService))
 	mux.Handle("DELETE /api/me/selected/{svc_id}", authMiddleware.ThenFunc(deselectActiveService))
 
-	log.Printf("Server initializing on port %s...", *port)
-	if err := http.ListenAndServeTLS(*port, *certFile, *keyFile, securityHeadersMiddleware(mux)); err != nil {
+	log.Printf("[INFO] Server initializing on port %s...", port)
+	if err := http.ListenAndServeTLS(port, certFile, keyFile, securityHeadersMiddleware(mux)); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }

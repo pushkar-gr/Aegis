@@ -191,8 +191,7 @@ func addRoleService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = database.DB.Exec("INSERT OR IGNORE INTO role_services (role_id, service_id) VALUES (?, ?)",
-		roleID, req.ServiceID)
+	err = database.InsertRoleService(roleID, req.ServiceID)
 	if err != nil {
 		log.Printf("[roles] add service failed for role %d and service %d: database error - %v", roleID, req.ServiceID, err)
 		http.Error(w, "Failed to link service to role (check if IDs exist)", http.StatusBadRequest)
@@ -222,7 +221,7 @@ func removeRoleService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = database.DB.Exec("DELETE FROM role_services WHERE role_id = ? AND service_id = ?", roleID, svcID)
+	err = database.DeleteRoleService(roleID, svcID)
 	if err != nil {
 		log.Printf("[roles] remove service failed for role %d and service %d: database error - %v", roleID, svcID, err)
 		http.Error(w, "Failed to remove service from role", http.StatusInternalServerError)
