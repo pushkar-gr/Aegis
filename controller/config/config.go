@@ -20,12 +20,12 @@ type Config struct {
 	KeyFile    string
 
 	// gRPC Agent connection
-	AgentAddress      string
-	AgentCertFile     string
-	AgentKeyFile      string
-	AgentCAFile       string
-	AgentServerName   string
-	AgentCallTimeout  time.Duration
+	AgentAddress     string
+	AgentCertFile    string
+	AgentKeyFile     string
+	AgentCAFile      string
+	AgentServerName  string
+	AgentCallTimeout time.Duration
 
 	// Session monitoring
 	MonitorRetryDelay time.Duration
@@ -81,7 +81,7 @@ func getIntEnv(key string, defaultValue int) int {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
 		}
-		log.Printf("Warning: Invalid integer value for %s, using default: %d", key, defaultValue)
+		log.Printf("[WARN] Invalid integer value for %s, using default: %d", key, defaultValue)
 	}
 	return defaultValue
 }
@@ -92,7 +92,7 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 		if duration, err := time.ParseDuration(value); err == nil {
 			return duration
 		}
-		log.Printf("Warning: Invalid duration value for %s, using default: %v", key, defaultValue)
+		log.Printf("[WARN] Invalid duration value for %s, using default: %v", key, defaultValue)
 	}
 	return defaultValue
 }

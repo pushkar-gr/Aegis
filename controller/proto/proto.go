@@ -73,17 +73,17 @@ func MonitorStream(callback func(*SessionList)) error {
 		return err
 	}
 
-	log.Println("Started monitoring sessions...")
+	log.Println("[INFO] Started monitoring sessions...")
 
 	for {
 		// This blocks until the server sends data (every 5 seconds as per your server logic)
 		sessionList, err := stream.Recv()
 		if err == io.EOF {
-			log.Println("Server closed the stream.")
+			log.Println("[INFO] Server closed the stream.")
 			break
 		}
 		if err != nil {
-			log.Printf("stream error: %v", err)
+			log.Printf("[ERROR] stream error: %v", err)
 			break
 		}
 

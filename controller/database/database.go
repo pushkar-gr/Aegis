@@ -47,25 +47,25 @@ func InitDB(maxOpen, maxIdle int, connMaxLifetime time.Duration) {
 	var err error
 
 	if _, err := os.Stat(DB_DIR); os.IsNotExist(err) {
-		log.Fatalf("[database] init failed: data directory '%s' does not exist", DB_DIR)
+		log.Fatalf("[ERROR] [database] init failed: data directory '%s' does not exist", DB_DIR)
 	}
 	dbPath := filepath.Join(DB_DIR, "aegis.db")
 
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		log.Fatalf("[database] init failed: aegis.db not found at %s", dbPath)
+		log.Fatalf("[ERROR] [database] init failed: aegis.db not found at %s", dbPath)
 	}
 
 	DB, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
-		log.Fatalf("[database] init failed: unable to open database: %v", err)
+		log.Fatalf("[ERROR] [database] init failed: unable to open database: %v", err)
 	}
 
 	if _, err := DB.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		log.Printf("[database] warning: WAL mode not enabled: %v", err)
+		log.Printf("[WARN] [database] WAL mode not enabled: %v", err)
 	}
 
 	if _, err := DB.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		log.Fatalf("[database] init failed: unable to enable foreign keys: %v", err)
+		log.Fatalf("[ERROR] [database] init failed: unable to enable foreign keys: %v", err)
 	}
 
 	DB.SetMaxOpenConns(maxOpen)
@@ -73,10 +73,10 @@ func InitDB(maxOpen, maxIdle int, connMaxLifetime time.Duration) {
 	DB.SetConnMaxLifetime(connMaxLifetime)
 
 	if err := InitPreparedStatements(); err != nil {
-		log.Fatalf("[database] init failed: unable to prepare statements: %v", err)
+		log.Fatalf("[ERROR] [database] init failed: unable to prepare statements: %v", err)
 	}
 
-	log.Printf("[database] initialized successfully at %s", dbPath)
+	log.Printf("[INFO] [database] initialized successfully at %s", dbPath)
 }
 
 // InitPreparedStatements prepares frequently used SQL statements for reuse.

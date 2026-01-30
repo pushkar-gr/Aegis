@@ -117,11 +117,15 @@ impl<'a> Bpf<'a> {
             .keys()
             .filter(|key_bytes| {
                 // Safely check value size before accessing
-                if let Ok(Some(val_bytes)) = self.skel.maps.session.lookup(key_bytes, MapFlags::ANY) {
+                if let Ok(Some(val_bytes)) = self.skel.maps.session.lookup(key_bytes, MapFlags::ANY)
+                {
                     // Validate size to prevent out-of-bounds access
                     if val_bytes.len() != std::mem::size_of::<session_val>() {
-                        warn!("Invalid session value size: {}, expected {}",
-                              val_bytes.len(), std::mem::size_of::<session_val>());
+                        warn!(
+                            "Invalid session value size: {}, expected {}",
+                            val_bytes.len(),
+                            std::mem::size_of::<session_val>()
+                        );
                         return false;
                     }
 
@@ -143,6 +147,11 @@ impl<'a> Bpf<'a> {
 
         if count > 0 {
             let flat_keys: Vec<u8> = stale_keys.concat();
+
+            // Validate that we have the right amount of data
+            if flat_keys.len() != count * std::mem::size_of::<session_key>() {
+                return Err(anyhow!("Key data size mismatch during cleanup"));
+            }
 
             // Validate that we have the right amount of data
             if flat_keys.len() != count * std::mem::size_of::<session_key>() {
@@ -174,8 +183,11 @@ impl<'a> Bpf<'a> {
             .filter_map(|key_bytes| {
                 // Validate sizes before accessing to prevent out-of-bounds reads
                 if key_bytes.len() != std::mem::size_of::<session_key>() {
-                    warn!("Invalid session key size: {}, expected {}",
-                          key_bytes.len(), std::mem::size_of::<session_key>());
+                    warn!(
+                        "Invalid session key size: {}, expected {}",
+                        key_bytes.len(),
+                        std::mem::size_of::<session_key>()
+                    );
                     return None;
                 }
 
@@ -185,11 +197,16 @@ impl<'a> Bpf<'a> {
                     return None;
                 }
 
-                if let Ok(Some(val_bytes)) = self.skel.maps.session.lookup(&key_bytes, MapFlags::ANY) {
+                if let Ok(Some(val_bytes)) =
+                    self.skel.maps.session.lookup(&key_bytes, MapFlags::ANY)
+                {
                     // Validate value size
                     if val_bytes.len() != std::mem::size_of::<session_val>() {
-                        warn!("Invalid session value size: {}, expected {}",
-                              val_bytes.len(), std::mem::size_of::<session_val>());
+                        warn!(
+                            "Invalid session value size: {}, expected {}",
+                            val_bytes.len(),
+                            std::mem::size_of::<session_val>()
+                        );
                         return None;
                     }
 

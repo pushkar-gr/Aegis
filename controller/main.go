@@ -23,7 +23,7 @@ func main() {
 	database.InitDB(cfg.MaxOpenConns, cfg.MaxIdleConns, cfg.ConnMaxLifetime)
 	defer func() {
 		if err := database.DB.Close(); err != nil {
-			log.Printf("Error closing database: %v", err)
+			log.Printf("[ERROR] Error closing database: %v", err)
 		}
 	}()
 	// Start the server in a goroutine so the main thread can listen for signals.
@@ -31,25 +31,25 @@ func main() {
 
 	err := proto.Init(cfg.AgentAddress, cfg.AgentCertFile, cfg.AgentKeyFile, cfg.AgentCAFile, cfg.AgentServerName)
 	if err != nil {
-		log.Printf("Error starting grpc client: %v", err)
+		log.Printf("[ERROR] Error starting grpc client: %v", err)
 		return
 	}
 
 	go func() {
 		for {
 			if err := proto.MonitorStream(func(list *proto.SessionList) {
-				log.Printf("Received update with %d sessions", len(list.Sessions))
+				log.Printf("[INFO] Received update with %d sessions", len(list.Sessions))
 
 				// Fetch current mappings from DB to resolve IDs
 				serviceMap, err := database.GetServiceMap()
 				if err != nil {
-					log.Printf("Sync skipped: failed to get service map: %v", err)
+					log.Printf("[ERROR] Sync skipped: failed to get service map: %v", err)
 					return
 				}
 
 				activeUsersMap, err := database.GetActiveServiceUsers()
 				if err != nil {
-					log.Printf("Sync skipped: failed to get active users: %v", err)
+					log.Printf("[ERROR] Sync skipped: failed to get active users: %v", err)
 					return
 				}
 
@@ -75,7 +75,7 @@ func main() {
 							}
 						}
 					} else {
-						log.Printf("Warning: Unknown service traffic %s", serviceKey)
+						log.Printf("[WARN] Unknown service traffic %s", serviceKey)
 					}
 				}
 
@@ -91,13 +91,13 @@ func main() {
 
 				// Perform the Sync (Update existing, Delete missing)
 				if err := database.SyncActiveSessions(sessionsToSync); err != nil {
-					log.Printf("Error syncing active sessions to DB: %v", err)
+					log.Printf("[ERROR] Error syncing active sessions to DB: %v", err)
 				} else {
-					log.Printf("Synced %d active sessions to database", len(sessionsToSync))
+					log.Printf("[INFO] Synced %d active sessions to database", len(sessionsToSync))
 				}
 
 			}); err != nil {
-				log.Printf("MonitorStream stopped with error: %v\nRetrying in %v", err, cfg.MonitorRetryDelay)
+				log.Printf("[ERROR] MonitorStream stopped with error: %v\nRetrying in %v", err, cfg.MonitorRetryDelay)
 				time.Sleep(cfg.MonitorRetryDelay)
 			}
 		}
@@ -109,5 +109,5 @@ func main() {
 	// Block until a signal is received.
 	<-quit
 
-	log.Println("Interrupt signal received. Shutting down server...")
+	log.Println("[INFO] Interrupt signal received. Shutting down server...")
 }
