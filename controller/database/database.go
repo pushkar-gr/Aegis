@@ -18,11 +18,20 @@ var (
 	DB *sql.DB
 
 	// Prepared statements for frequently used queries
-	stmtGetUserCredentials *sql.Stmt
-	stmtGetUserIDAndRole   *sql.Stmt
-	stmtUpdatePassword     *sql.Stmt
-	stmtGetServiceMap      *sql.Stmt
-	stmtGetActiveUsers     *sql.Stmt
+	stmtGetUserCredentials     *sql.Stmt
+	stmtGetUserIDAndRole       *sql.Stmt
+	stmtUpdatePassword         *sql.Stmt
+	stmtGetServiceMap          *sql.Stmt
+	stmtGetActiveUsers         *sql.Stmt
+	stmtGetServiceIPPort       *sql.Stmt
+	stmtInsertActiveService    *sql.Stmt
+	stmtDeleteActiveService    *sql.Stmt
+	stmtCheckUserExists        *sql.Stmt
+	stmtCheckServiceExists     *sql.Stmt
+	stmtInsertRoleService      *sql.Stmt
+	stmtDeleteRoleService      *sql.Stmt
+	stmtInsertUserExtraService *sql.Stmt
+	stmtDeleteUserExtraService *sql.Stmt
 )
 
 // ActiveSessionSync represents the data required to synchronize a session
@@ -100,6 +109,51 @@ func InitPreparedStatements() error {
 		return fmt.Errorf("failed to prepare active users query: %w", err)
 	}
 
+	stmtGetServiceIPPort, err = DB.Prepare("SELECT ip_port FROM services WHERE id = ?")
+	if err != nil {
+		return fmt.Errorf("failed to prepare service IP port query: %w", err)
+	}
+
+	stmtInsertActiveService, err = DB.Prepare("INSERT OR REPLACE INTO user_active_services (user_id, service_id, updated_at, time_left) VALUES (?, ?, ?, ?)")
+	if err != nil {
+		return fmt.Errorf("failed to prepare insert active service query: %w", err)
+	}
+
+	stmtDeleteActiveService, err = DB.Prepare("DELETE FROM user_active_services WHERE user_id = ? AND service_id = ?")
+	if err != nil {
+		return fmt.Errorf("failed to prepare delete active service query: %w", err)
+	}
+
+	stmtCheckUserExists, err = DB.Prepare("SELECT id FROM users WHERE id = ?")
+	if err != nil {
+		return fmt.Errorf("failed to prepare check user exists query: %w", err)
+	}
+
+	stmtCheckServiceExists, err = DB.Prepare("SELECT id FROM services WHERE id = ?")
+	if err != nil {
+		return fmt.Errorf("failed to prepare check service exists query: %w", err)
+	}
+
+	stmtInsertRoleService, err = DB.Prepare("INSERT OR IGNORE INTO role_services (role_id, service_id) VALUES (?, ?)")
+	if err != nil {
+		return fmt.Errorf("failed to prepare insert role service query: %w", err)
+	}
+
+	stmtDeleteRoleService, err = DB.Prepare("DELETE FROM role_services WHERE role_id = ? AND service_id = ?")
+	if err != nil {
+		return fmt.Errorf("failed to prepare delete role service query: %w", err)
+	}
+
+	stmtInsertUserExtraService, err = DB.Prepare("INSERT OR IGNORE INTO user_extra_services (user_id, service_id) VALUES (?, ?)")
+	if err != nil {
+		return fmt.Errorf("failed to prepare insert user extra service query: %w", err)
+	}
+
+	stmtDeleteUserExtraService, err = DB.Prepare("DELETE FROM user_extra_services WHERE user_id = ? AND service_id = ?")
+	if err != nil {
+		return fmt.Errorf("failed to prepare delete user extra service query: %w", err)
+	}
+
 	return nil
 }
 
@@ -132,7 +186,16 @@ func GetPasswordHash(username string) (string, error) {
 }
 
 // SyncActiveSessions performs a bulk update of the user_active_services table.
+// This function efficiently synchronizes the active sessions by:
+// 1. Inserting/updating sessions from the provided list
+// 2. Removing stale sessions not in the provided list
 func SyncActiveSessions(sessions []ActiveSessionSync) error {
+	if len(sessions) == 0 {
+		// If no sessions, delete all active sessions
+		_, err := DB.Exec("DELETE FROM user_active_services")
+		return err
+	}
+
 	tx, err := DB.Begin()
 	if err != nil {
 		return err
@@ -145,6 +208,7 @@ func SyncActiveSessions(sessions []ActiveSessionSync) error {
 		return err
 	}
 
+	// Use bulk insert for better performance
 	stmt, err := tx.Prepare("INSERT INTO sync_sessions (user_id, service_id, time_left) VALUES (?, ?, ?)")
 	if err != nil {
 		return err
@@ -183,6 +247,21 @@ func SyncActiveSessions(sessions []ActiveSessionSync) error {
 		)
 	`
 	if _, err := tx.Exec(updateQuery); err != nil {
+		return err
+	}
+
+	// Insert new records that don't exist in the main table
+	insertQuery := `
+		INSERT INTO user_active_services (user_id, service_id, time_left, updated_at)
+		SELECT user_id, service_id, time_left, CURRENT_TIMESTAMP
+		FROM sync_sessions
+		WHERE NOT EXISTS (
+			SELECT 1 FROM user_active_services
+			WHERE user_active_services.user_id = sync_sessions.user_id
+			AND user_active_services.service_id = sync_sessions.service_id
+		)
+	`
+	if _, err := tx.Exec(insertQuery); err != nil {
 		return err
 	}
 
@@ -229,4 +308,67 @@ func GetActiveServiceUsers() (map[int][]int, error) {
 		}
 	}
 	return activeMap, nil
+}
+
+// GetServiceIPPort retrieves the IP:port string for a service ID.
+func GetServiceIPPort(serviceID int) (string, error) {
+	var ipPort string
+	err := stmtGetServiceIPPort.QueryRow(serviceID).Scan(&ipPort)
+	return ipPort, err
+}
+
+// InsertActiveService adds or updates an active service session.
+func InsertActiveService(userID, serviceID, timeLeft int) error {
+	_, err := stmtInsertActiveService.Exec(userID, serviceID, time.Now(), timeLeft)
+	return err
+}
+
+// DeleteActiveService removes an active service session.
+func DeleteActiveService(userID, serviceID int) error {
+	_, err := stmtDeleteActiveService.Exec(userID, serviceID)
+	return err
+}
+
+// CheckUserExists verifies if a user ID exists in the database.
+func CheckUserExists(userID int) (bool, error) {
+	var id int
+	err := stmtCheckUserExists.QueryRow(userID).Scan(&id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// CheckServiceExists verifies if a service ID exists in the database.
+func CheckServiceExists(serviceID int) (bool, error) {
+	var id int
+	err := stmtCheckServiceExists.QueryRow(serviceID).Scan(&id)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// InsertRoleService adds a service to a role.
+func InsertRoleService(roleID, serviceID int) error {
+	_, err := stmtInsertRoleService.Exec(roleID, serviceID)
+	return err
+}
+
+// DeleteRoleService removes a service from a role.
+func DeleteRoleService(roleID, serviceID int) error {
+	_, err := stmtDeleteRoleService.Exec(roleID, serviceID)
+	return err
+}
+
+// InsertUserExtraService adds an extra service to a user.
+func InsertUserExtraService(userID, serviceID int) error {
+	_, err := stmtInsertUserExtraService.Exec(userID, serviceID)
+	return err
+}
+
+// DeleteUserExtraService removes an extra service from a user.
+func DeleteUserExtraService(userID, serviceID int) error {
+	_, err := stmtDeleteUserExtraService.Exec(userID, serviceID)
+	return err
 }

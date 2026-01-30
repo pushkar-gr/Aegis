@@ -100,6 +100,30 @@ func setupTestServer(t *testing.T) func() {
 		t.Fatalf("Failed to create user_active_services table: %v", err)
 	}
 
+	createRoleServicesTable := `
+		CREATE TABLE IF NOT EXISTS role_services (
+			"role_id" INTEGER NOT NULL,
+			"service_id" INTEGER NOT NULL,
+			PRIMARY KEY(role_id, service_id),
+			FOREIGN KEY(role_id) REFERENCES roles(id),
+			FOREIGN KEY(service_id) REFERENCES services(id)
+		);`
+	if _, err := database.DB.Exec(createRoleServicesTable); err != nil {
+		t.Fatalf("Failed to create role_services table: %v", err)
+	}
+
+	createUserExtraServicesTable := `
+		CREATE TABLE IF NOT EXISTS user_extra_services (
+			"user_id" INTEGER NOT NULL,
+			"service_id" INTEGER NOT NULL,
+			PRIMARY KEY(user_id, service_id),
+			FOREIGN KEY(user_id) REFERENCES users(id),
+			FOREIGN KEY(service_id) REFERENCES services(id)
+		);`
+	if _, err := database.DB.Exec(createUserExtraServicesTable); err != nil {
+		t.Fatalf("Failed to create user_extra_services table: %v", err)
+	}
+
 	// Initialize prepared statements for testing
 	// We need to call the database initialization to prepare the statements
 	if err := database.InitPreparedStatements(); err != nil {

@@ -133,9 +133,10 @@ impl<'a> Config<'a> {
                 "--cleanup-interval" => {
                     if i + 1 < args.len() {
                         let interval_str = &args[i + 1];
-                        config.cleanup_interval_sec = interval_str
-                            .parse::<u64>()
-                            .with_context(|| format!("Invalid cleanup-interval: {}", interval_str))?;
+                        config.cleanup_interval_sec =
+                            interval_str.parse::<u64>().with_context(|| {
+                                format!("Invalid cleanup-interval: {}", interval_str)
+                            })?;
                         i += 1;
                     }
                 }
@@ -187,7 +188,9 @@ impl<'a> Config<'a> {
         println!("  -i, --iface <NAME>          Network interface (default: eth0)");
         println!("  -c, --ip <IP>               Controller IP (default: 172.21.0.5)");
         println!("  -p, --port <PORT>           Controller port (default: 443)");
-        println!("  -n, --update-time <NS>      Session update timeout in ns (default: 1000000000)");
+        println!(
+            "  -n, --update-time <NS>      Session update timeout in ns (default: 1000000000)"
+        );
         println!("  -r, --rule-timeout <NS>     Rule timeout in ns (default: 60000000000)");
         println!("  -g, --grpc-port <PORT>      gRPC server port (default: 50001)");
         println!("  --cleanup-interval <SEC>    Cleanup interval in seconds (default: 30)");

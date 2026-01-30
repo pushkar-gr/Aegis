@@ -421,8 +421,7 @@ func addUserService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Insert into user_extra_services
-	_, err = database.DB.Exec("INSERT OR IGNORE INTO user_extra_services (user_id, service_id) VALUES (?, ?)",
-		userID, req.ServiceID)
+	err = database.InsertUserExtraService(userID, req.ServiceID)
 	if err != nil {
 		log.Printf("[users] add service failed for user %d and service %d: database error - %v", userID, req.ServiceID, err)
 		http.Error(w, "Failed to assign service to user (check if IDs exist)", http.StatusBadRequest)
@@ -482,18 +481,14 @@ func removeUserService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete from user_extra_services only
-	res, err := database.DB.Exec("DELETE FROM user_extra_services WHERE user_id = ? AND service_id = ?", userID, svcID)
+	err = database.DeleteUserExtraService(userID, svcID)
 	if err != nil {
 		log.Printf("[users] remove service failed for user %d and service %d: database error - %v", userID, svcID, err)
 		http.Error(w, "Failed to remove service from user", http.StatusInternalServerError)
 		return
 	}
 
-	if rows, _ := res.RowsAffected(); rows == 0 {
-		log.Printf("[users] remove service: no assignment found for user %d and service %d", userID, svcID)
-	} else {
-		log.Printf("[users] removed service %d from user %d successfully", svcID, userID)
-	}
+	log.Printf("[users] removed service %d from user %d successfully", svcID, userID)
 
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("Service removed from user successfully")); err != nil {

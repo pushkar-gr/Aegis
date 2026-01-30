@@ -165,8 +165,7 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = database.DB.Exec("INSERT OR REPLACE INTO user_active_services (user_id, service_id, updated_at, time_left) VALUES (?, ?, ?, ?)",
-		userID, req.ServiceID, time.Now(), 60)
+	err = database.InsertActiveService(userID, req.ServiceID, 60)
 	if err != nil {
 		log.Printf("[dashboard] select service failed: database write error - %v", err)
 		http.Error(w, "Failed to update active status", http.StatusInternalServerError)
@@ -213,7 +212,7 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[dashboard] SendSessionData returned false for service ID %d deactivation", svcID)
 	}
 
-	_, err = database.DB.Exec("DELETE FROM user_active_services WHERE user_id = ? AND service_id = ?", userID, svcID)
+	err = database.DeleteActiveService(userID, svcID)
 	if err != nil {
 		log.Printf("[dashboard] deselect service failed: database error - %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -239,8 +238,7 @@ func resolveCurrentUser(r *http.Request) (int, int, error) {
 // parseServiceIPPort retrieves and parses service IP and port from database.
 // Returns destination IP, port.
 func parseServiceIPPort(serviceID int) (string, uint32, error) {
-	var ipPort string
-	err := database.DB.QueryRow("SELECT ip_port FROM services WHERE id = ?", serviceID).Scan(&ipPort)
+	ipPort, err := database.GetServiceIPPort(serviceID)
 	if err != nil {
 		return "", 0, err
 	}
