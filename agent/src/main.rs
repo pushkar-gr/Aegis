@@ -81,8 +81,15 @@ async fn main() -> Result<()> {
             debug!("Running periodic eBPF rule cleanup...");
             match bpf_cleanup.lock() {
                 Ok(bpf) => {
-                    if let Err(e) = bpf.cleanup_ebpf_rules(rule_timeout_ns) {
-                        error!("Failed to cleanup stale rules: {}", e);
+                    match bpf.cleanup_ebpf_rules(rule_timeout_ns) {
+                        Ok(count) => {
+                            if count > 0 {
+                                debug!("Cleaned up {} stale rules", count);
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to cleanup stale rules: {}", e);
+                        }
                     }
                     match bpf.list_rules(rule_timeout_ns) {
                         Ok(rules) => {

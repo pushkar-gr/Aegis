@@ -68,7 +68,7 @@ impl SessionManagerService {
                     Ok(())
                 } else {
                     warn!(
-                        "ected unauthorized IP: {} (expected {})",
+                        "Rejected unauthorized IP: {} (expected {})",
                         ip, self.controller_ip
                     );
                     Err(Status::permission_denied(
@@ -91,6 +91,13 @@ impl SessionManager for SessionManagerService {
         self.validate_controller_ip(request.remote_addr())?;
 
         let event = request.into_inner();
+
+        // Validate port range to prevent overflow
+        if event.dst_port > u16::MAX as u32 {
+            warn!("Invalid destination port: {}", event.dst_port);
+            return Err(Status::invalid_argument("Destination port out of range"));
+        }
+
         let dst_port = event.dst_port as u16;
 
         debug!(
@@ -103,7 +110,7 @@ impl SessionManager for SessionManagerService {
         let success = match add_rule(event.activate, event.dst_ip, event.src_ip, dst_port) {
             Ok(_) => {
                 debug!(
-                    "Session Modified (is_active: {}): {} → {}:{}",
+                    "Session modified (is_active: {}): {} → {}:{}",
                     event.activate, event.src_ip, event.dst_ip, dst_port
                 );
                 true
