@@ -115,8 +115,7 @@ impl<'a> Bpf<'a> {
             .session
             .keys()
             .filter(|key_bytes| {
-                if let Ok(Some(val_bytes)) =
-                    self.skel.maps.session.lookup(key_bytes, MapFlags::ANY)
+                if let Ok(Some(val_bytes)) = self.skel.maps.session.lookup(key_bytes, MapFlags::ANY)
                     && val_bytes.len() == std::mem::size_of::<session_val>()
                 {
                     let val: &session_val = bytemuck::from_bytes(&val_bytes);
