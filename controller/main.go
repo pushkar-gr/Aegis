@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 )
 
 // main initializes the database, starts the HTTP server in a separate goroutine,
@@ -30,14 +31,17 @@ func main() {
 	}
 
 	go func() {
-		if err := proto.MonitorStream(func(list *proto.SessionList) {
-			log.Printf("Received update with %d sessions", len(list.Sessions))
-			for _, s := range list.Sessions {
-				log.Printf("Session: %v -> %v left: %ds",
-					utils.Uint32ToIp(s.SrcIp), s.DstPort, s.TimeLeft)
+		for {
+			if err := proto.MonitorStream(func(list *proto.SessionList) {
+				log.Printf("Received update with %d sessions", len(list.Sessions))
+				for _, s := range list.Sessions {
+					log.Printf("Session: %v -> %v left: %ds",
+						utils.Uint32ToIp(s.SrcIp), s.DstPort, s.TimeLeft)
+				}
+			}); err != nil {
+				log.Printf("MonitorStream stopped with error: %v. Retrying in 5 sec", err)
+				time.Sleep(5 * time.Second)
 			}
-		}); err != nil {
-			log.Printf("MonitorStream stopped with error: %v", err)
 		}
 	}()
 

@@ -18,11 +18,12 @@ mod cap;
 mod config;
 mod grpc_server;
 
+use crate::grpc_server::session::{Session, SessionList};
 use crate::{bpf::Bpf, config::Config, grpc_server::start_grpc_server};
 use anyhow::{Context, Result};
 use nix::net::if_::if_nametoindex;
 use std::{env, net::SocketAddr, sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, broadcast};
 use tracing::{debug, error, info, warn};
 
 /// Main entry point - initializes the agent and starts serving requests.
@@ -67,7 +68,10 @@ async fn main() -> Result<()> {
         config.controller_ip, config.controller_port
     );
 
+    let (monitor_tx, _) = broadcast::channel(16);
+    let monitor_tx_loop = monitor_tx.clone();
     let bpf_cleanup = bpf.clone();
+    const RULE_TIMEOUT_NS: u64 = 60_000_000_000;
 
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(5));
@@ -76,8 +80,31 @@ async fn main() -> Result<()> {
             debug!("Running periodic eBPF rule cleanup...");
             match bpf_cleanup.lock() {
                 Ok(bpf) => {
-                    if let Err(e) = bpf.cleanup_ebpf_rules(60000000000) {
+                    if let Err(e) = bpf.cleanup_ebpf_rules(RULE_TIMEOUT_NS) {
                         error!("Failed to cleanup stale rules: {}", e);
+                    }
+                    match bpf.list_rules(RULE_TIMEOUT_NS) {
+                        Ok(rules) => {
+                            let proto_sessions: Vec<Session> = rules
+                                .into_iter()
+                                .map(|(src, dst, port, time)| Session {
+                                    src_ip: src,
+                                    dst_ip: dst,
+                                    dst_port: port as u32,
+                                    time_left: time,
+                                })
+                                .collect();
+
+                            let session_list = SessionList {
+                                sessions: proto_sessions,
+                            };
+
+                            let _ = monitor_tx_loop.send(Ok(session_list));
+                        }
+                        Err(e) => {
+                            error!("Failed to list active rules: {}", e);
+                            let _ = monitor_tx_loop.send(Err(tonic::Status::internal("BPF error")));
+                        }
                     }
                 }
                 Err(e) => {
@@ -110,6 +137,7 @@ async fn main() -> Result<()> {
         server_addr,
         config.controller_ip,
         modify_rule_handler,
+        monitor_tx,
         &config.cert_file,
         &config.key_file,
         &config.ca_file,

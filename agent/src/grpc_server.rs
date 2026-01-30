@@ -19,7 +19,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, broadcast};
 use tonic::{
     Request, Response, Status,
     transport::{Certificate, Identity, Server, ServerTlsConfig},
@@ -33,13 +33,19 @@ type ModifyRulesFn = Arc<Mutex<dyn Fn(bool, u32, u32, u16) -> Result<()> + Send 
 pub struct SessionManagerService {
     controller_ip: Ipv4Addr,
     modify_rules: ModifyRulesFn,
+    monitor_tx: broadcast::Sender<Result<SessionList, Status>>,
 }
 
 impl SessionManagerService {
-    pub fn new(controller_ip: Ipv4Addr, modify_rules: ModifyRulesFn) -> Self {
+    pub fn new(
+        controller_ip: Ipv4Addr,
+        modify_rules: ModifyRulesFn,
+        monitor_tx: broadcast::Sender<Result<SessionList, Status>>,
+    ) -> Self {
         Self {
             controller_ip,
             modify_rules,
+            monitor_tx,
         }
     }
 
@@ -124,9 +130,26 @@ impl SessionManager for SessionManagerService {
 
         debug!("Starting session monitoring stream");
 
-        let (_tx, rx) = tokio::sync::mpsc::channel(4);
-
-        // TODO: Stream active sessions from BPF map
+        let mut broadcast_rx = self.monitor_tx.subscribe();
+        let (tx, rx) = tokio::sync::mpsc::channel(4);
+        tokio::spawn(async move {
+            loop {
+                match broadcast_rx.recv().await {
+                    Ok(msg) => {
+                        if tx.send(msg).await.is_err() {
+                            break;
+                        }
+                        println!("HERE SENT");
+                    }
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        warn!("Monitor stream lagged, skipped {} messages", skipped);
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        break;
+                    }
+                }
+            }
+        });
 
         Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
             rx,
@@ -139,11 +162,12 @@ pub async fn start_grpc_server(
     addr: SocketAddr,
     controller_ip: Ipv4Addr,
     modify_rules: ModifyRulesFn,
+    monitor_tx: broadcast::Sender<Result<SessionList, Status>>,
     cert_path: &str,
     key_path: &str,
     ca_path: &str,
 ) -> Result<()> {
-    let service = SessionManagerService::new(controller_ip, modify_rules);
+    let service = SessionManagerService::new(controller_ip, modify_rules, monitor_tx);
 
     debug!("Loading TLS certificates...");
     let cert = fs::read_to_string(cert_path).context("Failed to read certificate")?;
@@ -179,7 +203,8 @@ mod tests {
     fn test_validate_controller_ip_success() {
         let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
         let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, modify_rules);
+        let (tx, _) = broadcast::channel(4);
+        let service = SessionManagerService::new(controller_ip, modify_rules, tx);
 
         let remote_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 1234);
         let result = service.validate_controller_ip(Some(remote_addr));
@@ -191,7 +216,8 @@ mod tests {
     fn test_validate_controller_ip_unauthorized() {
         let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
         let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, modify_rules);
+        let (tx, _) = broadcast::channel(4);
+        let service = SessionManagerService::new(controller_ip, modify_rules, tx);
 
         let remote_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)), 1234);
         let result = service.validate_controller_ip(Some(remote_addr));
@@ -204,7 +230,8 @@ mod tests {
     fn test_validate_controller_ip_no_address() {
         let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
         let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, modify_rules);
+        let (tx, _) = broadcast::channel(4);
+        let service = SessionManagerService::new(controller_ip, modify_rules, tx);
 
         let result = service.validate_controller_ip(None);
 
@@ -216,7 +243,8 @@ mod tests {
     fn test_validate_controller_ip_ipv6_rejected() {
         let controller_ip = Ipv4Addr::new(10, 0, 0, 1);
         let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, modify_rules);
+        let (tx, _) = broadcast::channel(4);
+        let service = SessionManagerService::new(controller_ip, modify_rules, tx);
 
         let remote_addr = SocketAddr::new(IpAddr::V6("::1".parse().unwrap()), 1234);
         let result = service.validate_controller_ip(Some(remote_addr));
@@ -229,7 +257,8 @@ mod tests {
     fn test_session_manager_service_creation() {
         let controller_ip = Ipv4Addr::new(192, 168, 1, 1);
         let modify_rules: ModifyRulesFn = Arc::new(Mutex::new(|_, _, _, _| Ok(())));
-        let service = SessionManagerService::new(controller_ip, modify_rules);
+        let (tx, _) = broadcast::channel(4);
+        let service = SessionManagerService::new(controller_ip, modify_rules, tx);
 
         assert_eq!(service.controller_ip, controller_ip);
     }

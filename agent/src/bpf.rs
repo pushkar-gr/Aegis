@@ -106,7 +106,7 @@ impl<'a> Bpf<'a> {
     }
 
     /// Removes all ideal firewall rules from the map.
-    pub fn cleanup_ebpf_rules(&self, timeout_ns: u64) -> Result<Vec<Vec<u8>>> {
+    pub fn cleanup_ebpf_rules(&self, timeout_ns: u64) -> Result<()> {
         let now = Self::get_ktime_ns();
 
         let stale_keys: Vec<Vec<u8>> = self
@@ -117,17 +117,9 @@ impl<'a> Bpf<'a> {
             .filter(|key_bytes| {
                 if let Ok(Some(val_bytes)) =
                     self.skel.maps.session.lookup(&key_bytes, MapFlags::ANY)
+                    && val_bytes.len() == std::mem::size_of::<session_val>()
                 {
-                    if val_bytes.len() != std::mem::size_of::<session_val>() {
-                        return false;
-                    }
                     let val: &session_val = bytemuck::from_bytes(&val_bytes);
-                    println!(
-                        "lastseen: {:?}, time: {:?}, removing: {:?}",
-                        val.last_seen_ns,
-                        now.saturating_sub(val.last_seen_ns),
-                        now.saturating_sub(val.last_seen_ns) > timeout_ns
-                    );
                     now.saturating_sub(val.last_seen_ns) > timeout_ns
                 } else {
                     false
@@ -149,7 +141,38 @@ impl<'a> Bpf<'a> {
 
             debug!("Reaped {} stale session rules", count);
         }
-        Ok(stale_keys)
+
+        Ok(())
+    }
+
+    /// Lists all active sessions with their remaining time.
+    pub fn list_rules(&self, timeout_ns: u64) -> Result<Vec<(u32, u32, u16, i32)>> {
+        let now = Self::get_ktime_ns();
+        let sessions = self
+            .skel
+            .maps
+            .session
+            .keys()
+            .filter_map(|key_bytes| {
+                if let Ok(Some(val_bytes)) =
+                    self.skel.maps.session.lookup(&key_bytes, MapFlags::ANY)
+                    && val_bytes.len() == std::mem::size_of::<session_val>()
+                    && key_bytes.len() == std::mem::size_of::<session_key>()
+                {
+                    let key: &session_key = bytemuck::from_bytes(&key_bytes);
+                    let val: &session_val = bytemuck::from_bytes(&val_bytes);
+                    let elapsed = now.saturating_sub(val.last_seen_ns);
+                    let time_left_ns = timeout_ns.saturating_sub(elapsed);
+                    let time_left_sec = (time_left_ns / 1_000_000_000) as i32;
+
+                    Some((key.src_ip, key.dest_ip, key.dest_port, time_left_sec))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        println!("{:?}", sessions);
+        Ok(sessions)
     }
 
     fn get_ktime_ns() -> u64 {
