@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -38,7 +39,17 @@ func Init(agentAddr, certFile, keyFile, caFile, serverName string) error {
 		ServerName:   serverName,
 	})
 
-	conn, err := grpc.NewClient(agentAddr, grpc.WithTransportCredentials(creds))
+	cp := grpc.ConnectParams{
+		Backoff: backoff.Config{
+			BaseDelay:  1.0 * time.Second,
+			Multiplier: 1.6,
+			Jitter:     0.2,
+			MaxDelay:   30 * time.Second,
+		},
+		MinConnectTimeout: 20 * time.Second,
+	}
+
+	conn, err := grpc.NewClient(agentAddr, grpc.WithTransportCredentials(creds), grpc.WithConnectParams(cp))
 	if err != nil {
 		return err
 	}
