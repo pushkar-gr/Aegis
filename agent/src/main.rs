@@ -21,9 +21,9 @@ mod grpc_server;
 use crate::{bpf::Bpf, config::Config, grpc_server::start_grpc_server};
 use anyhow::{Context, Result};
 use nix::net::if_::if_nametoindex;
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Main entry point - initializes the agent and starts serving requests.
 #[tokio::main]
@@ -51,13 +51,13 @@ async fn main() -> Result<()> {
         as i32;
 
     info!(
-        "✓ Interface: {} (index: {})",
+        "Interface: {} (index: {})",
         config.iface_name, interface_index
     );
 
     // Load and attach BPF program
     debug!("Loading XDP program...");
-    let bpf = Bpf::new(interface_index, &config)?;
+    let bpf = Arc::new(std::sync::Mutex::new(Bpf::new(interface_index, &config)?));
     info!("XDP program attached");
 
     // Show active policy
@@ -67,12 +67,37 @@ async fn main() -> Result<()> {
         config.controller_ip, config.controller_port
     );
 
+    let bpf_cleanup = bpf.clone();
+
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        loop {
+            interval.tick().await;
+            debug!("Running periodic eBPF rule cleanup...");
+            match bpf_cleanup.lock() {
+                Ok(bpf) => {
+                    if let Err(e) = bpf.cleanup_ebpf_rules(60000000000) {
+                        error!("Failed to cleanup stale rules: {}", e);
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to acquire BPF lock for cleanup: {}", e);
+                }
+            }
+        }
+    });
+
     // Start gRPC server
     let server_addr = SocketAddr::from(([0, 0, 0, 0], 50001));
     info!("Starting gRPC server on {}", server_addr);
 
+    let bpf_grpc = bpf.clone();
     let modify_rule_handler = Arc::new(Mutex::new(
         move |is_add: bool, dest_ip: u32, src_ip: u32, dest_port: u16| -> Result<()> {
+            let bpf = bpf_grpc
+                .lock()
+                .map_err(|_| anyhow::anyhow!("BPF mutex poisoned"))?;
+
             if is_add {
                 bpf.add_rule(dest_ip.to_be(), src_ip.to_be(), dest_port)
             } else {
