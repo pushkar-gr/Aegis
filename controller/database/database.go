@@ -135,7 +135,7 @@ func SyncActiveSessions(sessions []ActiveSessionSync) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Load the provided session list into a temporary table
 	_, err = tx.Exec("CREATE TEMP TABLE sync_sessions (user_id INTEGER, service_id INTEGER, time_left INTEGER)")
@@ -147,7 +147,7 @@ func SyncActiveSessions(sessions []ActiveSessionSync) error {
 	if err != nil {
 		return err
 	}
-	defer stmt.Close()
+	defer func() { _ = stmt.Close() }()
 
 	for _, s := range sessions {
 		if _, err := stmt.Exec(s.UserID, s.ServiceID, s.TimeLeft); err != nil {
@@ -198,7 +198,7 @@ func GetServiceMap() (map[string]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	svcMap := make(map[string]int)
 	for rows.Next() {
@@ -217,7 +217,7 @@ func GetActiveServiceUsers() (map[int][]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	activeMap := make(map[int][]int)
 	for rows.Next() {
