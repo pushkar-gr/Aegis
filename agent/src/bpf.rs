@@ -130,7 +130,9 @@ impl<'a> Bpf<'a> {
                     }
 
                     // Check alignment before converting
-                    if val_bytes.as_ptr() as usize % std::mem::align_of::<session_val>() != 0 {
+                    if !(val_bytes.as_ptr() as usize)
+                        .is_multiple_of(std::mem::align_of::<session_val>())
+                    {
                         warn!("Misaligned session value, skipping");
                         return false;
                     }
@@ -192,7 +194,9 @@ impl<'a> Bpf<'a> {
                 }
 
                 // Validate alignment for session_key
-                if key_bytes.as_ptr() as usize % std::mem::align_of::<session_key>() != 0 {
+                if !(key_bytes.as_ptr() as usize)
+                    .is_multiple_of(std::mem::align_of::<session_key>())
+                {
                     warn!("Misaligned session key, skipping");
                     return None;
                 }
@@ -211,7 +215,9 @@ impl<'a> Bpf<'a> {
                     }
 
                     // Validate alignment for session_val
-                    if val_bytes.as_ptr() as usize % std::mem::align_of::<session_val>() != 0 {
+                    if !(val_bytes.as_ptr() as usize)
+                        .is_multiple_of(std::mem::align_of::<session_val>())
+                    {
                         warn!("Misaligned session value, skipping");
                         return None;
                     }
@@ -239,7 +245,7 @@ impl<'a> Bpf<'a> {
                 // Safely compute nanoseconds with overflow protection
                 now.tv_sec()
                     .saturating_mul(1_000_000_000)
-                    .saturating_add(now.tv_nsec() as i64) as u64
+                    .saturating_add(now.tv_nsec()) as u64
             }
             Err(e) => {
                 error!("Failed to get monotonic time: {}, using fallback", e);
