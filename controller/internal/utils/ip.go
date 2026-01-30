@@ -20,7 +20,7 @@ func IpToUint32(ipStr string) uint32 {
 // Uint32ToIp converts uint32 to IP string representation.
 func Uint32ToIp(nn uint32) string {
 	ip := make(net.IP, 4)
-	binary.BigEndian.PutUint32(ip, nn)
+	binary.LittleEndian.PutUint32(ip, nn)
 	return ip.String()
 }
 

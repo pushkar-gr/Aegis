@@ -22,6 +22,13 @@ var (
 	stmtUpdatePassword     *sql.Stmt
 )
 
+// ActiveSessionSync represents the data required to synchronize a session
+type ActiveSessionSync struct {
+	UserID    int
+	ServiceID int
+	TimeLeft  int
+}
+
 // InitDB sets up the database connection and prepares frequently used statements.
 // This includes enabling WAL mode for better performance and preparing queries for login, user lookup, and password updates.
 func InitDB() {
@@ -120,4 +127,104 @@ func GetPasswordHash(username string) (string, error) {
 	var hash string
 	err := DB.QueryRow("SELECT password FROM users WHERE username = ?", username).Scan(&hash)
 	return hash, err
+}
+
+// SyncActiveSessions performs a bulk update of the user_active_services table.
+func SyncActiveSessions(sessions []ActiveSessionSync) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Load the provided session list into a temporary table
+	_, err = tx.Exec("CREATE TEMP TABLE sync_sessions (user_id INTEGER, service_id INTEGER, time_left INTEGER)")
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare("INSERT INTO sync_sessions (user_id, service_id, time_left) VALUES (?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = stmt.Close() }()
+
+	for _, s := range sessions {
+		if _, err := stmt.Exec(s.UserID, s.ServiceID, s.TimeLeft); err != nil {
+			return err
+		}
+	}
+
+	// Remove records from the main table that are not in the temp table (stale sessions)
+	deleteQuery := `
+		DELETE FROM user_active_services
+		WHERE NOT EXISTS (
+			SELECT 1 FROM sync_sessions
+			WHERE sync_sessions.user_id = user_active_services.user_id 
+			AND sync_sessions.service_id = user_active_services.service_id
+		)
+	`
+	if _, err := tx.Exec(deleteQuery); err != nil {
+		return err
+	}
+
+	// Update existing records in the main table using data from the temp table
+	updateQuery := `
+		UPDATE user_active_services
+		SET 
+			time_left = (SELECT time_left FROM sync_sessions WHERE sync_sessions.user_id = user_active_services.user_id AND sync_sessions.service_id = user_active_services.service_id),
+			updated_at = CURRENT_TIMESTAMP
+		WHERE EXISTS (
+			SELECT 1 FROM sync_sessions 
+			WHERE sync_sessions.user_id = user_active_services.user_id 
+			AND sync_sessions.service_id = user_active_services.service_id
+		)
+	`
+	if _, err := tx.Exec(updateQuery); err != nil {
+		return err
+	}
+
+	// Cleanup
+	if _, err := tx.Exec("DROP TABLE sync_sessions"); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// GetServiceMap returns a map of "ip:port" -> service_id for all services.
+func GetServiceMap() (map[string]int, error) {
+	rows, err := DB.Query("SELECT id, ip_port FROM services")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	svcMap := make(map[string]int)
+	for rows.Next() {
+		var id int
+		var ipPort string
+		if err := rows.Scan(&id, &ipPort); err == nil {
+			svcMap[ipPort] = id
+		}
+	}
+	return svcMap, nil
+}
+
+// GetActiveServiceUsers returns a map of service_id -> []user_id for currently active sessions in DB.
+func GetActiveServiceUsers() (map[int][]int, error) {
+	rows, err := DB.Query("SELECT user_id, service_id FROM user_active_services")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	activeMap := make(map[int][]int)
+	for rows.Next() {
+		var uID, sID int
+		if err := rows.Scan(&uID, &sID); err == nil {
+			activeMap[sID] = append(activeMap[sID], uID)
+		}
+	}
+	return activeMap, nil
 }

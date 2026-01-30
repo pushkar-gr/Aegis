@@ -13,7 +13,7 @@ use libbpf_rs::{
     Link, MapCore, MapFlags,
     skel::{OpenSkel, SkelBuilder},
 };
-use std::time::{SystemTime, UNIX_EPOCH};
+use nix::time::{ClockId, clock_gettime};
 use tracing::{debug, error};
 
 /// BPF program manager - handles loading and interacting with the XDP firewall..
@@ -71,10 +71,7 @@ impl<'a> Bpf<'a> {
 
     /// Adds a firewall rule to allow traffic for a specific session.
     pub fn add_rule(&self, dest_ip: u32, src_ip: u32, dest_port: u16) -> Result<()> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_nanos() as u64;
+        let now = Self::get_ktime_ns();
 
         let key = session_key {
             dest_ip,
@@ -92,5 +89,92 @@ impl<'a> Bpf<'a> {
             MapFlags::ANY,
         )?;
         Ok(())
+    }
+
+    /// Removes a firewall rule from the map.
+    pub fn remove_rule(&self, dest_ip: u32, src_ip: u32, dest_port: u16) -> Result<()> {
+        let key = session_key {
+            dest_ip,
+            src_ip,
+            dest_port,
+        };
+        self.skel
+            .maps
+            .session
+            .delete(bytemuck::bytes_of(&key))
+            .map_err(|e| anyhow!(e))
+    }
+
+    /// Removes all ideal firewall rules from the map.
+    pub fn cleanup_ebpf_rules(&self, timeout_ns: u64) -> Result<()> {
+        let now = Self::get_ktime_ns();
+
+        let stale_keys: Vec<Vec<u8>> = self
+            .skel
+            .maps
+            .session
+            .keys()
+            .filter(|key_bytes| {
+                if let Ok(Some(val_bytes)) = self.skel.maps.session.lookup(key_bytes, MapFlags::ANY)
+                    && val_bytes.len() == std::mem::size_of::<session_val>()
+                {
+                    let val: &session_val = bytemuck::from_bytes(&val_bytes);
+                    now.saturating_sub(val.last_seen_ns) > timeout_ns
+                } else {
+                    false
+                }
+            })
+            .collect();
+
+        let count = stale_keys.len();
+
+        if count > 0 {
+            let flat_keys: Vec<u8> = stale_keys.concat();
+
+            self.skel.maps.session.delete_batch(
+                &flat_keys,
+                count as u32,
+                MapFlags::ANY,
+                MapFlags::ANY,
+            )?;
+
+            debug!("Reaped {} stale session rules", count);
+        }
+
+        Ok(())
+    }
+
+    /// Lists all active sessions with their remaining time.
+    pub fn list_rules(&self, timeout_ns: u64) -> Result<Vec<(u32, u32, u16, i32)>> {
+        let now = Self::get_ktime_ns();
+        let sessions = self
+            .skel
+            .maps
+            .session
+            .keys()
+            .filter_map(|key_bytes| {
+                if let Ok(Some(val_bytes)) =
+                    self.skel.maps.session.lookup(&key_bytes, MapFlags::ANY)
+                    && val_bytes.len() == std::mem::size_of::<session_val>()
+                    && key_bytes.len() == std::mem::size_of::<session_key>()
+                {
+                    let key: &session_key = bytemuck::from_bytes(&key_bytes);
+                    let val: &session_val = bytemuck::from_bytes(&val_bytes);
+                    let elapsed = now.saturating_sub(val.last_seen_ns);
+                    let time_left_ns = timeout_ns.saturating_sub(elapsed);
+                    let time_left_sec = (time_left_ns / 1_000_000_000) as i32;
+
+                    Some((key.src_ip, key.dest_ip, key.dest_port, time_left_sec))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Ok(sessions)
+    }
+
+    fn get_ktime_ns() -> u64 {
+        let now = clock_gettime(ClockId::CLOCK_MONOTONIC).expect("Failed to get time");
+        (now.tv_sec() as u64) * 1_000_000_000 + (now.tv_nsec() as u64)
     }
 }
