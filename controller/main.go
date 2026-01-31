@@ -13,6 +13,13 @@ import (
 	"time"
 )
 
+// Backoff configuration
+const (
+	baseDelay      = 1 * time.Second
+	maxDelay       = 60 * time.Second
+	resetThreshold = 10 * time.Second
+)
+
 // main initializes the database, starts the HTTP server in a separate goroutine,
 // and handles graceful shutdown upon receiving an interrupt signal.
 func main() {
@@ -36,8 +43,11 @@ func main() {
 	}
 
 	go func() {
+		currentDelay := baseDelay
 		for {
-			if err := proto.MonitorStream(func(list *proto.SessionList) {
+			connectStartTime := time.Now()
+
+			err := proto.MonitorStream(func(list *proto.SessionList) {
 				log.Printf("[INFO] Received update with %d sessions", len(list.Sessions))
 
 				// Fetch current mappings from DB to resolve IDs
@@ -96,10 +106,27 @@ func main() {
 					log.Printf("[INFO] Synced %d active sessions to database", len(sessionsToSync))
 				}
 
-			}); err != nil {
-				log.Printf("[ERROR] MonitorStream stopped with error: %v\nRetrying in %v", err, cfg.MonitorRetryDelay)
-				time.Sleep(cfg.MonitorRetryDelay)
+			})
+
+			// Stream exited
+			connectionDuration := time.Since(connectStartTime)
+
+			if err != nil {
+				log.Printf("[ERROR] MonitorStream disconnected: %v", err)
+			} else {
+				log.Println("[WARN] MonitorStream closed cleanly (EOF), reconnecting...")
 			}
+			if connectionDuration > resetThreshold {
+				currentDelay = baseDelay
+				log.Println("[INFO] Connection was stable. Resetting backoff.")
+			} else {
+				currentDelay *= 2
+				if currentDelay > maxDelay {
+					currentDelay = maxDelay
+				}
+			}
+			log.Printf("[INFO] Reconnecting in %v...", currentDelay)
+			time.Sleep(currentDelay)
 		}
 	}()
 
