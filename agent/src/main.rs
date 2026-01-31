@@ -13,6 +13,7 @@
 //! sudo ./aegis-agent -i eth0 -c 192.168.1.5 -p 8080
 //! ```
 
+mod benchmark;
 mod bpf;
 mod cap;
 mod config;
@@ -96,9 +97,9 @@ async fn main() -> Result<()> {
                             let proto_sessions: Vec<Session> = rules
                                 .into_iter()
                                 .map(|(src, dst, port, time)| Session {
-                                    src_ip: src,
-                                    dst_ip: dst,
-                                    dst_port: port as u32,
+                                    src_ip: u32::from_be(src),
+                                    dst_ip: u32::from_be(dst),
+                                    dst_port: u16::from_be(port) as u32,
                                     time_left: time,
                                 })
                                 .collect();
@@ -134,9 +135,9 @@ async fn main() -> Result<()> {
                 .map_err(|_| anyhow::anyhow!("BPF mutex poisoned"))?;
 
             if is_add {
-                bpf.add_rule(dest_ip.to_be(), src_ip.to_be(), dest_port)
+                bpf.add_rule(dest_ip.to_be(), src_ip.to_be(), dest_port.to_be())
             } else {
-                bpf.remove_rule(dest_ip.to_be(), src_ip.to_be(), dest_port)
+                bpf.remove_rule(dest_ip.to_be(), src_ip.to_be(), dest_port.to_be())
             }
         },
     ));
