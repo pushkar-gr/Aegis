@@ -14,7 +14,13 @@ use libbpf_rs::{
     skel::{OpenSkel, SkelBuilder},
 };
 use nix::time::{ClockId, clock_gettime};
+use std::{fs, path::Path};
 use tracing::{debug, error, warn};
+
+// Pin paths
+const BPF_FS_PATH: &str = "/sys/fs/bpf/aegis";
+const MAP_PIN_PATH: &str = "/sys/fs/bpf/aegis/session";
+const LINK_PIN_PATH: &str = "/sys/fs/bpf/aegis/xdp_link";
 
 /// BPF program manager - handles loading and interacting with the XDP firewall..
 pub struct Bpf<'a> {
@@ -31,12 +37,17 @@ unsafe impl Pod for session_val {}
 impl<'a> Bpf<'a> {
     /// Creates a new BPF instance and attaches it to the specified interface.
     pub fn new(interface_index: i32, config: &Config) -> Result<Self> {
+        if !Path::new(BPF_FS_PATH).exists() {
+            fs::create_dir_all(BPF_FS_PATH).context("Failed to create BPF FS directory")?;
+        }
+
         let skel_builder = AegisSkelBuilder::default();
 
         // Open the BPF skeleton with static lifetime
         let open_object = Box::new_uninit();
         let open_object_ref = Box::leak(open_object);
         let mut open_skel = skel_builder.open(open_object_ref)?;
+        open_skel.maps.session.set_pin_path(MAP_PIN_PATH)?;
 
         // Configure BPF global variables before loading
         let rodata = open_skel
@@ -58,15 +69,21 @@ impl<'a> Bpf<'a> {
         })?;
         debug!("BPF program loaded into kernel");
 
+        if Path::new(LINK_PIN_PATH).exists() {
+            let _ = fs::remove_file(LINK_PIN_PATH);
+        }
+
         // Attach XDP program to interface
         debug!("Attaching XDP to interface {}", interface_index);
-        let _link = skel
+        let mut link = skel
             .progs
             .xdp_drop_prog
             .attach_xdp(interface_index)
             .context("Failed to attach XDP program")?;
 
-        Ok(Self { skel, _link })
+        link.pin(LINK_PIN_PATH).context("Failed to pin XDP link")?;
+
+        Ok(Self { skel, _link: link })
     }
 
     /// Adds a firewall rule to allow traffic for a specific session.
