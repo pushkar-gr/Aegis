@@ -16,8 +16,8 @@ char __license[] SEC("license") = "GPL";
  *
  * Dynamic configuration of controller ip:port and lazy update timeout
  */
-volatile const __u32 CONTROLLER_IP;   // Big Endian (Network Byte Order)
-volatile const __u16 CONTROLLER_PORT; // Little Endian (Host Byte Order)
+volatile const __be32 CONTROLLER_IP;   // Big Endian (Network Byte Order)
+volatile const __be16 CONTROLLER_PORT; // Little Endian (Network Byte Order)
 volatile const u64
     LAZY_UPDATE_TIMEOUT; // Min time (ns) between timestamp updates
 struct session_key _session_key = {0};
@@ -83,7 +83,7 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
     return XDP_DROP;
   }
 
-  __u16 dst_port = 0;
+  __be16 dst_port = 0;
 
   // Parse transport layer (TCP/UDP)
   if (iph->protocol == IPPROTO_TCP) {
@@ -91,13 +91,13 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
     if ((void *)(tcph + 1) > data_end) {
       return XDP_DROP;
     }
-    dst_port = bpf_ntohs(tcph->dest);
+    dst_port = tcph->dest;
   } else if (iph->protocol == IPPROTO_UDP) {
     struct udphdr *udph = (void *)(iph + 1);
     if ((void *)(udph + 1) > data_end) {
       return XDP_DROP;
     }
-    dst_port = bpf_ntohs(udph->dest);
+    dst_port = udph->dest;
   } else {
     // Drop ICMP and other protocols
     return XDP_DROP;

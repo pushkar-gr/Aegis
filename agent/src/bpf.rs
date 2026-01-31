@@ -56,7 +56,7 @@ impl<'a> Bpf<'a> {
             .as_deref_mut()
             .ok_or_else(|| anyhow!("rodata not memory-mapped"))?;
 
-        rodata.CONTROLLER_PORT = config.controller_port;
+        rodata.CONTROLLER_PORT = config.controller_port.to_be();
         rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
         rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
 
