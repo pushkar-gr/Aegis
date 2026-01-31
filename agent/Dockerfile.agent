@@ -12,7 +12,20 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     bpftool \
     protobuf-compiler \
+    curl \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+RUN UPX_VER=4.2.4 && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then UPX_ARCH="amd64"; \
+    elif [ "$ARCH" = "aarch64" ]; then UPX_ARCH="arm64"; \
+    else echo "Unsupported architecture for UPX download: $ARCH" && exit 1; fi && \
+    curl -L -o upx.tar.xz "https://github.com/upx/upx/releases/download/v${UPX_VER}/upx-${UPX_VER}-${UPX_ARCH}_linux.tar.xz" && \
+    tar -xf upx.tar.xz && \
+    mv upx-${UPX_VER}-${UPX_ARCH}_linux/upx /usr/bin/upx && \
+    chmod +x /usr/bin/upx && \
+    rm -rf upx.tar.xz upx-${UPX_VER}-${UPX_ARCH}_linux
 
 RUN rustup component add rustfmt
 
@@ -30,6 +43,7 @@ RUN bpftool btf dump file /sys/kernel/btf/vmlinux format c > src/bpf/vmlinux.h
 
 # Build the binary
 RUN cargo build --release
+RUN upx --best --lzma target/release/aegis-agent
 
 # Run Stage
 FROM debian:bookworm-slim
@@ -42,4 +56,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/aegis-agent .
+
+RUN size=$(stat -c%s ./aegis-agent) && \
+    echo "Final Binary Size: $((size/1024))KB" && \
+    if [ $size -gt 5242880 ]; then \
+        echo "Error: Binary exceeds 5MB limit!"; exit 1; \
+    fi
+
 CMD ["./aegis-agent", "-i", "eth1"]

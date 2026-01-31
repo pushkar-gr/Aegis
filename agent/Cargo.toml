@@ -21,3 +21,10 @@ prost = "0.14"
 libbpf-cargo = "0.25"
 tonic-build = "0.14"
 tonic-prost-build = "0.14"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
