@@ -13,11 +13,11 @@
 //! sudo ./aegis-agent -i eth0 -c 192.168.1.5 -p 8080
 //! ```
 
+mod benchmark;
 mod bpf;
 mod cap;
 mod config;
 mod grpc_server;
-mod benchmark;
 
 use crate::grpc_server::session::{Session, SessionList};
 use crate::{bpf::Bpf, config::Config, grpc_server::start_grpc_server};
