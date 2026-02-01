@@ -34,6 +34,10 @@ type Config struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
+
+	// Authentication settings
+	JwtKey           string
+	JwtTokenLifetime time.Duration
 }
 
 // Load reads configuration from environment variables and command-line flags.
@@ -42,8 +46,8 @@ func Load() *Config {
 		// Defaults
 		DBDir:             getEnv("DB_DIR", "./data"),
 		ServerPort:        getEnv("SERVER_PORT", ":443"),
-		CertFile:          getEnv("CERT_FILE", "/app/certs/server.crt"),
-		KeyFile:           getEnv("KEY_FILE", "/app/certs/server.key"),
+		CertFile:          getEnv("CERT_FILE", "certs/server.crt"),
+		KeyFile:           getEnv("KEY_FILE", "certs/server.key"),
 		AgentAddress:      getEnv("AGENT_ADDRESS", "172.21.0.10:50001"),
 		AgentCertFile:     getEnv("AGENT_CERT_FILE", "certs/controller.pem"),
 		AgentKeyFile:      getEnv("AGENT_KEY_FILE", "certs/controller.key"),
@@ -54,6 +58,12 @@ func Load() *Config {
 		MaxOpenConns:      getIntEnv("DB_MAX_OPEN_CONNS", 1),
 		MaxIdleConns:      getIntEnv("DB_MAX_IDLE_CONNS", 1),
 		ConnMaxLifetime:   getDurationEnv("DB_CONN_MAX_LIFETIME", time.Hour),
+		JwtKey:            getEnv("JWT_SECRET", "DEFAULT_JWT_KEY"),
+		JwtTokenLifetime:  getDurationEnv("JWT_TOKEN_LIFETIME", 60*time.Second),
+	}
+
+	if config.JwtKey == "DEFAULT_JWT_KEY" {
+		log.Fatal("FATAL: JWT_SECRET environment variable is not found, using `DEFAULT_JWT_KEY`")
 	}
 
 	// Command-line flags override environment variables

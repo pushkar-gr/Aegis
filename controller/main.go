@@ -34,7 +34,7 @@ func main() {
 		}
 	}()
 	// Start the server in a goroutine so the main thread can listen for signals.
-	go server.StartServer(cfg.ServerPort, cfg.CertFile, cfg.KeyFile)
+	go server.StartServer(cfg.ServerPort, cfg.CertFile, cfg.KeyFile, []byte(cfg.JwtKey), cfg.JwtTokenLifetime)
 
 	err := proto.Init(cfg.AgentAddress, cfg.AgentCertFile, cfg.AgentKeyFile, cfg.AgentCAFile, cfg.AgentServerName)
 	if err != nil {

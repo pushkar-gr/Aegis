@@ -3,27 +3,16 @@ package server
 import (
 	"log"
 	"net/http"
-	"os"
-
-	"github.com/joho/godotenv"
+	"time"
 )
 
 var jwtKey []byte
-
-// init loads the JWT secret from environment variables on startup.
-func init() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, relying on system environment variables")
-	}
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		log.Fatal("FATAL: JWT_SECRET environment variable is required")
-	}
-	jwtKey = []byte(secret)
-}
+var jwtTokenLifetime time.Duration
 
 // StartServer configures and starts the TLS-enabled HTTP server.
-func StartServer(port, certFile, keyFile string) {
+func StartServer(port, certFile, keyFile string, jwtKeyByte []byte, jwtTokenLifetimeDuration time.Duration) {
+	jwtKey = jwtKeyByte
+	jwtTokenLifetime = jwtTokenLifetimeDuration
 	mux := http.NewServeMux()
 
 	// --- Static Files ---

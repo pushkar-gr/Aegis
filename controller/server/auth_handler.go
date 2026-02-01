@@ -55,7 +55,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expirationTime := time.Now().Add(5 * time.Minute)
+	expirationTime := time.Now().Add(jwtTokenLifetime * time.Minute)
 	claims := &models.Claims{
 		Username: creds.Username,
 		RegisteredClaims: jwt.RegisteredClaims{
