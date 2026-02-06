@@ -1,78 +1,587 @@
 #[cfg(test)]
 mod benchmarks {
+    use crate::bpf::agent_skel::types::{session_key, session_val};
     use crate::config::Config;
-    use libbpf_rs::ProgramInput;
+    use bytemuck;
     use libbpf_rs::skel::{OpenSkel, SkelBuilder};
+    use libbpf_rs::{MapCore, MapFlags, ProgramInput};
     use std::mem::MaybeUninit;
+    use std::time::Instant;
+
+    /// Helper function to create a TCP packet with specified source and destination
+    fn create_tcp_packet(src_ip: [u8; 4], dst_ip: [u8; 4], dst_port: u16) -> [u8; 64] {
+        let mut packet = [0u8; 64];
+
+        // Ethernet header
+        packet[12] = 0x08; // EtherType IPv4 (high byte)
+        packet[13] = 0x00; // EtherType IPv4 (low byte)
+
+        // IPv4 header
+        packet[14] = 0x45; // Version 4, IHL 5
+        packet[15] = 0x00; // TOS
+        packet[16] = 0x00; // Total length (high)
+        packet[17] = 0x32; // Total length (low)
+        packet[18] = 0x00; // ID (high)
+        packet[19] = 0x00; // ID (low)
+        packet[20] = 0x40; // Flags
+        packet[21] = 0x00; // Fragment offset
+        packet[22] = 0x40; // TTL
+        packet[23] = 0x06; // Protocol (TCP)
+        packet[24] = 0x00; // Checksum (high)
+        packet[25] = 0x00; // Checksum (low)
+
+        // Source IP
+        packet[26..30].copy_from_slice(&src_ip);
+
+        // Destination IP
+        packet[30..34].copy_from_slice(&dst_ip);
+
+        // TCP header
+        packet[34] = 0x1F; // Src port (high) - 8080
+        packet[35] = 0x90; // Src port (low)
+        packet[36] = (dst_port >> 8) as u8; // Dst port (high)
+        packet[37] = (dst_port & 0xFF) as u8; // Dst port (low)
+
+        packet
+    }
+
+    /// Helper function to generate a random-looking IP address (deterministic for reproducibility)
+    fn generate_ip(seed: u32) -> [u8; 4] {
+        // Simple LCG pseudo-random number generator for deterministic IPs
+        let a = 1664525u32;
+        let c = 1013904223u32;
+        let next = a.wrapping_mul(seed).wrapping_add(c);
+
+        [
+            ((next >> 24) & 0xFF) as u8,
+            ((next >> 16) & 0xFF) as u8,
+            ((next >> 8) & 0xFF) as u8,
+            (next & 0xFF) as u8,
+        ]
+    }
+
+    /// Helper to convert u32 IP to bytes
+    fn ip_to_bytes(ip: u32) -> [u8; 4] {
+        [
+            ((ip >> 24) & 0xFF) as u8,
+            ((ip >> 16) & 0xFF) as u8,
+            ((ip >> 8) & 0xFF) as u8,
+            (ip & 0xFF) as u8,
+        ]
+    }
+
+    /// Helper to fill the session map with entries
+    fn fill_session_map(
+        skel: &crate::bpf::agent_skel::AegisSkel,
+        count: usize,
+        base_ip: u32,
+        base_port: u16,
+    ) {
+        for i in 0..count {
+            let src_ip = base_ip.wrapping_add(i as u32);
+            let dest_ip = base_ip.wrapping_add(10000 + i as u32);
+            let dest_port = base_port.wrapping_add((i % 1000) as u16);
+
+            let key = session_key {
+                src_ip: src_ip.to_be(),
+                dest_ip: dest_ip.to_be(),
+                dest_port: dest_port.to_be(),
+            };
+
+            let val = session_val {
+                created_at_ns: 1000000000,
+                last_seen_ns: 1000000000,
+            };
+
+            skel.maps
+                .session
+                .update(
+                    bytemuck::bytes_of(&key),
+                    bytemuck::bytes_of(&val),
+                    MapFlags::ANY,
+                )
+                .expect("Failed to insert session");
+        }
+
+        println!("Pre-filled session map with {} entries", count);
+    }
 
     #[test]
     #[ignore]
-    fn benchmark_xdp_latency() {
-        // Setup a dummy config
+    fn benchmark_attack_scenario_dropped_packets() {
+        println!("\nBENCHMARK: Attack Scenario (Dropped Packets)");
+
         let config = Config {
-            controller_ip: "127.0.0.1".parse().unwrap(),
-            controller_port: 8080,
+            controller_ip: "172.21.0.5".parse().unwrap(),
+            controller_port: 443,
             ..Default::default()
         };
 
-        // Load the BPF program
         let skel_builder = crate::bpf::agent_skel::AegisSkelBuilder::default();
-
         let mut open_object = MaybeUninit::uninit();
-
         let mut open_skel = skel_builder
             .open(&mut open_object)
             .expect("Failed to open skel");
 
         let rodata = open_skel.maps.rodata_data.as_deref_mut().unwrap();
-        rodata.CONTROLLER_PORT = config.controller_port;
+        rodata.CONTROLLER_PORT = config.controller_port.to_be();
         rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
         rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
 
         let skel = open_skel.load().expect("Failed to load");
 
-        // Create a raw IPv4/TCP packet (approx 64 bytes)
-        let packet: [u8; 64] = [
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Dst MAC
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Src MAC
-            0x08, 0x00, // EtherType (IPv4)
-            0x45, 0x00, 0x00, 0x32, // Version, IHL, TOS, Len
-            0x00, 0x00, 0x40, 0x00, // ID, Flags
-            0x40, 0x06, 0x00, 0x00, // TTL, Proto (TCP), Checksum
-            0x7F, 0x00, 0x00, 0x01, // Src IP (127.0.0.1)
-            0x7F, 0x00, 0x00, 0x01, // Dst IP (127.0.0.1)
-            0x1F, 0x90, 0x1F, 0x90, // Src Port, Dst Port (8080)
-            0x00, 0x00, 0x00, 0x00, // Seq
-            // Padding
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ];
+        // Fill the map with legitimate sessions
+        let map_size = 5000;
+        fill_session_map(&skel, map_size, 0x0A000001, 8000); // Base IP: 10.0.0.1
 
-        // Run Benchmark
-        let repetitions = 100_000;
-        let prog = &skel.progs.xdp_drop_prog;
+        // Create packets from RANDOM unauthorized IPs (attack traffic)
+        let num_packets = 10000;
+        let mut packets = Vec::new();
 
-        let mut test_args = ProgramInput::default();
-        test_args.data_in = Some(&packet);
-        test_args.repeat = repetitions;
+        for i in 0..num_packets {
+            let random_src = generate_ip(i * 12345);
+            let random_dst = generate_ip(i * 67890);
+            let random_port = 3000 + (i % 5000) as u16;
+            packets.push(create_tcp_packet(random_src, random_dst, random_port));
+        }
 
-        let result = prog.test_run(test_args).expect("Benchmark failed");
-
-        // Calculate Latency
-        let avg_ns = result.duration.as_nanos() as f64;
-
-        println!("---------------------------------------------------");
-        println!(" BPF BENCHMARK RESULTS ");
-        println!("---------------------------------------------------");
-        println!(" Total Runs:     {}", repetitions);
-        println!(" Avg Latency:    {:.2} ns/packet", avg_ns);
-        println!(" Target:         < 2000 ns");
         println!(
-            " Status:         {}",
-            if avg_ns < 2000.0 { "PASS" } else { "FAIL" }
+            " Testing with {} packets from random unauthorized IPs",
+            num_packets
         );
-        println!("---------------------------------------------------");
+        println!(" Map contains {} authorized sessions\n", map_size);
 
-        assert!(avg_ns < 2000.0, "Latency too high: {} ns", avg_ns);
+        // Benchmark individual packet latency
+        let prog = &skel.progs.xdp_drop_prog;
+        let mut total_duration_ns = 0u128;
+        let num_test_runs = 1000usize;
+        let repeat_per_test = 100u32;
+
+        for packet in packets.iter().take(num_test_runs) {
+            let mut test_args = ProgramInput::default();
+            test_args.data_in = Some(packet);
+            test_args.repeat = repeat_per_test;
+
+            let result = prog.test_run(test_args).expect("Test run failed");
+
+            // result.duration is the total time for all repeats
+            total_duration_ns += result.duration.as_nanos();
+
+            // Verify packet was dropped (XDP_DROP = 1)
+            assert_eq!(result.return_value, 1, "Packet should be dropped");
+        }
+
+        // Calculate average latency per packet
+        let total_packets = num_test_runs * (repeat_per_test as usize);
+        let avg_latency_ns = total_duration_ns as f64 / total_packets as f64;
+
+        // Measure throughput
+        let mut test_args = ProgramInput::default();
+        test_args.data_in = Some(&packets[0]);
+        test_args.repeat = 1_000_000;
+
+        let start = Instant::now();
+        prog.test_run(test_args).expect("Throughput test failed");
+        let elapsed = start.elapsed();
+
+        let throughput = 1_000_000.0 / elapsed.as_secs_f64();
+
+        println!(" ATTACK SCENARIO RESULTS");
+        println!("  Average Latency:  {:.2} ns/packet", avg_latency_ns);
+        println!("  Throughput:       {:.0} packets/sec", throughput);
+        println!("  Map Size:         {} sessions", map_size);
+        println!("  Packets Tested:   {} (all dropped)", num_packets);
+        println!(
+            "  Status:           {}",
+            if avg_latency_ns < 2000.0 {
+                "PASS (< 2µs)"
+            } else {
+                "FAIL"
+            }
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn benchmark_legitimate_traffic_accepted_packets() {
+        println!("\nBENCHMARK: Legitimate Traffic (Accepted Packets)");
+
+        let config = Config {
+            controller_ip: "172.21.0.5".parse().unwrap(),
+            controller_port: 443,
+            ..Default::default()
+        };
+
+        let skel_builder = crate::bpf::agent_skel::AegisSkelBuilder::default();
+        let mut open_object = MaybeUninit::uninit();
+        let mut open_skel = skel_builder
+            .open(&mut open_object)
+            .expect("Failed to open skel");
+
+        let rodata = open_skel.maps.rodata_data.as_deref_mut().unwrap();
+        rodata.CONTROLLER_PORT = config.controller_port.to_be();
+        rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
+        rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
+
+        let skel = open_skel.load().expect("Failed to load");
+
+        // Fill the map with legitimate sessions
+        let map_size = 5000;
+        let base_ip = 0x0A000001u32; // 10.0.0.1
+        fill_session_map(&skel, map_size, base_ip, 8000);
+
+        // Create packets from AUTHORIZED IPs (legitimate traffic)
+        let num_packets = 5000;
+        let mut packets = Vec::new();
+
+        for i in 0..num_packets {
+            let src_ip = base_ip.wrapping_add(i as u32);
+            let dest_ip = base_ip.wrapping_add(10000 + i as u32);
+            let dest_port = 8000 + ((i % 1000) as u16);
+
+            let src_bytes = ip_to_bytes(src_ip);
+            let dst_bytes = ip_to_bytes(dest_ip);
+            packets.push(create_tcp_packet(src_bytes, dst_bytes, dest_port));
+        }
+
+        println!(" Testing with {} packets from authorized IPs", num_packets);
+        println!(" Map contains {} authorized sessions\n", map_size);
+
+        // Benchmark individual packet latency
+        let prog = &skel.progs.xdp_drop_prog;
+        let mut total_duration_ns = 0u128;
+        let num_test_runs = 1000usize;
+        let repeat_per_test = 100u32;
+
+        for packet in packets.iter().take(num_test_runs) {
+            let mut test_args = ProgramInput::default();
+            test_args.data_in = Some(packet);
+            test_args.repeat = repeat_per_test;
+
+            let result = prog.test_run(test_args).expect("Test run failed");
+
+            // result.duration is the total time for all repeats
+            total_duration_ns += result.duration.as_nanos();
+
+            // Verify packet was accepted (XDP_PASS = 2)
+            assert_eq!(result.return_value, 2, "Packet should be accepted");
+        }
+
+        // Calculate average latency per packet
+        let total_packets = num_test_runs * (repeat_per_test as usize);
+        let avg_latency_ns = total_duration_ns as f64 / total_packets as f64;
+
+        // Measure throughput
+        let mut test_args = ProgramInput::default();
+        test_args.data_in = Some(&packets[0]);
+        test_args.repeat = 1_000_000;
+
+        let start = Instant::now();
+        prog.test_run(test_args).expect("Throughput test failed");
+        let elapsed = start.elapsed();
+
+        let throughput = 1_000_000.0 / elapsed.as_secs_f64();
+
+        println!(" LEGITIMATE TRAFFIC RESULTS");
+        println!("  Average Latency:  {:.2} ns/packet", avg_latency_ns);
+        println!("  Throughput:       {:.0} packets/sec", throughput);
+        println!("  Map Size:         {} sessions", map_size);
+        println!("  Packets Tested:   {} (all dropped)", num_packets);
+        println!(
+            "  Status:           {}",
+            if avg_latency_ns < 2000.0 {
+                "PASS (< 2µs)"
+            } else {
+                "FAIL"
+            }
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn benchmark_mixed_traffic() {
+        println!("\nBENCHMARK: Mixed Traffic (Attack + Legitimate)");
+
+        let config = Config {
+            controller_ip: "172.21.0.5".parse().unwrap(),
+            controller_port: 443,
+            ..Default::default()
+        };
+
+        let skel_builder = crate::bpf::agent_skel::AegisSkelBuilder::default();
+        let mut open_object = MaybeUninit::uninit();
+        let mut open_skel = skel_builder
+            .open(&mut open_object)
+            .expect("Failed to open skel");
+
+        let rodata = open_skel.maps.rodata_data.as_deref_mut().unwrap();
+        rodata.CONTROLLER_PORT = config.controller_port.to_be();
+        rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
+        rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
+
+        let skel = open_skel.load().expect("Failed to load");
+
+        // Fill the map with legitimate sessions
+        let map_size = 5000;
+        let base_ip = 0x0A000001u32;
+        fill_session_map(&skel, map_size, base_ip, 8000);
+
+        // Create mixed traffic: 50% legitimate, 50% attack
+        let mut packets = Vec::new();
+        let mut expected_results = Vec::new();
+
+        for i in 0..10000 {
+            if i % 2 == 0 {
+                // Legitimate traffic (should be accepted)
+                let idx = i / 2;
+                let src_ip = base_ip.wrapping_add((idx % map_size) as u32);
+                let dest_ip = base_ip.wrapping_add(10000 + (idx % map_size) as u32);
+                let dest_port = 8000 + ((idx % 1000) as u16);
+
+                let src_bytes = ip_to_bytes(src_ip);
+                let dst_bytes = ip_to_bytes(dest_ip);
+                packets.push(create_tcp_packet(src_bytes, dst_bytes, dest_port));
+                expected_results.push(2); // XDP_PASS
+            } else {
+                // Attack traffic (should be dropped)
+                let random_src = generate_ip((i * 54321) as u32);
+                let random_dst = generate_ip((i * 98765) as u32);
+                let random_port = 3000 + (i % 5000) as u16;
+                packets.push(create_tcp_packet(random_src, random_dst, random_port));
+                expected_results.push(1); // XDP_DROP
+            }
+        }
+
+        println!(" Testing with 10000 packets (50% legitimate, 50% attack)");
+        println!(" Map contains {} authorized sessions\n", map_size);
+
+        // Benchmark
+        let prog = &skel.progs.xdp_drop_prog;
+        let mut total_duration_ns = 0u128;
+        let mut accepted_count = 0;
+        let mut dropped_count = 0;
+        let num_test_runs = 1000usize;
+        let repeat_per_test = 100u32;
+
+        for (packet, &expected) in packets
+            .iter()
+            .zip(expected_results.iter())
+            .take(num_test_runs)
+        {
+            let mut test_args = ProgramInput::default();
+            test_args.data_in = Some(packet);
+            test_args.repeat = repeat_per_test;
+
+            let result = prog.test_run(test_args).expect("Test run failed");
+
+            // result.duration is the total time for all repeats
+            total_duration_ns += result.duration.as_nanos();
+
+            assert_eq!(result.return_value, expected, "Unexpected packet verdict");
+
+            if result.return_value == 2 {
+                accepted_count += 1;
+            } else {
+                dropped_count += 1;
+            }
+        }
+
+        // Calculate average latency per packet
+        let total_packets = num_test_runs * (repeat_per_test as usize);
+        let avg_latency_ns = total_duration_ns as f64 / total_packets as f64;
+
+        // Measure overall throughput
+        let mut test_args = ProgramInput::default();
+        test_args.data_in = Some(&packets[0]);
+        test_args.repeat = 1_000_000;
+
+        let start = Instant::now();
+        prog.test_run(test_args).expect("Throughput test failed");
+        let elapsed = start.elapsed();
+
+        let throughput = 1_000_000.0 / elapsed.as_secs_f64();
+
+        println!(" MIXED TRAFFIC RESULTS");
+        println!("  Average Latency:  {:.2} ns/packet", avg_latency_ns);
+        println!("  Throughput:       {:.0} packets/sec", throughput);
+        println!("  Map Size:         {} sessions", map_size);
+        println!(
+            "  Packets Tested:   {} ({} accepted, {} dropped)",
+            total_packets,
+            accepted_count * (repeat_per_test as usize),
+            dropped_count * (repeat_per_test as usize)
+        );
+        println!(
+            "  Status:           {}",
+            if avg_latency_ns < 2000.0 {
+                "PASS (< 2µs)"
+            } else {
+                "FAIL"
+            }
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn benchmark_map_operations() {
+        println!("\nBENCHMARK: eBPF Map Operations Performance");
+
+        let config = Config {
+            controller_ip: "172.21.0.5".parse().unwrap(),
+            controller_port: 443,
+            ..Default::default()
+        };
+
+        let skel_builder = crate::bpf::agent_skel::AegisSkelBuilder::default();
+        let mut open_object = MaybeUninit::uninit();
+        let mut open_skel = skel_builder
+            .open(&mut open_object)
+            .expect("Failed to open skel");
+
+        let rodata = open_skel.maps.rodata_data.as_deref_mut().unwrap();
+        rodata.CONTROLLER_PORT = config.controller_port.to_be();
+        rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
+        rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
+
+        let skel = open_skel.load().expect("Failed to load");
+
+        // Benchmark insertions
+        let num_ops = 5000;
+        let start = Instant::now();
+
+        for i in 0..num_ops {
+            let key = session_key {
+                src_ip: (0x0A000001u32 + i).to_be(),
+                dest_ip: (0x0A010001u32 + i).to_be(),
+                dest_port: (8000 + (i % 1000) as u16).to_be(),
+            };
+
+            let val = session_val {
+                created_at_ns: 1000000000,
+                last_seen_ns: 1000000000,
+            };
+
+            skel.maps
+                .session
+                .update(
+                    bytemuck::bytes_of(&key),
+                    bytemuck::bytes_of(&val),
+                    MapFlags::ANY,
+                )
+                .expect("Failed to insert");
+        }
+
+        let insert_elapsed = start.elapsed();
+        let insert_throughput = num_ops as f64 / insert_elapsed.as_secs_f64();
+
+        // Benchmark lookups
+        let start = Instant::now();
+
+        for i in 0..num_ops {
+            let key = session_key {
+                src_ip: (0x0A000001u32 + i).to_be(),
+                dest_ip: (0x0A010001u32 + i).to_be(),
+                dest_port: (8000 + (i % 1000) as u16).to_be(),
+            };
+
+            let _result = skel
+                .maps
+                .session
+                .lookup(bytemuck::bytes_of(&key), MapFlags::ANY)
+                .expect("Failed to lookup");
+        }
+
+        let lookup_elapsed = start.elapsed();
+        let lookup_throughput = num_ops as f64 / lookup_elapsed.as_secs_f64();
+
+        // Benchmark deletions
+        let start = Instant::now();
+
+        for i in 0..num_ops {
+            let key = session_key {
+                src_ip: (0x0A000001u32 + i).to_be(),
+                dest_ip: (0x0A010001u32 + i).to_be(),
+                dest_port: (8000 + (i % 1000) as u16).to_be(),
+            };
+
+            let _result = skel.maps.session.delete(bytemuck::bytes_of(&key));
+        }
+
+        let delete_elapsed = start.elapsed();
+        let delete_throughput = num_ops as f64 / delete_elapsed.as_secs_f64();
+
+        println!(" MAP OPERATIONS RESULTS");
+        println!("  Operations:       {} per test", num_ops);
+        println!(
+            "\n  Insert Latency:   {:.2} µs/op",
+            insert_elapsed.as_micros() as f64 / num_ops as f64
+        );
+        println!("  Insert Throughput: {:.0} ops/sec", insert_throughput);
+        println!(
+            "\n  Lookup Latency:   {:.2} µs/op",
+            lookup_elapsed.as_micros() as f64 / num_ops as f64
+        );
+        println!("  Lookup Throughput: {:.0} ops/sec", lookup_throughput);
+        println!(
+            "\n  Delete Latency:   {:.2} µs/op",
+            delete_elapsed.as_micros() as f64 / num_ops as f64
+        );
+        println!("  Delete Throughput: {:.0} ops/sec", delete_throughput);
+    }
+
+    #[test]
+    #[ignore]
+    fn benchmark_scalability_varying_map_sizes() {
+        println!("\nBENCHMARK: Scalability with Varying Map Sizes");
+
+        let map_sizes = [100, 500, 1000, 2500, 5000];
+
+        for &size in &map_sizes {
+            let config = Config {
+                controller_ip: "172.21.0.5".parse().unwrap(),
+                controller_port: 443,
+                ..Default::default()
+            };
+
+            let skel_builder = crate::bpf::agent_skel::AegisSkelBuilder::default();
+            let mut open_object = MaybeUninit::uninit();
+            let mut open_skel = skel_builder
+                .open(&mut open_object)
+                .expect("Failed to open skel");
+
+            let rodata = open_skel.maps.rodata_data.as_deref_mut().unwrap();
+            rodata.CONTROLLER_PORT = config.controller_port.to_be();
+            rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
+            rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
+
+            let skel = open_skel.load().expect("Failed to load");
+
+            fill_session_map(&skel, size, 0x0A000001, 8000);
+
+            // Test with legitimate traffic
+            let base_ip = 0x0A000001u32;
+            let src_bytes = ip_to_bytes(base_ip);
+            let dst_bytes = ip_to_bytes(base_ip + 10000);
+            let packet = create_tcp_packet(src_bytes, dst_bytes, 8000);
+
+            let prog = &skel.progs.xdp_drop_prog;
+            let mut test_args = ProgramInput::default();
+            test_args.data_in = Some(&packet);
+            test_args.repeat = 100_000;
+
+            let start = Instant::now();
+            prog.test_run(test_args).expect("Test run failed");
+            let elapsed = start.elapsed();
+
+            let avg_latency_ns = elapsed.as_nanos() as f64 / 100_000.0;
+            let throughput = 100_000.0 / elapsed.as_secs_f64();
+
+            println!(
+                "  Map Size: {:5} → Latency: {:6.2} ns/pkt | Throughput: {:10.0} pkt/s",
+                size, avg_latency_ns, throughput
+            );
+        }
+
+        println!(" Scalability benchmark complete\n");
     }
 }

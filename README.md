@@ -68,15 +68,55 @@ docker-compose -f deploy/docker-compose.yml up --build -d
 
 ### ⚡ Performance & Benchmarks
 
-Aegis is optimized for extreme low-latency environments and minimal footprint.
+Aegis is optimized for extreme low-latency environments and minimal footprint. Read detailed benchmarks results in [📖 Benchmarking Docs](./BENCHMARKING.md)
 
 **Reproduce Benchmarks:**
 
-To run the latency benchmarks (requires root for XDP hook):
+To run all comprehensive benchmarks (requires root for XDP hook):
 ```bash
+cd agent
 sudo -E cargo test -- --ignored --nocapture
-
 ```
+
+or
+
+```bash
+sudo ./run_benchmarks.sh
+```
+
+**Available Benchmarks:**
+
+1. **Attack Scenario** - Tests packet processing when all traffic is malicious (dropped)
+   ```bash
+   sudo -E cargo test benchmark_attack_scenario_dropped_packets -- --ignored --nocapture
+   ```
+
+2. **Legitimate Traffic** - Tests packet processing when all traffic is authorized (accepted)
+   ```bash
+   sudo -E cargo test benchmark_legitimate_traffic_accepted_packets -- --ignored --nocapture
+   ```
+
+3. **Mixed Traffic** - Tests realistic scenario with 50% legitimate and 50% attack traffic
+   ```bash
+   sudo -E cargo test benchmark_mixed_traffic -- --ignored --nocapture
+   ```
+
+4. **Map Operations** - Benchmarks eBPF map insert/lookup/delete performance
+   ```bash
+   sudo -E cargo test benchmark_map_operations -- --ignored --nocapture
+   ```
+
+5. **Scalability** - Tests performance impact of varying map sizes (100 to 5000 entries)
+   ```bash
+   sudo -E cargo test benchmark_scalability_varying_map_sizes -- --ignored --nocapture
+   ```
+
+**Key Features:**
+- Random IP generation for realistic traffic simulation
+- Pre-filled maps to test real-world scenarios
+- Latency measurements (nanoseconds per packet)
+- Throughput measurements (packets per second)
+- Comprehensive coverage of attack, legitimate, and mixed traffic patterns
 
 To build the optimized binary and check size:
 
@@ -85,19 +125,20 @@ cargo build --release
 
 ```
 
-**Current Results:**
+**Expected Results:**
 
 ```text
----------------------------------------------------
- BPF BENCHMARK RESULTS 
----------------------------------------------------
- Total Runs:      100000
- Avg Latency:     30.00 ns/packet
- Target:          < 2000 ns
- Status:          PASS
----------------------------------------------------
-Final Binary Size: 1085KB
+BENCHMARK: Attack Scenario (Dropped Packets)
+Pre-filled session map with 5000 entries
+ Testing with 10000 packets from random unauthorized IPs
+ Map contains 5000 authorized sessions
 
+ ATTACK SCENARIO RESULTS
+  Average Latency:  0.64 ns/packet
+  Throughput:       8822864 packets/sec
+  Map Size:         5000 sessions
+  Packets Tested:   10000 (all dropped)
+  Status:           PASS (< 2µs)
 ```
 
 ## Future Goals & Improvements

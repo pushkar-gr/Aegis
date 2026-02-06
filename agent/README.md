@@ -97,3 +97,7 @@ sudo ./target/release/aegis-agent \
   --grpc-port 50051
 
 ```
+
+## 📊 Benchmarking
+
+See [BENCHMARKING.md](../BENCHMARKING.md) in the repository root.
