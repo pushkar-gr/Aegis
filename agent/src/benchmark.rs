@@ -135,65 +135,61 @@ mod benchmarks {
         fill_session_map(&skel, map_size, 0x0A000001, 8000); // Base IP: 10.0.0.1
 
         // Create packets from RANDOM unauthorized IPs (attack traffic)
-        let num_packets = 10000;
-        let mut packets = Vec::new();
-
-        for i in 0..num_packets {
-            let random_src = generate_ip(i * 12345);
-            let random_dst = generate_ip(i * 67890);
-            let random_port = 3000 + (i % 5000) as u16;
-            packets.push(create_tcp_packet(random_src, random_dst, random_port));
-        }
+        let num_unique_packets = 100;
+        let repeats_per_packet = 10_000;
 
         println!(
-            " Testing with {} packets from random unauthorized IPs",
-            num_packets
+            " Generating {} unique random packets...",
+            num_unique_packets
         );
+        let mut packets = Vec::new();
+        for i in 0..num_unique_packets {
+            let src_ip = generate_ip(i as u32 * 9999);
+            let packet = create_tcp_packet(src_ip, [192, 168, 1, 100], 9999);
+            packets.push(packet);
+        }
+
         println!(" Map contains {} authorized sessions\n", map_size);
+        println!(
+            " Running benchmark: {} unique packets x {} repeats each",
+            num_unique_packets, repeats_per_packet
+        );
 
         // Benchmark individual packet latency
         let prog = &skel.progs.xdp_drop_prog;
-        let mut total_duration_ns = 0u128;
-        let num_test_runs = 1000usize;
-        let repeat_per_test = 100u32;
+        let mut total_avg_latency = 0.0;
 
-        for packet in packets.iter().take(num_test_runs) {
+        for packet in &packets {
             let mut test_args = ProgramInput::default();
             test_args.data_in = Some(packet);
-            test_args.repeat = repeat_per_test;
+            test_args.repeat = repeats_per_packet;
 
             let result = prog.test_run(test_args).expect("Test run failed");
 
             // result.duration is the total time for all repeats
-            total_duration_ns += result.duration.as_nanos();
+            total_avg_latency += result.duration.as_nanos() as f64;
 
             // Verify packet was dropped (XDP_DROP = 1)
             assert_eq!(result.return_value, 1, "Packet should be dropped");
         }
 
         // Calculate average latency per packet
-        let total_packets = num_test_runs * (repeat_per_test as usize);
-        let avg_latency_ns = total_duration_ns as f64 / total_packets as f64;
+        let global_avg_ns = total_avg_latency / num_unique_packets as f64;
 
         // Measure throughput
-        let mut test_args = ProgramInput::default();
-        test_args.data_in = Some(&packets[0]);
-        test_args.repeat = 1_000_000;
-
-        let start = Instant::now();
-        prog.test_run(test_args).expect("Throughput test failed");
-        let elapsed = start.elapsed();
-
-        let throughput = 1_000_000.0 / elapsed.as_secs_f64();
+        let throughput = 1_000_000_000.0 / global_avg_ns;
 
         println!(" ATTACK SCENARIO RESULTS");
-        println!("  Average Latency:  {:.2} ns/packet", avg_latency_ns);
+        println!("  Average Latency:  {:.2} ns/packet", global_avg_ns);
         println!("  Throughput:       {:.0} packets/sec", throughput);
         println!("  Map Size:         {} sessions", map_size);
-        println!("  Packets Tested:   {} (all dropped)", num_packets);
+        println!(
+            "  Packets Tested:   {} (all dropped)",
+            num_unique_packets * repeats_per_packet
+        );
         println!(
             "  Status:           {}",
-            if avg_latency_ns < 2000.0 {
+            if global_avg_ns < 2000.0 {
                 "PASS (< 2µs)"
             } else {
                 "FAIL"
@@ -207,7 +203,7 @@ mod benchmarks {
         println!("\nBENCHMARK: Legitimate Traffic (Accepted Packets)");
 
         let config = Config {
-            controller_ip: "172.21.0.5".parse().unwrap(),
+            controller_ip: "127.21.0.5".parse().unwrap(),
             controller_port: 443,
             ..Default::default()
         };
@@ -231,65 +227,64 @@ mod benchmarks {
         fill_session_map(&skel, map_size, base_ip, 8000);
 
         // Create packets from AUTHORIZED IPs (legitimate traffic)
-        let num_packets = 5000;
-        let mut packets = Vec::new();
+        let num_unique_packets = 100;
+        let repeats_per_packet = 10_000;
 
-        for i in 0..num_packets {
-            let src_ip = base_ip.wrapping_add(i as u32);
+        println!(" Generating {} unique valid packets...", num_unique_packets);
+        let mut packets = Vec::new();
+        for i in 0..num_unique_packets {
+            let idx = i % map_size;
+            let src_ip = base_ip.wrapping_add(idx as u32);
             let dest_ip = base_ip.wrapping_add(10000 + i as u32);
             let dest_port = 8000 + ((i % 1000) as u16);
 
             let src_bytes = ip_to_bytes(src_ip);
             let dst_bytes = ip_to_bytes(dest_ip);
-            packets.push(create_tcp_packet(src_bytes, dst_bytes, dest_port));
+            let packet = create_tcp_packet(src_bytes, dst_bytes, dest_port);
+            packets.push(packet);
         }
 
-        println!(" Testing with {} packets from authorized IPs", num_packets);
         println!(" Map contains {} authorized sessions\n", map_size);
+        println!(
+            " Running benchmark: {} unique packets x {} repeats each...",
+            num_unique_packets, repeats_per_packet
+        );
 
         // Benchmark individual packet latency
         let prog = &skel.progs.xdp_drop_prog;
-        let mut total_duration_ns = 0u128;
-        let num_test_runs = 1000usize;
-        let repeat_per_test = 100u32;
+        let mut total_avg_latency = 0.0;
 
-        for packet in packets.iter().take(num_test_runs) {
+        for packet in &packets {
             let mut test_args = ProgramInput::default();
             test_args.data_in = Some(packet);
-            test_args.repeat = repeat_per_test;
+            test_args.repeat = repeats_per_packet;
 
-            let result = prog.test_run(test_args).expect("Test run failed");
+            let result = prog.test_run(test_args).expect("Benchmark failed");
 
             // result.duration is the total time for all repeats
-            total_duration_ns += result.duration.as_nanos();
+            total_avg_latency += result.duration.as_nanos() as f64;
 
             // Verify packet was accepted (XDP_PASS = 2)
             assert_eq!(result.return_value, 2, "Packet should be accepted");
         }
 
         // Calculate average latency per packet
-        let total_packets = num_test_runs * (repeat_per_test as usize);
-        let avg_latency_ns = total_duration_ns as f64 / total_packets as f64;
+        let global_avg_ns = total_avg_latency / num_unique_packets as f64;
 
         // Measure throughput
-        let mut test_args = ProgramInput::default();
-        test_args.data_in = Some(&packets[0]);
-        test_args.repeat = 1_000_000;
-
-        let start = Instant::now();
-        prog.test_run(test_args).expect("Throughput test failed");
-        let elapsed = start.elapsed();
-
-        let throughput = 1_000_000.0 / elapsed.as_secs_f64();
+        let throughput = 1_000_000_000.0 / global_avg_ns;
 
         println!(" LEGITIMATE TRAFFIC RESULTS");
-        println!("  Average Latency:  {:.2} ns/packet", avg_latency_ns);
+        println!("  Average Latency:  {:.2} ns/packet", global_avg_ns);
         println!("  Throughput:       {:.0} packets/sec", throughput);
         println!("  Map Size:         {} sessions", map_size);
-        println!("  Packets Tested:   {} (all dropped)", num_packets);
+        println!(
+            "  Packets Tested:   {} (all dropped)",
+            num_unique_packets * repeats_per_packet as usize
+        );
         println!(
             "  Status:           {}",
-            if avg_latency_ns < 2000.0 {
+            if global_avg_ns < 2000.0 {
                 "PASS (< 2µs)"
             } else {
                 "FAIL"
@@ -326,94 +321,69 @@ mod benchmarks {
         let base_ip = 0x0A000001u32;
         fill_session_map(&skel, map_size, base_ip, 8000);
 
-        // Create mixed traffic: 50% legitimate, 50% attack
-        let mut packets = Vec::new();
-        let mut expected_results = Vec::new();
+        let num_unique_packets = 100;
+        let repeats_per_packet = 10_000;
+        let prog = &skel.progs.xdp_drop_prog;
 
-        for i in 0..10000 {
+        let mut total_avg_latency = 0.0;
+
+        println!(
+            " Testing with {} packets (50% legitimate, 50% attack)",
+            num_unique_packets * repeats_per_packet
+        );
+        println!(" Map contains {} authorized sessions\n", map_size);
+
+        for i in 0..num_unique_packets {
+            let packet;
+            let expected_ret;
+            let dest_port;
             if i % 2 == 0 {
                 // Legitimate traffic (should be accepted)
                 let idx = i / 2;
                 let src_ip = base_ip.wrapping_add((idx % map_size) as u32);
                 let dest_ip = base_ip.wrapping_add(10000 + (idx % map_size) as u32);
-                let dest_port = 8000 + ((idx % 1000) as u16);
+                dest_port = 8000 + ((idx % 1000) as u16);
 
                 let src_bytes = ip_to_bytes(src_ip);
                 let dst_bytes = ip_to_bytes(dest_ip);
-                packets.push(create_tcp_packet(src_bytes, dst_bytes, dest_port));
-                expected_results.push(2); // XDP_PASS
+                packet = create_tcp_packet(src_bytes, dst_bytes, dest_port);
+                expected_ret = 2; // XDP_PASS
             } else {
                 // Attack traffic (should be dropped)
                 let random_src = generate_ip((i * 54321) as u32);
                 let random_dst = generate_ip((i * 98765) as u32);
                 let random_port = 3000 + (i % 5000) as u16;
-                packets.push(create_tcp_packet(random_src, random_dst, random_port));
-                expected_results.push(1); // XDP_DROP
+                packet = create_tcp_packet(random_src, random_dst, random_port);
+                expected_ret = 1; // XDP_DROP
             }
-        }
 
-        println!(" Testing with 10000 packets (50% legitimate, 50% attack)");
-        println!(" Map contains {} authorized sessions\n", map_size);
-
-        // Benchmark
-        let prog = &skel.progs.xdp_drop_prog;
-        let mut total_duration_ns = 0u128;
-        let mut accepted_count = 0;
-        let mut dropped_count = 0;
-        let num_test_runs = 1000usize;
-        let repeat_per_test = 100u32;
-
-        for (packet, &expected) in packets
-            .iter()
-            .zip(expected_results.iter())
-            .take(num_test_runs)
-        {
             let mut test_args = ProgramInput::default();
-            test_args.data_in = Some(packet);
-            test_args.repeat = repeat_per_test;
+            test_args.data_in = Some(&packet);
+            test_args.repeat = repeats_per_packet as u32;
 
-            let result = prog.test_run(test_args).expect("Test run failed");
+            let result = prog.test_run(test_args).expect("Benchmark failed");
+            assert_eq!(result.return_value, expected_ret, "Unexpected verdict");
 
-            // result.duration is the total time for all repeats
-            total_duration_ns += result.duration.as_nanos();
-
-            assert_eq!(result.return_value, expected, "Unexpected packet verdict");
-
-            if result.return_value == 2 {
-                accepted_count += 1;
-            } else {
-                dropped_count += 1;
-            }
+            total_avg_latency += result.duration.as_nanos() as f64;
         }
 
         // Calculate average latency per packet
-        let total_packets = num_test_runs * (repeat_per_test as usize);
-        let avg_latency_ns = total_duration_ns as f64 / total_packets as f64;
+        let global_avg_ns = total_avg_latency / num_unique_packets as f64;
 
         // Measure overall throughput
-        let mut test_args = ProgramInput::default();
-        test_args.data_in = Some(&packets[0]);
-        test_args.repeat = 1_000_000;
-
-        let start = Instant::now();
-        prog.test_run(test_args).expect("Throughput test failed");
-        let elapsed = start.elapsed();
-
-        let throughput = 1_000_000.0 / elapsed.as_secs_f64();
+        let throughput = 1_000_000_000.0 / global_avg_ns;
 
         println!(" MIXED TRAFFIC RESULTS");
-        println!("  Average Latency:  {:.2} ns/packet", avg_latency_ns);
+        println!("  Average Latency:  {:.2} ns/packet", global_avg_ns);
         println!("  Throughput:       {:.0} packets/sec", throughput);
         println!("  Map Size:         {} sessions", map_size);
         println!(
-            "  Packets Tested:   {} ({} accepted, {} dropped)",
-            total_packets,
-            accepted_count * (repeat_per_test as usize),
-            dropped_count * (repeat_per_test as usize)
+            "  Packets Tested:   {}",
+            num_unique_packets * repeats_per_packet,
         );
         println!(
             "  Status:           {}",
-            if avg_latency_ns < 2000.0 {
+            if global_avg_ns < 2000.0 {
                 "PASS (< 2µs)"
             } else {
                 "FAIL"

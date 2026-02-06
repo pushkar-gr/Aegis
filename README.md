@@ -130,14 +130,15 @@ cargo build --release
 ```text
 BENCHMARK: Attack Scenario (Dropped Packets)
 Pre-filled session map with 5000 entries
- Testing with 10000 packets from random unauthorized IPs
+ Generating 100 unique random packets...
  Map contains 5000 authorized sessions
 
+ Running benchmark: 100 unique packets x 10000 repeats each
  ATTACK SCENARIO RESULTS
-  Average Latency:  0.64 ns/packet
-  Throughput:       8822864 packets/sec
+  Average Latency:  39.37 ns/packet
+  Throughput:       25400051 packets/sec
   Map Size:         5000 sessions
-  Packets Tested:   10000 (all dropped)
+  Packets Tested:   1000000 (all dropped)
   Status:           PASS (< 2µs)
 ```
 

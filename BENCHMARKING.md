@@ -52,14 +52,15 @@ sudo -E cargo test benchmark_attack_scenario_dropped_packets -- --ignored --noca
 ```
 BENCHMARK: Attack Scenario (Dropped Packets)
 Pre-filled session map with 5000 entries
- Testing with 10000 packets from random unauthorized IPs
+ Generating 100 unique random packets...
  Map contains 5000 authorized sessions
 
+ Running benchmark: 100 unique packets x 10000 repeats each
  ATTACK SCENARIO RESULTS
-  Average Latency:  0.64 ns/packet
-  Throughput:       8822864 packets/sec
+  Average Latency:  39.37 ns/packet
+  Throughput:       25400051 packets/sec
   Map Size:         5000 sessions
-  Packets Tested:   10000 (all dropped)
+  Packets Tested:   1000000 (all dropped)
   Status:           PASS (< 2µs)
 ```
 
@@ -82,14 +83,15 @@ sudo -E cargo test benchmark_legitimate_traffic_accepted_packets -- --ignored --
 ```
 BENCHMARK: Legitimate Traffic (Accepted Packets)
 Pre-filled session map with 5000 entries
- Testing with 5000 packets from authorized IPs
+ Generating 100 unique valid packets...
  Map contains 5000 authorized sessions
 
+ Running benchmark: 100 unique packets x 10000 repeats each...
  LEGITIMATE TRAFFIC RESULTS
-  Average Latency:  1.23 ns/packet
-  Throughput:       7691360 packets/sec
+  Average Latency:  93.72 ns/packet
+  Throughput:       10670081 packets/sec
   Map Size:         5000 sessions
-  Packets Tested:   5000 (all dropped)
+  Packets Tested:   1000000 (all dropped)
   Status:           PASS (< 2µs)
 ```
 
@@ -113,14 +115,14 @@ sudo -E cargo test benchmark_mixed_traffic -- --ignored --nocapture
 ```
 BENCHMARK: Mixed Traffic (Attack + Legitimate)
 Pre-filled session map with 5000 entries
- Testing with 10000 packets (50% legitimate, 50% attack)
+ Testing with 1000000 packets (50% legitimate, 50% attack)
  Map contains 5000 authorized sessions
 
  MIXED TRAFFIC RESULTS
-  Average Latency:  0.95 ns/packet
-  Throughput:       9082538 packets/sec
+  Average Latency:  64.98 ns/packet
+  Throughput:       15389351 packets/sec
   Map Size:         5000 sessions
-  Packets Tested:   100000 (50000 accepted, 50000 dropped)
+  Packets Tested:   1000000
   Status:           PASS (< 2µs)
 ```
 
@@ -247,8 +249,8 @@ When adding new benchmarks:
 
 | Scenario | Avg Latency | Throughput | Pass Rate |
 |----------|-------------|------------|-----------|
-| Attack (Dropped) | ~0.64 ns | 8.8M pkt/s | 100% |
-| Legitimate (Accepted) | ~1.23 ns | 7.7M pkt/s | 100% |
-| Mixed (50/50) | ~0.95 ns | 9M pkt/s | 100% |
+| Attack (Dropped) | ~39 ns | 25.4M pkt/s | 100% |
+| Legitimate (Accepted) | ~94 ns | 10.7M pkt/s | 100% |
+| Mixed (50/50) | ~65 ns | 15.4M pkt/s | 100% |
 
 *Results from Intel Core i7, 4.7 GHz, Linux 6.12*

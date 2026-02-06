@@ -16,6 +16,7 @@ tokio-stream = { version = "0.1.18", features = ["sync"] }
 tonic = { version = "0.14", features = ["tls-ring", "tls-native-roots"] }
 tonic-prost = "0.14"
 prost = "0.14"
+indicatif = "0.18"
 
 [build-dependencies]
 libbpf-cargo = "0.25"
