@@ -34,7 +34,7 @@ impl<'a> Default for Config<'a> {
             iface_name: "eth0",
             controller_ip: Ipv4Addr::new(172, 21, 0, 5),
             controller_port: 443,
-            lazy_update_timeout: 1000000000, // 1s
+            lazy_update_timeout: 1_000_000_000, // 1s
             cert_file: "certs/agent.pem".to_string(),
             key_file: "certs/agent.key".to_string(),
             ca_file: "certs/ca.pem".to_string(),

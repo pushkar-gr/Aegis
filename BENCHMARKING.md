@@ -4,8 +4,8 @@ This document provides a comprehensive guide to benchmarking the Aegis eBPF fire
 
 ## Overview
 
-Aegis includes a comprehensive benchmarking suite that measures:
-- **Latency**: Per-packet processing time in nanoseconds
+Aegis includes a benchmarking suite that measures:
+- **Latency**: Per packet processing time in nanoseconds
 - **Throughput**: Number of packets processed per second
 - **Map Operations**: Performance of eBPF map insert/lookup/delete operations
 - **Scalability**: Performance impact of varying session map sizes
@@ -35,10 +35,9 @@ bpftool btf dump file /sys/kernel/btf/vmlinux format c > src/bpf/vmlinux.h
 
 ### 1. Attack Scenario (Dropped Packets)
 
-Tests packet processing performance when handling malicious traffic that gets dropped.
+Tests packet processing performance when handling traffic with all malicious packets. All packets should be dropped
 
-**Characteristics:**
-- 10,000 packets from random, unauthorized IP addresses
+- 1,000,000 packets from random, unauthorized IP addresses
 - 5,000 authorized sessions pre-filled in the map
 - All packets should be dropped (XDP_DROP)
 - Simulates DDoS or port scanning attacks
@@ -46,6 +45,10 @@ Tests packet processing performance when handling malicious traffic that gets dr
 **Run:**
 ```bash
 sudo -E cargo test benchmark_attack_scenario_dropped_packets -- --ignored --nocapture
+```
+or
+```bash
+sudo ./run_benchmarks.sh benchmark_attack_scenario_dropped_packets 
 ```
 
 **Expected Output:**
@@ -68,8 +71,7 @@ Pre-filled session map with 5000 entries
 
 Tests packet processing performance when handling legitimate, authorized traffic.
 
-**Characteristics:**
-- 5,000 packets from authorized IP addresses
+- 1,000,000 packets from authorized IP addresses
 - 5,000 authorized sessions pre-filled in the map
 - All packets should be accepted (XDP_PASS)
 - Simulates normal operational load
@@ -77,6 +79,10 @@ Tests packet processing performance when handling legitimate, authorized traffic
 **Run:**
 ```bash
 sudo -E cargo test benchmark_legitimate_traffic_accepted_packets -- --ignored --nocapture
+```
+or
+```bash
+sudo ./run_benchmarks.sh benchmark_legitimate_traffic_accepted_packets 
 ```
 
 **Expected Output:**
@@ -91,7 +97,7 @@ Pre-filled session map with 5000 entries
   Average Latency:  93.72 ns/packet
   Throughput:       10670081 packets/sec
   Map Size:         5000 sessions
-  Packets Tested:   1000000 (all dropped)
+  Packets Tested:   1000000 (all accepted)
   Status:           PASS (< 2µs)
 ```
 
@@ -99,8 +105,7 @@ Pre-filled session map with 5000 entries
 
 Tests realistic scenario combining both legitimate and attack traffic.
 
-**Characteristics:**
-- 10,000 total packets (50% legitimate, 50% attack)
+- 1,000,000 total packets (50% legitimate, 50% attack)
 - 5,000 authorized sessions pre-filled in the map
 - Random IP generation for attack traffic
 - Authorized IPs for legitimate traffic
@@ -109,6 +114,10 @@ Tests realistic scenario combining both legitimate and attack traffic.
 **Run:**
 ```bash
 sudo -E cargo test benchmark_mixed_traffic -- --ignored --nocapture
+```
+or
+```bash
+sudo ./run_benchmarks.sh benchmark_mixed_traffic 
 ```
 
 **Expected Output:**
@@ -130,7 +139,6 @@ Pre-filled session map with 5000 entries
 
 Benchmarks the performance of eBPF map operations (insert, lookup, delete).
 
-**Characteristics:**
 - 5,000 operations of each type
 - Measures userspace-to-kernel map operation latency
 - Reports throughput for each operation type
@@ -138,6 +146,10 @@ Benchmarks the performance of eBPF map operations (insert, lookup, delete).
 **Run:**
 ```bash
 sudo -E cargo test benchmark_map_operations -- --ignored --nocapture
+```
+or
+```bash
+sudo ./run_benchmarks.sh benchmark_map_operations
 ```
 
 **Expected Output:**
@@ -160,7 +172,6 @@ BENCHMARK: eBPF Map Operations Performance
 
 Tests performance impact of varying session map sizes.
 
-**Characteristics:**
 - Tests map sizes: 100, 500, 1000, 2500, 5000 entries
 - Measures latency and throughput for each size
 - Helps identify performance degradation at scale
@@ -168,6 +179,10 @@ Tests performance impact of varying session map sizes.
 **Run:**
 ```bash
 sudo -E cargo test benchmark_scalability_varying_map_sizes -- --ignored --nocapture
+```
+or
+```bash
+sudo ./run_benchmarks.sh benchmark_scalability_varying_map_sizes 
 ```
 
 **Expected Output:**
@@ -223,14 +238,14 @@ Lower latency means faster packet processing and less CPU overhead.
 ### Map Operations
 - Insert operations are typically slower than lookups
 - LRU hash maps provide automatic eviction of old entries
-- Lookups should be consistently fast (< 5µs)
+- Lookups should be fast (< 5µs)
 
 ## Benchmark Design Principles
 
 The benchmarks are designed to:
 
-1. **Replicate Real-World Scenarios**: Use random IPs and realistic traffic patterns
-2. **Pre-fill Maps**: Ensure the map contains entries before testing, simulating production environments
+1. **Replicate Real World Scenarios**: Use random IPs and realistic traffic patterns
+2. **Pre fill Maps**: Ensure the map contains entries before testing, simulating production environments
 3. **Measure Multiple Metrics**: Both latency and throughput for comprehensive analysis
 4. **Test Edge Cases**: Attack scenarios, legitimate traffic, and mixed loads
 5. **Ensure Reproducibility**: Use deterministic pseudo-random generators for consistent results

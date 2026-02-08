@@ -1,12 +1,11 @@
 # Aegis Controller (Control Plane)
 
-The Controller is the brain of the Aegis Zero Trust network. Written in Go, it serves the web dashboard for user authentication, manages RBAC (Role-Based Access Control), and dispatches allow-rules to Agents via gRPC.
+The Controller is the brain of the Aegis Zero Trust network. Written in Go, it serves the web dashboard for user authentication, manages RBAC, and dispatches allow-rules to Agents via gRPC.
 
-## 🏗️ Architecture
+## Architecture
 
-The Controller bridges the user-facing web UI and the backend infrastructure.
+The Controller bridges the user facing web UI and the backend infrastructure.
 
-![Controller Architecture](./../docs/images/controller_architecture.png)
 * **Frontend:** Serves static HTML/JS pages for Login, Dashboard, and User Management.
 * **API Layer:** REST API for handling user sessions and database interactions.
 * **RPC Client:** Acts as a gRPC client to push authenticated session data to the Edge Agent.
@@ -15,58 +14,67 @@ The Controller bridges the user-facing web UI and the backend infrastructure.
 
 ## Documentation
 
-For detailed information on how to configure and use the Aegis Controller, please refer to the following guides:
+For detailed information on how to configure and use the Aegis Controller:
 
 * **[Application Guide & Usage](./CONTROLLER_DOCS.md)**: Explains the core concepts (Roles, Services, Users), the administrative setup workflow, and the user dashboard experience.
 * **[API Documentation](./API_DOCS.md)**: A complete reference for all API endpoints, including authentication, role management, and service configuration.
 
-## 📋 Prerequisites
+## Prerequisites
 
 * **Go 1.25+**
 * **SQLite** (Embedded, no external setup required)
 
-## 🛠️ Build
+## Build
 
 ```bash
 cd controller
 go mod download
 go build -o bin/aegis-controller .
-
 ```
 
-## 🏃 Usage
+## Usage
 
 ```bash
 ./bin/aegis-controller [flags]
-
 ```
 
 ### Configuration
 
-The Controller supports both Environment Variables and Command Line Flags. CLI flags take precedence.
+The Controller supports both Environment Variables and Command Line Flags. CLI flags has more priority.
 
 **Core Settings:**
 
 | Env Variable | CLI Flag | Default | Description |
 | --- | --- | --- | --- |
-| `SERVER_PORT` | `-port` | `:443` | The port the HTTP/gRPC server listens on. |
 | `DB_DIR` | N/A | `./data` | Directory to store the SQLite database. |
+| `SERVER_PORT` | `-port` | `:443` | The port the HTTP/gRPC server listens on. |
 | `CERT_FILE` | `-cert` | `certs/server.crt` | TLS Certificate path. |
 | `KEY_FILE` | `-key` | `certs/server.key` | TLS Private Key path. |
+| `JWT_SECRET` | N/A | `DEFAULT_JWT_KEY` | JWT key for signing tokens. |
+| `JWT_TOKEN_LIFETIME` | N/A | `60`(s) | JWT access token lifetime. |
 
 **Agent Connection Settings:**
 
 | Env Variable | Flag | Default | Description |
 | --- | --- | --- | --- |
-| `JWT_SECRET` | N/A | `DEFAULT_JWT_KEY` | JWT key for signing tokens. |
 | `AGENT_ADDRESS` | `-agent-addr` | `172.21.0.10:50001` | Address of the target Aegis Agent. |
 | `AGENT_CERT_FILE` | N/A | `certs/controller.pem` | mTLS Cert for talking to Agent. |
 | `AGENT_KEY_FILE` | N/A | `certs/controller.key` | mTLS Key for talking to Agent. |
+| `AGENT_CA_FILE` | N/A | `certs/ca.pen` | Trusted CA certificate to verify the Agent's identity. |
+| `AGENT_SERVER_FILE` | N/A | `aegis-agent` | Expected server name (SNI) for TLS verification. |
+| `AGENT_CALL_TIMEOUT` | N/A | `1`(s) | Timeout duration for gRPC calls to the Agent. |
+| `MONITOR_RETRY_DELAY` | N/A | `1`(s) | Wait time before retrying a failed health check. |
+
+**DB settings:**
+
+| Env Variable | Flag | Default | Description |
+| --- | --- | --- | --- |
+| `DB_MAX_OPEN_CONNS` | N/A | `1` | Maximum number of open connections to the database. |
+| `DB_MAX_IDLE_CONNS` | N/A | `1` | Maximum number of idle connections to keep in the pool. |
+| `DB_CONN_MAX_LIFETIME` | N/A | `1`(hrs) | Maximum amount of time a connection may be reused. |
 
 ### Running Tests
 
 ```bash
-# Run all tests with verbose output
 JWT_SECRET="test-secret" go test -v ./...
-
 ```

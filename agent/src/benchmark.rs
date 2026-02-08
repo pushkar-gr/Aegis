@@ -279,7 +279,7 @@ mod benchmarks {
         println!("  Throughput:       {:.0} packets/sec", throughput);
         println!("  Map Size:         {} sessions", map_size);
         println!(
-            "  Packets Tested:   {} (all dropped)",
+            "  Packets Tested:   {} (all accepted)",
             num_unique_packets * repeats_per_packet as usize
         );
         println!(
