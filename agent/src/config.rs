@@ -3,6 +3,8 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 use tracing::{debug, warn};
 
+use crate::hostname_to_ip::hostname_to_ip;
+
 /// Agent configuration loaded from command-line arguments.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Config<'a> {
@@ -72,6 +74,14 @@ impl<'a> Config<'a> {
                         let ip_str = &args[i + 1];
                         config.controller_ip = Ipv4Addr::from_str(ip_str)
                             .with_context(|| format!("Invalid IPv4 address: {}", ip_str))?;
+                        i += 1;
+                    }
+                }
+
+                // Controller host
+                "--host" => {
+                    if i + 1 < args.len() {
+                        config.controller_ip = hostname_to_ip(args[i + 1].clone())?;
                         i += 1;
                     }
                 }
@@ -187,6 +197,9 @@ impl<'a> Config<'a> {
         println!("\nOptions:");
         println!("  -i, --iface <NAME>          Network interface (default: eth0)");
         println!("  -c, --ip <IP>               Controller IP (default: 172.21.0.5)");
+        println!(
+            "  --host <IP>                 Controller hostname (automically resolves hostname and uses as controller ip)"
+        );
         println!("  -p, --port <PORT>           Controller port (default: 443)");
         println!(
             "  -n, --update-time <NS>      Session update timeout in ns (default: 1000000000)"
@@ -349,5 +362,33 @@ mod tests {
         // Should not panic, just log a warning
         let config = Config::load(&args).expect("Should handle unknown args");
         assert_eq!(config.iface_name, "eth0");
+    }
+
+    #[test]
+    fn test_load_hostname_flag() {
+        let args = vec![
+            "aegis".to_string(),
+            "--host".to_string(),
+            "localhost".to_string(),
+        ];
+        let config = Config::load(&args).expect("Failed to resolve localhost via flag");
+
+        // Localhost should resolve to 127.0.0.1
+        assert_eq!(config.controller_ip, Ipv4Addr::new(127, 0, 0, 1));
+    }
+
+    #[test]
+    fn test_host_override() {
+        let args = vec![
+            "aegis".to_string(),
+            "--ip".to_string(),
+            "1.1.1.1".to_string(),
+            "--host".to_string(),
+            "localhost".to_string(),
+        ];
+        let config = Config::load(&args).expect("Failed to load config");
+
+        // Should use the localhost IP (127.0.0.1), overriding 1.1.1.1
+        assert_eq!(config.controller_ip, Ipv4Addr::new(127, 0, 0, 1));
     }
 }

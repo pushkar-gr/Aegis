@@ -63,4 +63,4 @@ RUN size=$(stat -c%s ./aegis-agent) && \
         echo "Error: Binary exceeds 5MB limit!"; exit 1; \
     fi
 
-CMD ["./aegis-agent", "-i", "eth1"]
+CMD ["./aegis-agent", "-i", "eth1", "--host", "controller"]

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-BASE_URL="https://172.21.0.5"
+BASE_URL="https://controller"
 COOKIE_FILE="session_cookies.txt"
 WGET_OPTS="--no-check-certificate -qO- --keep-session-cookies"
 
