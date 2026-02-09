@@ -68,9 +68,9 @@ INSERT OR IGNORE INTO roles (name, description) VALUES
 ('user', 'Standard user');
 
 -- Seed Root User
--- Note: The password string below is a PLACEHOLDER. 
+-- username: root, password root
 INSERT INTO users (username, password, role_id, is_active)
-SELECT 'root', '$2a$10$REPLACE_WITH_VALID_BCRYPT_HASH_FOR_ROOT', id, 1
+SELECT 'root', '$2a$12$ZJtnuD8QGgPA4298uOuDF./HHup/v2oDUFJuJ19IIr52OnJ4DOaU6', id, 1
 FROM roles 
 WHERE name = 'root' 
 AND NOT EXISTS (SELECT 1 FROM users WHERE username = 'root');
