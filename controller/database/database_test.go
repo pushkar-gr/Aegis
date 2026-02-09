@@ -69,6 +69,7 @@ FOREIGN KEY(role_id) REFERENCES roles(id)
 CREATE TABLE IF NOT EXISTS services (
 "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 "name" TEXT NOT NULL UNIQUE,
+"hostname" TEXT NOT NULL,
 "ip_port" TEXT NOT NULL,
 "description" TEXT,
 "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -276,8 +277,8 @@ func TestGetServiceIPPort(t *testing.T) {
 	defer cleanup()
 
 	// Create a test service
-	result, err := DB.Exec("INSERT INTO services (name, ip_port, description) VALUES (?, ?, ?)",
-		"test_service", "192.168.1.100:8080", "Test service")
+	result, err := DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
+		"test_service", "192.168.1.100:8080", "192.168.1.100:8080", "Test service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -305,8 +306,8 @@ func TestInsertAndDeleteActiveService(t *testing.T) {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
-	_, err = DB.Exec("INSERT INTO services (name, ip_port, description) VALUES (?, ?, ?)",
-		"test_service", "192.168.1.100:8080", "Test service")
+	_, err = DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
+		"test_service", "192.168.1.100:8080", "192.168.1.100:8080", "Test service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -380,8 +381,8 @@ func TestCheckServiceExists(t *testing.T) {
 	defer cleanup()
 
 	// Create test service
-	result, err := DB.Exec("INSERT INTO services (name, ip_port, description) VALUES (?, ?, ?)",
-		"test_service", "192.168.1.100:8080", "Test")
+	result, err := DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
+		"test_service", "192.168.1.100:8080", "192.168.1.100:8080", "Test")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
