@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -14,8 +15,8 @@ func TestGetServices(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	_, err := database.DB.Exec("INSERT INTO services (name, ip_port, description) VALUES (?, ?, ?)",
-		"TestService", "localhost:8080", "Test service")
+	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
+		"TestService", "localhost:8080", "127.0.0.1:8080", "Test service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -52,7 +53,7 @@ func TestCreateService(t *testing.T) {
 			name: "Successful service creation",
 			payload: models.Service{
 				Name:        "NewService",
-				IpPort:      "localhost:9090",
+				Hostname:    "localhost:9090",
 				Description: "New test service",
 			},
 			expectedStatus: http.StatusCreated,
@@ -60,8 +61,8 @@ func TestCreateService(t *testing.T) {
 		{
 			name: "Missing required fields",
 			payload: models.Service{
-				Name:   "",
-				IpPort: "localhost:9090",
+				Name:     "",
+				Hostname: "localhost:9090",
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
@@ -97,15 +98,15 @@ func TestCreateServiceDuplicate(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	_, err := database.DB.Exec("INSERT INTO services (name, ip_port, description) VALUES (?, ?, ?)",
-		"ExistingService", "localhost:8080", "Existing service")
+	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
+		"ExistingService", "localhost:8080", "127.0.0.1:8080", "Existing service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
 
 	payload := models.Service{
 		Name:        "ExistingService",
-		IpPort:      "localhost:8080",
+		Hostname:    "localhost:8080",
 		Description: "Duplicate service",
 	}
 
@@ -125,8 +126,8 @@ func TestUpdateService(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	result, err := database.DB.Exec("INSERT INTO services (name, ip_port, description) VALUES (?, ?, ?)",
-		"UpdateService", "localhost:8080", "Update test")
+	result, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
+		"UpdateService", "localhost:8080", "127.0.0.1:8080", "Update test")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -143,7 +144,7 @@ func TestUpdateService(t *testing.T) {
 			serviceID: "1",
 			payload: models.Service{
 				Name:        "UpdatedService",
-				IpPort:      "localhost:9090",
+				Hostname:    "localhost:9090",
 				Description: "Updated description",
 			},
 			expectedStatus: http.StatusOK,
@@ -152,8 +153,8 @@ func TestUpdateService(t *testing.T) {
 			name:      "Invalid service ID",
 			serviceID: "invalid",
 			payload: models.Service{
-				Name:   "UpdatedService",
-				IpPort: "localhost:9090",
+				Name:     "UpdatedService",
+				Hostname: "localhost:9090",
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
@@ -161,8 +162,8 @@ func TestUpdateService(t *testing.T) {
 			name:      "Non-existent service",
 			serviceID: "99999",
 			payload: models.Service{
-				Name:   "UpdatedService",
-				IpPort: "localhost:9090",
+				Name:     "UpdatedService",
+				Hostname: "localhost:9090",
 			},
 			expectedStatus: http.StatusNotFound,
 		},
@@ -191,8 +192,8 @@ func TestDeleteService(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	result, err := database.DB.Exec("INSERT INTO services (name, ip_port, description) VALUES (?, ?, ?)",
-		"DeleteService", "localhost:8080", "Delete test")
+	result, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
+		"DeleteService", "localhost:8080", "127.0.0.1:8080", "Delete test")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -235,4 +236,286 @@ func TestDeleteService(t *testing.T) {
 	}
 
 	_ = serviceID
+}
+
+// TestCreateServiceWithHostnameResolution tests hostname resolution during service creation
+func TestCreateServiceWithHostnameResolution(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	tests := []struct {
+		name           string
+		payload        models.Service
+		expectedStatus int
+		validateFunc   func(t *testing.T, service models.Service)
+	}{
+		{
+			name: "Valid hostname resolves to IP",
+			payload: models.Service{
+				Name:        "HostnameService",
+				Hostname:    "localhost:8080",
+				Description: "Service with hostname",
+			},
+			expectedStatus: http.StatusCreated,
+			validateFunc: func(t *testing.T, service models.Service) {
+				if service.Hostname != "localhost:8080" {
+					t.Errorf("Expected hostname 'localhost:8080', got '%s'", service.Hostname)
+				}
+				if service.IpPort != "127.0.0.1:8080" {
+					t.Errorf("Expected ip_port '127.0.0.1:8080', got '%s'", service.IpPort)
+				}
+			},
+		},
+		{
+			name: "IP address as hostname",
+			payload: models.Service{
+				Name:        "IPService",
+				Hostname:    "192.168.1.1:9000",
+				Description: "Service with IP",
+			},
+			expectedStatus: http.StatusCreated,
+			validateFunc: func(t *testing.T, service models.Service) {
+				if service.Hostname != "192.168.1.1:9000" {
+					t.Errorf("Expected hostname '192.168.1.1:9000', got '%s'", service.Hostname)
+				}
+				if service.IpPort != "192.168.1.1:9000" {
+					t.Errorf("Expected ip_port '192.168.1.1:9000', got '%s'", service.IpPort)
+				}
+			},
+		},
+		{
+			name: "Invalid hostname format - no port",
+			payload: models.Service{
+				Name:        "InvalidService",
+				Hostname:    "localhost",
+				Description: "Invalid format",
+			},
+			expectedStatus: http.StatusBadRequest,
+			validateFunc:   nil,
+		},
+		{
+			name: "Invalid hostname - non-existent domain",
+			payload: models.Service{
+				Name:        "NonExistentService",
+				Hostname:    "this-domain-does-not-exist-12345.invalid:8080",
+				Description: "Non-existent domain",
+			},
+			expectedStatus: http.StatusBadRequest,
+			validateFunc:   nil,
+		},
+		{
+			name: "Missing hostname field",
+			payload: models.Service{
+				Name:        "NoHostnameService",
+				Description: "No hostname provided",
+			},
+			expectedStatus: http.StatusBadRequest,
+			validateFunc:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.payload)
+			req := httptest.NewRequest(http.MethodPost, "/api/services", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			createService(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+
+			if tt.expectedStatus == http.StatusCreated && tt.validateFunc != nil {
+				var service models.Service
+				if err := json.NewDecoder(w.Body).Decode(&service); err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
+				tt.validateFunc(t, service)
+			}
+		})
+	}
+}
+
+// TestUpdateServiceWithHostnameResolution tests hostname resolution during service update
+func TestUpdateServiceWithHostnameResolution(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Create initial service
+	result, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
+		"UpdateHostnameTest", "localhost:8080", "127.0.0.1:8080", "Initial service")
+	if err != nil {
+		t.Fatalf("Failed to create test service: %v", err)
+	}
+	serviceID, _ := result.LastInsertId()
+
+	tests := []struct {
+		name           string
+		payload        models.Service
+		expectedStatus int
+		validateFunc   func(t *testing.T, service models.Service)
+	}{
+		{
+			name: "Update hostname successfully",
+			payload: models.Service{
+				Name:        "UpdatedHostnameService",
+				Hostname:    "localhost:9090",
+				Description: "Updated with new hostname",
+			},
+			expectedStatus: http.StatusOK,
+			validateFunc: func(t *testing.T, service models.Service) {
+				if service.Hostname != "localhost:9090" {
+					t.Errorf("Expected hostname 'localhost:9090', got '%s'", service.Hostname)
+				}
+				if service.IpPort != "127.0.0.1:9090" {
+					t.Errorf("Expected ip_port '127.0.0.1:9090', got '%s'", service.IpPort)
+				}
+			},
+		},
+		{
+			name: "Update with invalid hostname format",
+			payload: models.Service{
+				Name:        "UpdatedService",
+				Hostname:    "invalid-format",
+				Description: "Invalid update",
+			},
+			expectedStatus: http.StatusBadRequest,
+			validateFunc:   nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.payload)
+			req := httptest.NewRequest(http.MethodPut, "/api/services/1", bytes.NewReader(body))
+			req.SetPathValue("id", "1")
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			updateService(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+
+			if tt.expectedStatus == http.StatusOK && tt.validateFunc != nil {
+				var service models.Service
+				if err := json.NewDecoder(w.Body).Decode(&service); err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
+				tt.validateFunc(t, service)
+			}
+		})
+	}
+
+	_ = serviceID
+}
+
+// TestCreateServiceErrorMessages tests that error messages are descriptive
+func TestCreateServiceErrorMessages(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	tests := []struct {
+		name             string
+		payload          models.Service
+		expectedStatus   int
+		expectedErrorMsg string
+	}{
+		{
+			name: "Format error provides clear message",
+			payload: models.Service{
+				Name:        "InvalidFormatService",
+				Hostname:    "no-port-here",
+				Description: "Should fail with format error",
+			},
+			expectedStatus:   http.StatusBadRequest,
+			expectedErrorMsg: "Invalid hostname format",
+		},
+		{
+			name: "DNS resolution error provides clear message",
+			payload: models.Service{
+				Name:        "DNSFailService",
+				Hostname:    "nonexistent-domain-12345.invalid:8080",
+				Description: "Should fail with DNS error",
+			},
+			expectedStatus:   http.StatusBadRequest,
+			expectedErrorMsg: "DNS resolution failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body, _ := json.Marshal(tt.payload)
+			req := httptest.NewRequest(http.MethodPost, "/api/services", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			createService(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d", tt.expectedStatus, w.Code)
+			}
+
+			responseBody := w.Body.String()
+			if !strings.Contains(responseBody, tt.expectedErrorMsg) {
+				t.Errorf("Expected error message to contain '%s', got: %s", tt.expectedErrorMsg, responseBody)
+			}
+		})
+	}
+}
+
+// TestIPAddressOptimization verifies that IP addresses don't trigger DNS lookups
+func TestIPAddressOptimization(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	tests := []struct {
+		name     string
+		hostname string
+		expected string
+	}{
+		{
+			name:     "IPv4 address passes through",
+			hostname: "192.168.1.100:8080",
+			expected: "192.168.1.100:8080",
+		},
+		{
+			name:     "Another IPv4 address",
+			hostname: "10.0.0.1:9000",
+			expected: "10.0.0.1:9000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := models.Service{
+				Name:        "IPTest" + tt.name,
+				Hostname:    tt.hostname,
+				Description: "Testing IP optimization",
+			}
+
+			body, _ := json.Marshal(payload)
+			req := httptest.NewRequest(http.MethodPost, "/api/services", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			createService(w, req)
+
+			if w.Code != http.StatusCreated {
+				t.Errorf("Expected status %d, got %d. Response: %s", http.StatusCreated, w.Code, w.Body.String())
+			}
+
+			var service models.Service
+			if err := json.NewDecoder(w.Body).Decode(&service); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
+
+			if service.IpPort != tt.expected {
+				t.Errorf("Expected ip_port '%s', got '%s'", tt.expected, service.IpPort)
+			}
+		})
+	}
 }
