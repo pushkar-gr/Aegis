@@ -357,7 +357,7 @@
                             </div>
                             <div>
                                 <p class="text-white text-sm font-medium">${escapeHtml(service.name)}</p>
-                                <p class="text-text-muted text-[10px] font-mono">${escapeHtml(service.ip_port)}</p>
+                                <p class="text-text-muted text-[10px] font-mono">${escapeHtml(service.hostname)}</p>
                             </div>
                         </div>
                         <div class="col-span-4 text-right">
@@ -369,7 +369,7 @@
 
             const availableServices = allServices.filter(s => !assignedIds.includes(s.id));
             availableSelect.innerHTML = '<option value="">Select Service...</option>' + 
-                availableServices.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.ip_port})</option>`).join('');
+                availableServices.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.hostname})</option>`).join('');
         }
 
         function openAddModal() {

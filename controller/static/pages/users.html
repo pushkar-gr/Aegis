@@ -537,7 +537,7 @@
                                 <div class="flex justify-between items-center p-3 bg-surface-highlight/30 hover:bg-surface-highlight/50 border border-white/5 rounded-lg group transition-all">
                                     <div class="flex items-center gap-3">
                                         <div class="p-1.5 rounded bg-primary/10 text-primary"><span class="material-symbols-outlined text-[16px]">check_circle</span></div>
-                                        <div><p class="font-medium text-white text-sm">${escapeHtml(s.name)}</p><p class="text-xs text-text-muted font-mono">${escapeHtml(s.ip_port)}</p></div>
+                                        <div><p class="font-medium text-white text-sm">${escapeHtml(s.name)}</p><p class="text-xs text-text-muted font-mono">${escapeHtml(s.hostname)}</p></div>
                                     </div>
                                     <button data-action="remove-user-service" data-user-id="${userId}" data-service-id="${s.id}" class="p-1.5 rounded bg-surface-dark border border-white/10 text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/10"><span class="material-symbols-outlined text-[16px]">remove</span></button>
                                 </div>`).join('')}
@@ -550,7 +550,7 @@
                                 <div class="flex justify-between items-center p-3 bg-surface-highlight/10 hover:bg-surface-highlight/30 border border-white/5 rounded-lg group transition-all">
                                     <div class="flex items-center gap-3 opacity-60 group-hover:opacity-100">
                                         <div class="p-1.5 rounded bg-white/5 text-text-muted"><span class="material-symbols-outlined text-[16px]">dns</span></div>
-                                        <div><p class="font-medium text-white text-sm">${escapeHtml(s.name)}</p><p class="text-xs text-text-muted font-mono">${escapeHtml(s.ip_port)}</p></div>
+                                        <div><p class="font-medium text-white text-sm">${escapeHtml(s.name)}</p><p class="text-xs text-text-muted font-mono">${escapeHtml(s.hostname)}</p></div>
                                     </div>
                                     <button data-action="add-user-service" data-user-id="${userId}" data-service-id="${s.id}" class="p-1.5 rounded bg-surface-dark border border-white/10 text-primary opacity-0 group-hover:opacity-100 hover:bg-primary/10"><span class="material-symbols-outlined text-[16px]">add</span></button>
                                 </div>`).join('')}
