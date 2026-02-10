@@ -281,6 +281,102 @@ func (x *Session) GetTimeLeft() int32 {
 	return 0
 }
 
+type IpChangeList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IpChanges     []*IpChangeEvent       `protobuf:"bytes,1,rep,name=ip_changes,json=ipChanges,proto3" json:"ip_changes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IpChangeList) Reset() {
+	*x = IpChangeList{}
+	mi := &file_proto_session_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IpChangeList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IpChangeList) ProtoMessage() {}
+
+func (x *IpChangeList) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_session_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IpChangeList.ProtoReflect.Descriptor instead.
+func (*IpChangeList) Descriptor() ([]byte, []int) {
+	return file_proto_session_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *IpChangeList) GetIpChanges() []*IpChangeEvent {
+	if x != nil {
+		return x.IpChanges
+	}
+	return nil
+}
+
+type IpChangeEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OldIp         uint32                 `protobuf:"varint,1,opt,name=old_ip,json=oldIp,proto3" json:"old_ip,omitempty"`
+	NewIp         uint32                 `protobuf:"varint,2,opt,name=new_ip,json=newIp,proto3" json:"new_ip,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IpChangeEvent) Reset() {
+	*x = IpChangeEvent{}
+	mi := &file_proto_session_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IpChangeEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IpChangeEvent) ProtoMessage() {}
+
+func (x *IpChangeEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_session_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IpChangeEvent.ProtoReflect.Descriptor instead.
+func (*IpChangeEvent) Descriptor() ([]byte, []int) {
+	return file_proto_session_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *IpChangeEvent) GetOldIp() uint32 {
+	if x != nil {
+		return x.OldIp
+	}
+	return 0
+}
+
+func (x *IpChangeEvent) GetNewIp() uint32 {
+	if x != nil {
+		return x.NewIp
+	}
+	return 0
+}
+
 var File_proto_session_proto protoreflect.FileDescriptor
 
 const file_proto_session_proto_rawDesc = "" +
@@ -301,10 +397,17 @@ const file_proto_session_proto_rawDesc = "" +
 	"\x06src_ip\x18\x01 \x01(\rR\x05srcIp\x12\x15\n" +
 	"\x06dst_ip\x18\x02 \x01(\rR\x05dstIp\x12\x19\n" +
 	"\bdst_port\x18\x03 \x01(\rR\adstPort\x12\x1b\n" +
-	"\ttime_left\x18\x04 \x01(\x05R\btimeLeft2\x7f\n" +
+	"\ttime_left\x18\x04 \x01(\x05R\btimeLeft\"E\n" +
+	"\fIpChangeList\x125\n" +
+	"\n" +
+	"ip_changes\x18\x01 \x03(\v2\x16.session.IpChangeEventR\tipChanges\"=\n" +
+	"\rIpChangeEvent\x12\x15\n" +
+	"\x06old_ip\x18\x01 \x01(\rR\x05oldIp\x12\x15\n" +
+	"\x06new_ip\x18\x02 \x01(\rR\x05newIp2\xb0\x01\n" +
 	"\x0eSessionManager\x122\n" +
 	"\rSubmitSession\x12\x13.session.LoginEvent\x1a\f.session.Ack\x129\n" +
-	"\x0fMonitorSessions\x12\x0e.session.Empty\x1a\x14.session.SessionList0\x01B\x18Z\x16Aegis/controller/protob\x06proto3"
+	"\x0fMonitorSessions\x12\x0e.session.Empty\x1a\x14.session.SessionList0\x01\x12/\n" +
+	"\bIpChange\x12\x15.session.IpChangeList\x1a\f.session.AckB\x18Z\x16Aegis/controller/protob\x06proto3"
 
 var (
 	file_proto_session_proto_rawDescOnce sync.Once
@@ -318,25 +421,30 @@ func file_proto_session_proto_rawDescGZIP() []byte {
 	return file_proto_session_proto_rawDescData
 }
 
-var file_proto_session_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_proto_session_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_proto_session_proto_goTypes = []any{
-	(*LoginEvent)(nil),  // 0: session.LoginEvent
-	(*Ack)(nil),         // 1: session.Ack
-	(*Empty)(nil),       // 2: session.Empty
-	(*SessionList)(nil), // 3: session.SessionList
-	(*Session)(nil),     // 4: session.Session
+	(*LoginEvent)(nil),    // 0: session.LoginEvent
+	(*Ack)(nil),           // 1: session.Ack
+	(*Empty)(nil),         // 2: session.Empty
+	(*SessionList)(nil),   // 3: session.SessionList
+	(*Session)(nil),       // 4: session.Session
+	(*IpChangeList)(nil),  // 5: session.IpChangeList
+	(*IpChangeEvent)(nil), // 6: session.IpChangeEvent
 }
 var file_proto_session_proto_depIdxs = []int32{
 	4, // 0: session.SessionList.sessions:type_name -> session.Session
-	0, // 1: session.SessionManager.SubmitSession:input_type -> session.LoginEvent
-	2, // 2: session.SessionManager.MonitorSessions:input_type -> session.Empty
-	1, // 3: session.SessionManager.SubmitSession:output_type -> session.Ack
-	3, // 4: session.SessionManager.MonitorSessions:output_type -> session.SessionList
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	6, // 1: session.IpChangeList.ip_changes:type_name -> session.IpChangeEvent
+	0, // 2: session.SessionManager.SubmitSession:input_type -> session.LoginEvent
+	2, // 3: session.SessionManager.MonitorSessions:input_type -> session.Empty
+	5, // 4: session.SessionManager.IpChange:input_type -> session.IpChangeList
+	1, // 5: session.SessionManager.SubmitSession:output_type -> session.Ack
+	3, // 6: session.SessionManager.MonitorSessions:output_type -> session.SessionList
+	1, // 7: session.SessionManager.IpChange:output_type -> session.Ack
+	5, // [5:8] is the sub-list for method output_type
+	2, // [2:5] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_proto_session_proto_init() }
@@ -350,7 +458,7 @@ func file_proto_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_session_proto_rawDesc), len(file_proto_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

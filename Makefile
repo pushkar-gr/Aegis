@@ -144,7 +144,15 @@ up:
 
 # Normal Compose Down
 down:
-	docker compose -f $(DOCKER_COMPOSE_MAIN) down
+	docker compose -f $(DOCKER_COMPOSE_MAIN) --profile "*" down
+
+ip-steal:
+	@echo "Stopping protected-service1..."
+	docker stop aegis-protected-service1
+	@echo "Starting IP stealer..."
+	docker compose -f $(DOCKER_COMPOSE_MAIN) up -d ip-stealer
+	@echo "Restarting protected-service1 (should get new IP)..."
+	docker start aegis-protected-service1
 
 # View Logs
 logs:

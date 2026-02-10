@@ -4,9 +4,11 @@ package session;
 option go_package = "Aegis/controller/proto";
 
 service SessionManager {
-  rpc SubmitSession (LoginEvent) returns (Ack);
+  rpc SubmitSession(LoginEvent) returns (Ack);
 
-  rpc MonitorSessions (Empty) returns (stream SessionList);
+  rpc MonitorSessions(Empty) returns (stream SessionList);
+
+  rpc IpChange(IpChangeList) returns (Ack);
 }
 
 message LoginEvent {
@@ -16,19 +18,22 @@ message LoginEvent {
   bool activate = 4;
 }
 
-message Ack {
-  bool success = 1;
-}
+message Ack { bool success = 1; }
 
 message Empty {}
 
-message SessionList {
-  repeated Session sessions = 1;
-}
+message SessionList { repeated Session sessions = 1; }
 
 message Session {
   uint32 src_ip = 1;
   uint32 dst_ip = 2;
   uint32 dst_port = 3;
   int32 time_left = 4;
+}
+
+message IpChangeList { repeated IpChangeEvent ip_changes = 1; }
+
+message IpChangeEvent {
+  uint32 old_ip = 1;
+  uint32 new_ip = 2;
 }

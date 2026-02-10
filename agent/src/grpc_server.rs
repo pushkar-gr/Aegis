@@ -11,7 +11,7 @@ pub mod session {
 
 use anyhow::{Context, Result, anyhow};
 use session::{
-    Ack, Empty, LoginEvent, SessionList,
+    Ack, Empty, IpChangeList, LoginEvent, SessionList,
     session_manager_server::{SessionManager, SessionManagerServer},
 };
 use std::{
@@ -160,6 +160,14 @@ impl SessionManager for SessionManagerService {
         Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
             rx,
         )))
+    }
+
+    async fn ip_change(&self, request: Request<IpChangeList>) -> Result<Response<Ack>, Status> {
+        // print for now
+        println!("request: {:?}", request);
+
+        let reply = Ack { success: true };
+        Ok(Response::new(reply))
     }
 }
 

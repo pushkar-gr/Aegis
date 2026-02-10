@@ -104,3 +104,15 @@ func MonitorStream(callback func(*SessionList)) error {
 
 	return nil
 }
+
+// SendChanedIpData sends list of changed IPs to the agent
+func SendChanedIpData(changedIps *IpChangeList, timeout time.Duration) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	res, err := c.IpChange(ctx, changedIps)
+	if err != nil {
+		return false, err
+	}
+	return res.GetSuccess(), nil
+}

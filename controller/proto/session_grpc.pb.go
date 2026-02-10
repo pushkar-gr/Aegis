@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	SessionManager_SubmitSession_FullMethodName   = "/session.SessionManager/SubmitSession"
 	SessionManager_MonitorSessions_FullMethodName = "/session.SessionManager/MonitorSessions"
+	SessionManager_IpChange_FullMethodName        = "/session.SessionManager/IpChange"
 )
 
 // SessionManagerClient is the client API for SessionManager service.
@@ -29,6 +30,7 @@ const (
 type SessionManagerClient interface {
 	SubmitSession(ctx context.Context, in *LoginEvent, opts ...grpc.CallOption) (*Ack, error)
 	MonitorSessions(ctx context.Context, in *Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SessionList], error)
+	IpChange(ctx context.Context, in *IpChangeList, opts ...grpc.CallOption) (*Ack, error)
 }
 
 type sessionManagerClient struct {
@@ -68,12 +70,23 @@ func (c *sessionManagerClient) MonitorSessions(ctx context.Context, in *Empty, o
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SessionManager_MonitorSessionsClient = grpc.ServerStreamingClient[SessionList]
 
+func (c *sessionManagerClient) IpChange(ctx context.Context, in *IpChangeList, opts ...grpc.CallOption) (*Ack, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Ack)
+	err := c.cc.Invoke(ctx, SessionManager_IpChange_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SessionManagerServer is the server API for SessionManager service.
 // All implementations must embed UnimplementedSessionManagerServer
 // for forward compatibility.
 type SessionManagerServer interface {
 	SubmitSession(context.Context, *LoginEvent) (*Ack, error)
 	MonitorSessions(*Empty, grpc.ServerStreamingServer[SessionList]) error
+	IpChange(context.Context, *IpChangeList) (*Ack, error)
 	mustEmbedUnimplementedSessionManagerServer()
 }
 
@@ -89,6 +102,9 @@ func (UnimplementedSessionManagerServer) SubmitSession(context.Context, *LoginEv
 }
 func (UnimplementedSessionManagerServer) MonitorSessions(*Empty, grpc.ServerStreamingServer[SessionList]) error {
 	return status.Error(codes.Unimplemented, "method MonitorSessions not implemented")
+}
+func (UnimplementedSessionManagerServer) IpChange(context.Context, *IpChangeList) (*Ack, error) {
+	return nil, status.Error(codes.Unimplemented, "method IpChange not implemented")
 }
 func (UnimplementedSessionManagerServer) mustEmbedUnimplementedSessionManagerServer() {}
 func (UnimplementedSessionManagerServer) testEmbeddedByValue()                        {}
@@ -140,6 +156,24 @@ func _SessionManager_MonitorSessions_Handler(srv interface{}, stream grpc.Server
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SessionManager_MonitorSessionsServer = grpc.ServerStreamingServer[SessionList]
 
+func _SessionManager_IpChange_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IpChangeList)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SessionManagerServer).IpChange(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SessionManager_IpChange_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SessionManagerServer).IpChange(ctx, req.(*IpChangeList))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SessionManager_ServiceDesc is the grpc.ServiceDesc for SessionManager service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -150,6 +184,10 @@ var SessionManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SubmitSession",
 			Handler:    _SessionManager_SubmitSession_Handler,
+		},
+		{
+			MethodName: "IpChange",
+			Handler:    _SessionManager_IpChange_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
