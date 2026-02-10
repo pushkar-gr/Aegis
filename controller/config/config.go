@@ -29,6 +29,7 @@ type Config struct {
 
 	// Session monitoring
 	MonitorRetryDelay time.Duration
+	IpUpdateInterval  time.Duration
 
 	// Connection pool settings
 	MaxOpenConns    int
@@ -55,6 +56,7 @@ func Load() *Config {
 		AgentServerName:   getEnv("AGENT_SERVER_NAME", "aegis-agent"),
 		AgentCallTimeout:  getDurationEnv("AGENT_CALL_TIMEOUT", time.Second),
 		MonitorRetryDelay: getDurationEnv("MONITOR_RETRY_DELAY", 5*time.Second),
+		IpUpdateInterval:  getDurationEnv("IP_UPDATE_INTERVAL", 60*time.Second),
 		MaxOpenConns:      getIntEnv("DB_MAX_OPEN_CONNS", 1),
 		MaxIdleConns:      getIntEnv("DB_MAX_IDLE_CONNS", 1),
 		ConnMaxLifetime:   getDurationEnv("DB_CONN_MAX_LIFETIME", time.Hour),
