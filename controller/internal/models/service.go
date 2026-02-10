@@ -6,6 +6,7 @@ type Service struct {
 	Name        string    `json:"name"`
 	Id          int       `json:"id"`
 	Description string    `json:"description"`
+	Hostname    string    `json:"hostname"`
 	IpPort      string    `json:"ip_port"`
 	CreatedAt   time.Time `json:"created_at"`
 }

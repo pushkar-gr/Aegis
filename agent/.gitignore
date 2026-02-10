@@ -4,3 +4,4 @@ target
 **/mutants.out*/
 src/bpf/*.skel.rs
 src/bpf/vmlinux.h
+aegis_verify.o

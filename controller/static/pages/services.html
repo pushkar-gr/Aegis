@@ -130,7 +130,7 @@
                 <div class="flex items-center gap-4 flex-1 w-full md:w-auto">
                     <div class="relative flex-1 md:max-w-md w-full">
                         <span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-text-muted text-[20px]">search</span>
-                        <input id="serviceSearch" class="w-full bg-surface-highlight border border-transparent focus:border-primary rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-text-muted focus:ring-0 transition-all shadow-sm" placeholder="Search services by Name or IP..." type="text"/>
+                        <input id="serviceSearch" class="w-full bg-surface-highlight border border-transparent focus:border-primary rounded-lg pl-10 pr-4 py-2 text-sm text-white placeholder-text-muted focus:ring-0 transition-all shadow-sm" placeholder="Search services by Name or Hostname..." type="text"/>
                     </div>
                     <button onclick="loadServices()" class="h-10 w-10 flex items-center justify-center rounded-lg bg-surface-highlight text-text-muted hover:text-primary hover:bg-surface-highlight/80 transition-all border border-transparent hover:border-surface-highlight" title="Refresh">
                         <span class="material-symbols-outlined text-[20px]">refresh</span>
@@ -150,7 +150,7 @@
                         <tr class="bg-surface-highlight/50 border-b border-surface-highlight">
                             <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider w-24">ID</th>
                             <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider">Name</th>
-                            <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider">IP / Port</th>
+                            <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider">Hostname</th>
                             <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider">Description</th>
                             <th class="px-6 py-4 text-xs font-mono font-medium text-text-muted uppercase tracking-wider text-right">Actions</th>
                         </tr>
@@ -184,8 +184,8 @@
                         class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all">
                 </div>
                 <div class="space-y-1.5">
-                    <label for="serviceIpPort" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">IP:Port *</label>
-                    <input type="text" id="serviceIpPort" required placeholder="e.g., 192.168.1.10:8080"
+                    <label for="serviceHostname" class="block text-xs font-bold text-gray-300 uppercase tracking-wider ml-1">HostName *</label>
+                    <input type="text" id="serviceHostname" required placeholder="e.g., protectedservice1:8080"
                         class="block w-full px-4 py-3 border-0 ring-1 ring-inset ring-white/10 rounded-lg text-white placeholder:text-gray-600 focus:ring-2 focus:ring-inset focus:ring-primary/60 text-sm bg-black/20 focus:bg-black/40 transition-all font-mono">
                 </div>
                 <div class="space-y-1.5">
@@ -250,7 +250,7 @@
                 const query = e.target.value.toLowerCase();
                 renderServices(services.filter(s => 
                     s.name.toLowerCase().includes(query) || 
-                    s.ip_port.toLowerCase().includes(query) ||
+                    s.hostname.toLowerCase().includes(query) ||
                     (s.description && s.description.toLowerCase().includes(query))
                 ));
             });
@@ -302,7 +302,7 @@
                             <span class="font-medium text-white text-sm">${escapeHtml(service.name)}</span>
                         </div>
                     </td>
-                    <td class="px-6 py-4 font-mono text-xs text-gray-400">${escapeHtml(service.ip_port)}</td>
+                    <td class="px-6 py-4 font-mono text-xs text-gray-400">${escapeHtml(service.hostname)}</td>
                     <td class="px-6 py-4 text-gray-400 text-sm max-w-xs truncate" title="${escapeHtml(service.description || '')}">${escapeHtml(service.description || '-')}</td>
                     <td class="px-6 py-4 text-right whitespace-nowrap text-sm font-medium">
                         <div class="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
@@ -327,7 +327,7 @@
             document.getElementById('modalTitle').textContent = 'Edit Service';
             document.getElementById('serviceId').value = service.id;
             document.getElementById('serviceName').value = service.name;
-            document.getElementById('serviceIpPort').value = service.ip_port;
+            document.getElementById('serviceHostname').value = service.hostname;
             document.getElementById('serviceDescription').value = service.description || '';
             document.getElementById('serviceModal').classList.remove('hidden');
         }
@@ -339,7 +339,7 @@
             const serviceId = document.getElementById('serviceId').value;
             const serviceData = {
                 name: document.getElementById('serviceName').value,
-                ip_port: document.getElementById('serviceIpPort').value,
+                hostname: document.getElementById('serviceHostname').value,
                 description: document.getElementById('serviceDescription').value
             };
             try {

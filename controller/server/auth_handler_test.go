@@ -78,6 +78,7 @@ func setupTestServer(t *testing.T) func() {
 		CREATE TABLE IF NOT EXISTS services (
 			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 			"name" TEXT NOT NULL UNIQUE,
+			"hostname" TEXT NOT NULL,
 			"ip_port" TEXT NOT NULL,
 			"description" TEXT,
 			"created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP

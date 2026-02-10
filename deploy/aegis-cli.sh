@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Configuration
-BASE_URL="https://172.21.0.5"
+BASE_URL="https://controller"
 COOKIE_FILE="session_cookies.txt"
-WGET_OPTS="--no-check-certificate -qO- --keep-session-cookies"
+WGET_OPTS="--no-check-certificate -nv -O- --keep-session-cookies --content-on-error"
 
 # Helper function to print usage
 usage() {
@@ -41,8 +41,8 @@ usage() {
     echo ""
     echo "Admin - Services:"
     echo "  list-services"
-    echo "  create-service <name> <ip_port> <description>"
-    echo "  update-service <id> <name> <ip_port> <description>"
+    echo "  create-service <name> <hostname:port> <description>"
+    echo "  update-service <id> <name> <hostname:port> <description>"
     echo "  delete-service <id>"
     exit 1
 }
@@ -235,8 +235,8 @@ case "$CMD" in
         echo ""
         ;;
     create-service)
-        if [ "$#" -ne 3 ]; then echo "Usage: $0 create-service <name> <ip_port> <description>"; exit 1; fi
-        JSON_DATA=$(printf '{"name": "%s", "ip_port": "%s", "description": "%s"}' "$1" "$2" "$3")
+        if [ "$#" -ne 3 ]; then echo "Usage: $0 create-service <name> <hostname:port> <description>"; exit 1; fi
+        JSON_DATA=$(printf '{"name": "%s", "hostname": "%s", "description": "%s"}' "$1" "$2" "$3")
         wget $WGET_OPTS \
              --load-cookies "$COOKIE_FILE" \
              --header="Content-Type: application/json" \
@@ -245,8 +245,8 @@ case "$CMD" in
         echo ""
         ;;
     update-service)
-        if [ "$#" -ne 4 ]; then echo "Usage: $0 update-service <id> <name> <ip_port> <description>"; exit 1; fi
-        JSON_DATA=$(printf '{"name": "%s", "ip_port": "%s", "description": "%s"}' "$2" "$3" "$4")
+        if [ "$#" -ne 4 ]; then echo "Usage: $0 update-service <id> <name> <hostname:port> <description>"; exit 1; fi
+        JSON_DATA=$(printf '{"name": "%s", "hostname": "%s", "description": "%s"}' "$2" "$3" "$4")
         wget $WGET_OPTS \
              --load-cookies "$COOKIE_FILE" \
              --header="Content-Type: application/json" \

@@ -331,7 +331,7 @@ func getUserServices(w http.ResponseWriter, r *http.Request) {
 
 	// Direct user services (via user_extra_services)
 	rows, err := database.DB.Query(`
-		SELECT s.id, s.name, s.ip_port, s.description, s.created_at
+		SELECT s.id, s.name, s.hostname, s.ip_port, s.description, s.created_at
 		FROM services s
 		JOIN user_extra_services ues ON s.id = ues.service_id
 		WHERE ues.user_id = ?`, userID)
@@ -353,7 +353,7 @@ func getUserServices(w http.ResponseWriter, r *http.Request) {
 		var s models.Service
 		var desc sql.NullString
 
-		if err := rows.Scan(&s.Id, &s.Name, &s.IpPort, &desc, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.Id, &s.Name, &s.Hostname, &s.IpPort, &desc, &s.CreatedAt); err != nil {
 			log.Printf("[users] get services: row scan error. %v", err)
 			continue
 		}

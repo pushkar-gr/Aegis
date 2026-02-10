@@ -27,12 +27,12 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 
 	// Logic: Union of Role-based services AND User-specific extra services
 	rows, err := database.DB.Query(`
-		SELECT s.id, s.name, s.ip_port, s.description, s.created_at
+		SELECT s.id, s.name, s.hostname, s.ip_port, s.description, s.created_at
 		FROM services s
 		JOIN role_services rs ON s.id = rs.service_id
 		WHERE rs.role_id = ?
 		UNION
-		SELECT s.id, s.name, s.ip_port, s.description, s.created_at
+		SELECT s.id, s.name, s.hostname, s.ip_port, s.description, s.created_at
 		FROM services s
 		JOIN user_extra_services ues ON s.id = ues.service_id
 		WHERE ues.user_id = ?`, roleID, userID)
@@ -52,7 +52,7 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var s models.Service
 		var desc sql.NullString
-		if err := rows.Scan(&s.Id, &s.Name, &s.IpPort, &desc, &s.CreatedAt); err == nil {
+		if err := rows.Scan(&s.Id, &s.Name, &s.Hostname, &s.IpPort, &desc, &s.CreatedAt); err == nil {
 			s.Description = desc.String
 			services = append(services, s)
 		}
@@ -75,7 +75,7 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := database.DB.Query(`
-		SELECT s.id, s.name, s.ip_port, s.description, s.created_at, uas.time_left, uas.updated_at
+		SELECT s.id, s.name, s.hostname, s.ip_port, s.description, s.created_at, uas.time_left, uas.updated_at
 		FROM services s
 		JOIN user_active_services uas ON s.id = uas.service_id
 		WHERE uas.user_id = ?
@@ -96,7 +96,7 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var as models.ActiveService
 		var desc sql.NullString
-		if err := rows.Scan(&as.Id, &as.Name, &as.IpPort, &desc, &as.CreatedAt, &as.TimeLeft, &as.UpdatedAt); err == nil {
+		if err := rows.Scan(&as.Id, &as.Name, &as.Hostname, &as.IpPort, &desc, &as.CreatedAt, &as.TimeLeft, &as.UpdatedAt); err == nil {
 			as.Description = desc.String
 			services = append(services, as)
 		}

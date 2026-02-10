@@ -1,5 +1,5 @@
 services:
-  # 1. Control Plane
+  # Control Plane
   controller:
     build:
       context: ../controller
@@ -12,11 +12,10 @@ services:
       - ./certs:/app/certs
     networks:
       private_net:
-        ipv4_address: 172.21.0.5
     command: >
       sh -c "ip route add 172.20.0.0/24 via 172.21.0.10 && /app/controller"
 
-  # 2. Data Plane and router
+  # Data Plane and router
   agent:
     build:
       context: ..
@@ -41,34 +40,72 @@ services:
       private_net:
         ipv4_address: 172.21.0.10
 
-  # 3. Zone A - Public
+  # DNS for devices in public zone
+  dns:
+    image: alpine:latest
+    container_name: aegis-dns
+    hostname: dns-server
+    networks:
+      public_net:
+        ipv4_address: 172.20.0.2
+      private_net:
+    command: >
+      sh -c "apk add --no-cache dnsmasq &&
+      dnsmasq -k \
+      --no-resolv \
+      --server=127.0.0.11 \
+      --log-queries \
+      --log-facility=-"
+
+  # Zone A - Public
   client:
     image: alpine:latest
     container_name: aegis-client
     cap_add: [NET_ADMIN]
+    dns:
+      - 172.20.0.2
     volumes:
       - ./aegis-cli.sh:/usr/local/bin/app
     networks:
       public_net:
         ipv4_address: 172.20.0.5
     command: >
-      sh -c "apk add --no-cache bash wget && chmod +x /usr/local/bin/app && ip route add 172.21.0.0/24 via 172.20.0.10 && sleep infinity"
+      sh -c "apk add --no-cache bash wget &&
+      chmod +x /usr/local/bin/app &&
+      ip route add 172.21.0.0/24 via 172.20.0.10 &&
+      sleep infinity"
 
-  # 4. Zone B - Private
-  protected_service:
-    image: alpine:latest 
-    container_name: aegis-service
+  # Zone B - Private
+  protected_service_1:
+    image: alpine:latest
+    container_name: aegis-protected-service1
+    hostname: protectedservice1
     cap_add: [NET_ADMIN]
     networks:
       private_net:
-        ipv4_address: 172.21.0.20
+    command:
+      - sh
+      - -c
+      - |
+        ip route add 172.20.0.0/24 via 172.21.0.10
+        while true; do
+          echo -e "HTTP/1.1 200 OK\n\nHello from protected service 1" | nc -l -p 8080
+        done
+
+  protected_service_2:
+    image: alpine:latest 
+    container_name: aegis-protected-service2
+    hostname: protectedservice2
+    cap_add: [NET_ADMIN]
+    networks:
+      private_net:
     command: 
       - sh
       - -c
       - |
         ip route add 172.20.0.0/24 via 172.21.0.10
         while true; do 
-          echo -e "HTTP/1.1 200 OK\n\nHello" | nc -l -p 8080
+          echo -e "HTTP/1.1 200 OK\n\nHello from protected service 2" | nc -l -p 8080
         done
 
 networks:

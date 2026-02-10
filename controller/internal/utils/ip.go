@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -51,4 +52,25 @@ func GetClientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return ip
+}
+
+// ResolveHostname looks up the IP addresses for a given hostname
+func ResolveHostname(hostname string) ([]string, error) {
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve hostname %s: %w", hostname, err)
+	}
+
+	var ipStrings []string
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			ipStrings = append(ipStrings, ipv4.String())
+		}
+	}
+
+	if len(ipStrings) == 0 {
+		return nil, fmt.Errorf("no IPv4 addresses found for hostname %s", hostname)
+	}
+
+	return ipStrings, nil
 }

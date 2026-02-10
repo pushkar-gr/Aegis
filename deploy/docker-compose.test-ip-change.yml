@@ -1,0 +1,35 @@
+services:
+  controller:
+    build:
+      context: ../controller
+      dockerfile: Dockerfile.controller
+    container_name: aegis-controller
+    hostname: controller
+    ports:
+      - "443:443"
+    environment:
+      - JWT_TOKEN_LIFETIME=10
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./certs:/app/certs
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      private_net:
+
+  target-app:
+    image: nginx:alpine
+    container_name: target-app
+    networks:
+      private_net:
+
+  ip-stealer:
+    image: alpine
+    command: sleep infinity
+    networks:
+      private_net:
+    profiles: ["manual"]
+
+networks:
+  private_net:
+    driver: bridge

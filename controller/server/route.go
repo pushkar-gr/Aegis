@@ -15,7 +15,7 @@ func StartServer(port, certFile, keyFile string, jwtKeyByte []byte, jwtTokenLife
 	jwtTokenLifetime = jwtTokenLifetimeDuration
 	mux := http.NewServeMux()
 
-	// --- Static Files ---
+	// Static files
 	fs := http.FileServer(http.Dir("static"))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", fs))
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
@@ -26,15 +26,15 @@ func StartServer(port, certFile, keyFile string, jwtKeyByte []byte, jwtTokenLife
 		http.NotFound(w, r)
 	})
 
-	// --- API Routes ---
+	// API routes
 
-	// 1. Authentication
+	// Authentication
 	mux.HandleFunc("POST /api/auth/login", login)
 	mux.Handle("POST /api/auth/logout", authMiddleware.ThenFunc(logout))
 	mux.Handle("POST /api/auth/password", authMiddleware.ThenFunc(updatePassword))
 	mux.Handle("GET /api/auth/me", authMiddleware.ThenFunc(getCurrentUser))
 
-	// 2. Roles (RBAC)
+	// Roles (RBAC)
 	mux.Handle("GET /api/roles", adminOrRootOnly.ThenFunc(getRoles))
 	mux.Handle("POST /api/roles", rootOnly.ThenFunc(createRole))
 	mux.Handle("DELETE /api/roles/{id}", rootOnly.ThenFunc(deleteRole))
@@ -42,13 +42,13 @@ func StartServer(port, certFile, keyFile string, jwtKeyByte []byte, jwtTokenLife
 	mux.Handle("POST /api/roles/{id}/services", adminOrRootOnly.ThenFunc(addRoleService))
 	mux.Handle("DELETE /api/roles/{id}/services/{svc_id}", adminOrRootOnly.ThenFunc(removeRoleService))
 
-	// 3. Services (Global Management)
+	// Services (global management)
 	mux.Handle("GET /api/services", adminOrRootOnly.ThenFunc(getServices))
 	mux.Handle("POST /api/services", adminOrRootOnly.ThenFunc(createService))
 	mux.Handle("PUT /api/services/{id}", adminOrRootOnly.ThenFunc(updateService))
 	mux.Handle("DELETE /api/services/{id}", adminOrRootOnly.ThenFunc(deleteService))
 
-	// 4. User Management (Admin Panel)
+	// User management (admin panel)
 	mux.Handle("GET /api/users", adminOrRootOnly.ThenFunc(getUsers))
 	mux.Handle("POST /api/users", adminOrRootOnly.ThenFunc(createUser))
 	mux.Handle("DELETE /api/users/{id}", adminOrRootOnly.ThenFunc(deleteUser))
@@ -58,7 +58,7 @@ func StartServer(port, certFile, keyFile string, jwtKeyByte []byte, jwtTokenLife
 	mux.Handle("POST /api/users/{id}/services", adminOrRootOnly.ThenFunc(addUserService))
 	mux.Handle("DELETE /api/users/{id}/services/{svc_id}", adminOrRootOnly.ThenFunc(removeUserService))
 
-	// 5. User Dashboard (Client)
+	// User dashboard (client)
 	mux.Handle("GET /api/me/services", authMiddleware.ThenFunc(getMyServices))
 	mux.Handle("GET /api/me/selected", authMiddleware.ThenFunc(getMyActiveServices))
 	mux.Handle("POST /api/me/selected", authMiddleware.ThenFunc(selectActiveService))

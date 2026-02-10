@@ -292,7 +292,7 @@
                 services = services.filter(s => 
                     s.name.toLowerCase().includes(searchQuery) ||
                     (s.description && s.description.toLowerCase().includes(searchQuery)) ||
-                    s.ip_port.toLowerCase().includes(searchQuery)
+                    s.hostname.toLowerCase().includes(searchQuery)
                 );
             }
             
@@ -324,7 +324,7 @@
                                     </div>
                                     <h3 class="text-white font-bold text-base truncate">${escapeHtml(service.name)}</h3>
                                 </div>
-                                <p class="text-text-muted text-[10px] font-mono bg-black/20 px-1.5 py-0.5 rounded w-fit">${escapeHtml(service.ip_port)}</p>
+                                <p class="text-text-muted text-[10px] font-mono bg-black/20 px-1.5 py-0.5 rounded w-fit">${escapeHtml(service.hostname)}</p>
                             </div>
                             <div class="relative h-10 w-10 flex items-center justify-center">
                                 <svg class="transform -rotate-90 w-full h-full" viewBox="0 0 36 36">
@@ -355,7 +355,7 @@
                                 <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-gray-600"></span>
                                 <h3 class="text-gray-300 font-bold text-base truncate">${escapeHtml(service.name)}</h3>
                             </div>
-                            <p class="text-gray-500 text-[10px] font-mono bg-black/20 px-1.5 py-0.5 rounded w-fit">${escapeHtml(service.ip_port)}</p>
+                            <p class="text-gray-500 text-[10px] font-mono bg-black/20 px-1.5 py-0.5 rounded w-fit">${escapeHtml(service.hostname)}</p>
                         </div>
                         <div class="w-10 h-10 rounded-full bg-surface-highlight/30 flex items-center justify-center text-gray-500 border border-white/5">
                             <span class="material-symbols-outlined text-[20px]">dns</span>
