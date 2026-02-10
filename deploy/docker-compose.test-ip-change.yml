@@ -13,6 +13,7 @@ services:
       - NET_ADMIN
     volumes:
       - ./certs:/app/certs
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       private_net:
 

@@ -4,6 +4,7 @@ import (
 	"Aegis/controller/config"
 	"Aegis/controller/database"
 	"Aegis/controller/internal/utils"
+	"Aegis/controller/internal/watcher"
 	"Aegis/controller/proto"
 	"Aegis/controller/server"
 	"fmt"
@@ -45,6 +46,7 @@ func main() {
 
 	go connectGrpc()
 	go updateIpFromHostnames(cfg.IpUpdateInterval)
+	go watcher.StartDockerWatcher()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
