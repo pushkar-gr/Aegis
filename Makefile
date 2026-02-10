@@ -2,11 +2,13 @@ CONTROLLER_DIR := controller
 AGENT_DIR := agent
 PROTO_SRC_DIR := proto
 BIN_DIR := bin
+PWD := $(shell pwd)
+GO_BIN := $(shell go env GOPATH)/bin
 
 DOCKER_COMPOSE_TEST := deploy/docker-compose.test-ip-change.yml
 DOCKER_COMPOSE_MAIN := deploy/docker-compose.yml
 
-.PHONY: all build build-go build-rust run clean proto deps-proto vmlinux test test-go test-rust docker-build up down logs test-ip-up test-ip-steal test-ip-down
+.PHONY: all build build-go build-rust run clean proto deps-proto vmlinux ci ci-go ci-rust verify-ebpf test test-go test-rust docker-build up down logs test-ip-up test-ip-steal test-ip-down
 
 all: build
 
@@ -24,7 +26,7 @@ build-rust:
 	@echo "Building Agent (Rust)..."
 	@mkdir -p $(BIN_DIR)
 	@if ! command -v cargo >/dev/null 2>&1; then \
-		echo "Error: cargo not found. Please install Rust."; \
+		echo "Error: cargo not found. Install Rust."; \
 		exit 1; \
 	fi
 	@if [ ! -f $(AGENT_DIR)/src/bpf/vmlinux.h ]; then \
@@ -40,6 +42,51 @@ clean:
 	rm -rf $(BIN_DIR)
 	rm -f $(AGENT_DIR)/src/bpf/*.skel.rs
 	rm -f $(AGENT_DIR)/src/bpf/vmlinux.h
+	cd $(AGENT_DIR) && cargo clean
+
+# Run CI locally
+ci: ci-go ci-rust
+
+# Go CI: Lint (Docker), Vuln Check (Docker), Test, Build
+ci-go:
+	@echo "--- [CI] Starting Go Controller Checks ---"
+	@echo "[Lint] Running golangci-lint (via Docker)..."
+	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -w /app golangci/golangci-lint:latest golangci-lint run -v
+	
+	@echo "[Vuln] Running govulncheck (via Docker)..."
+	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -w /app golang:1.25.7 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	
+	@echo "[Test] Running Unit Tests..."
+	cd $(CONTROLLER_DIR) && JWT_SECRET="test-secret" go test -v ./...
+	
+	@echo "[Build] Verifying Build..."
+	cd $(CONTROLLER_DIR) && go build -o ../$(BIN_DIR)/controller ./main.go
+	@echo "--- [CI] Go Checks Passed ---"
+
+# Rust CI: Format, Build (Gen Skel), Clippy, BPF Verify, Test
+ci-rust: vmlinux
+	@echo "--- [CI] Starting Rust Agent Checks ---"
+	@echo "[Build] Building (Generates .skel.rs)..."
+	cd $(AGENT_DIR) && cargo build --verbose
+	
+	@echo "[Format] Checking formatting..."
+	cd $(AGENT_DIR) && cargo fmt -- --check
+	
+	@echo "[Lint] Running Clippy..."
+	cd $(AGENT_DIR) && cargo clippy -- -D warnings
+	
+	@echo "[Verify] Checking eBPF C-Source Safety (Clang)..."
+	$(MAKE) verify-ebpf
+	
+	@echo "[Test] Running Unit Tests..."
+	cd $(AGENT_DIR) && cargo test --verbose
+	@echo "--- [CI] Rust Checks Passed ---"
+
+# Helper to verify eBPF compilation (simulates CI verification step)
+verify-ebpf:
+	@echo "Compiling eBPF source with Clang to verify syntax..."
+	cd $(AGENT_DIR) && clang -g -O2 -target bpf -D__TARGET_ARCH_x86 -c src/bpf/aegis.bpf.c -o aegis_verify.o
+	@echo "eBPF Compilation successful (Artifact: $(AGENT_DIR)/aegis_verify.o)"
 
 # Install required Go plugins for Protoc
 deps-proto:
@@ -50,12 +97,12 @@ deps-proto:
 # Generate Go code from .proto files
 proto:
 	@echo "Checking for protoc plugins..."
-	@if ! command -v protoc-gen-go >/dev/null 2>&1 || ! command -v protoc-gen-go-grpc >/dev/null 2>&1; then \
-		echo "Protoc plugins not found. Running 'make deps-proto'..."; \
+	@if [ ! -x "$(GO_BIN)/protoc-gen-go" ] || [ ! -x "$(GO_BIN)/protoc-gen-go-grpc" ]; then \
+		echo "Protoc plugins not found in $(GO_BIN). Running 'make deps-proto'..."; \
 		$(MAKE) deps-proto; \
 	fi
 	@echo "Generating Go Protocol Buffers..."
-	protoc --go_out=./$(CONTROLLER_DIR) --go_opt=paths=source_relative \
+	PATH=$(GO_BIN):$$PATH protoc --go_out=./$(CONTROLLER_DIR) --go_opt=paths=source_relative \
 	       --go-grpc_out=./$(CONTROLLER_DIR) --go-grpc_opt=paths=source_relative \
 	       $(PROTO_SRC_DIR)/*.proto
 	@echo "Proto generation complete."
@@ -75,13 +122,16 @@ test-rust:
 
 # Generate vmlinux.h from the running kernel into the Agent's source dir
 vmlinux:
-	@if [ -z "$(BPFTOOL)" ]; then \
-		echo "Error: bpftool not found. Please install it (e.g., apt install linux-tools-common)"; \
-		exit 1; \
-	fi
 	@echo "Generating vmlinux.h..."
 	@mkdir -p $(AGENT_DIR)/src/bpf
-	$(BPFTOOL) btf dump file /sys/kernel/btf/vmlinux format c > $(AGENT_DIR)/src/bpf/vmlinux.h
+	@if command -v bpftool >/dev/null 2>&1; then \
+		bpftool btf dump file /sys/kernel/btf/vmlinux format c > $(AGENT_DIR)/src/bpf/vmlinux.h; \
+	elif [ -f /usr/sbin/bpftool ]; then \
+		/usr/sbin/bpftool btf dump file /sys/kernel/btf/vmlinux format c > $(AGENT_DIR)/src/bpf/vmlinux.h; \
+	else \
+		echo "Error: bpftool not found in PATH or /usr/sbin. Install it."; \
+		exit 1; \
+	fi
 	@echo "vmlinux.h generated at $(AGENT_DIR)/src/bpf/vmlinux.h"
 
 # Normal Compose Build with no cache

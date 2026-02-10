@@ -185,7 +185,7 @@ func syncHostnameIPs() {
 		}
 		services = append(services, s)
 	}
-	rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	// Process all service
 	for _, s := range services {

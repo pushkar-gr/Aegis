@@ -20,7 +20,7 @@ func StartDockerWatcher() {
 		log.Printf("[WARN] Docker watcher: failed to create client: %v. Relying on DNS polling.", err)
 		return
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	// Verify connection
 	if _, err := cli.Ping(context.Background()); err != nil {
@@ -102,7 +102,7 @@ func findServiceByHostnamePrefix(containerName string) (int, string, string, err
 	if err != nil {
 		return 0, "", "", err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var id int
