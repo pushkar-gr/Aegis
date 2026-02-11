@@ -143,14 +143,22 @@ async fn main() -> Result<()> {
         },
     ));
 
+    let bpf_ip_update = bpf.clone();
+    let update_ip_handler = Arc::new(Mutex::new(
+        move |old_dest_ip: u32, new_dest_ip: u32| -> Result<usize> {
+            let bpf = bpf_ip_update
+                .lock()
+                .map_err(|_| anyhow::anyhow!("BPF mutex poisoned"))?;
+            bpf.update_dest_ip(old_dest_ip.to_be(), new_dest_ip.to_be())
+        },
+    ));
+
     start_grpc_server(
+        &config,
         server_addr,
-        config.controller_ip,
         modify_rule_handler,
+        update_ip_handler,
         monitor_tx,
-        &config.cert_file,
-        &config.key_file,
-        &config.ca_file,
     )
     .await?;
 

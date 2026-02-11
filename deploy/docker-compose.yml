@@ -52,6 +52,7 @@ services:
     command: >
       sh -c "apk add --no-cache dnsmasq &&
       dnsmasq -k \
+      --cache-size=0 \
       --no-resolv \
       --server=127.0.0.11 \
       --log-queries \
