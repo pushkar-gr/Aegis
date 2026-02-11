@@ -432,7 +432,7 @@ func TestCreateServiceErrorMessages(t *testing.T) {
 				Description: "Should fail with format error",
 			},
 			expectedStatus:   http.StatusBadRequest,
-			expectedErrorMsg: "Invalid hostname format",
+			expectedErrorMsg: "invalid hostname format",
 		},
 		{
 			name: "DNS resolution error provides clear message",

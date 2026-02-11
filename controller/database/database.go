@@ -1,6 +1,7 @@
 package database
 
 import (
+	"Aegis/controller/internal/utils"
 	"database/sql"
 	"fmt"
 	"log"
@@ -287,9 +288,7 @@ func GetServiceMap() (map[string]int, error) {
 		var ip uint32
 		var port uint16
 		if err := rows.Scan(&id, &ip, &port); err == nil {
-			ipStr := fmt.Sprintf("%d.%d.%d.%d:%d",
-				byte(ip>>24), byte(ip>>16), byte(ip>>8), byte(ip),
-				port)
+			ipStr := fmt.Sprintf("%s:%d", utils.Uint32ToIp(ip), port)
 			svcMap[ipStr] = id
 		}
 	}

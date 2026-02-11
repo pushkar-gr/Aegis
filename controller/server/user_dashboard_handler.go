@@ -152,7 +152,7 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[dashboard] activating service ID %d for user ID %d from IP %s to %d:%d", req.ServiceID, userID, clientIP, dstIP, dstPort)
 
 	// Call SendSessionData to activate the session
-	success, err := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, dstPort, true, time.Second)
+	success, err := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), true, time.Second)
 	if err != nil {
 		log.Printf("[dashboard] SendSessionData failed for service ID %d: %v", req.ServiceID, err)
 		http.Error(w, "Failed to activate session", http.StatusInternalServerError)
@@ -204,7 +204,7 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[dashboard] deactivating service ID %d for user ID %d from IP %s to %d:%d", svcID, userID, clientIP, dstIP, dstPort)
 
 	// Call SendSessionData to deactivate the session
-	success, err := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, dstPort, false, time.Second)
+	success, err := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), false, time.Second)
 	if err != nil {
 		log.Printf("[dashboard] SendSessionData failed for service ID %d deactivation: %v", svcID, err)
 	} else if !success {
@@ -236,11 +236,11 @@ func resolveCurrentUser(r *http.Request) (int, int, error) {
 
 // parseServiceIPPort retrieves and parses service IP and port from database.
 // Returns destination IP, port.
-func parseServiceIPPort(serviceID int) (uint32, uint32, error) {
+func parseServiceIPPort(serviceID int) (uint32, uint16, error) {
 	ip, port, err := database.GetServiceIPPort(serviceID)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	return ip, uint32(port), nil
+	return ip, port, nil
 }
