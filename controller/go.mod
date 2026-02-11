@@ -1,6 +1,6 @@
 module Aegis/controller
 
-go 1.25.5
+go 1.25.7
 
 require (
 	github.com/docker/docker v27.1.1+incompatible
