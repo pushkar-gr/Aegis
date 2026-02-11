@@ -167,23 +167,24 @@ func syncHostnameIPs() {
 	}
 
 	// Query all services
-	rows, err := database.DB.Query("SELECT id, hostname, ip_port FROM services")
+	rows, err := database.DB.Query("SELECT id, hostname, ip, port FROM services")
 	if err != nil {
 		log.Printf("[ERROR] updateHostnames: failed to query services: %v", err)
 		return
 	}
 
 	type svcData struct {
-		id            int
-		hostname      string
-		currentIPPort string
+		id          int
+		hostname    string
+		currentIP   uint32
+		currentPort uint16
 	}
 	var services []svcData
 
 	// Read all rows
 	for rows.Next() {
 		var s svcData
-		if err := rows.Scan(&s.id, &s.hostname, &s.currentIPPort); err != nil {
+		if err := rows.Scan(&s.id, &s.hostname, &s.currentIP, &s.currentPort); err != nil {
 			log.Printf("[ERROR] updateHostnames: scan error: %v", err)
 			continue
 		}
@@ -191,7 +192,7 @@ func syncHostnameIPs() {
 	}
 	defer func() { _ = rows.Close() }()
 
-	// Process all service
+	// Process all services
 	for _, s := range services {
 		host, port, err := net.SplitHostPort(s.hostname)
 		if err != nil {
@@ -213,35 +214,49 @@ func syncHostnameIPs() {
 			resolvedIP = ips[0]
 		}
 
-		newIPPort := net.JoinHostPort(resolvedIP, port)
+		// Convert new IP to uint32
+		newIpInt := utils.IpToUint32(resolvedIP)
 
-		// Update DB if different
-		if newIPPort != s.currentIPPort {
-			log.Printf("[INFO] Service %d (%s) IP changed: %s -> %s. Updating DB.", s.id, s.hostname, s.currentIPPort, newIPPort)
+		// Parse port
+		portNum, err := net.LookupPort("tcp", port)
+		if err != nil {
+			log.Printf("[WARN] updateHostnames: invalid port %s for service ID %d: %v", port, s.id, err)
+			continue
+		}
+		newPort := uint16(portNum)
 
-			_, err := database.DB.Exec("UPDATE services SET ip_port = ? WHERE id = ?", newIPPort, s.id)
+		// Update DB if IP or port changed
+		if newIpInt != s.currentIP || newPort != s.currentPort {
+			oldIpStr := utils.Uint32ToIp(s.currentIP)
+			log.Printf("[INFO] Service %d (%s) changed: %s:%d -> %s:%d. Updating DB.",
+				s.id, s.hostname, oldIpStr, s.currentPort, resolvedIP, newPort)
+
+			_, err := database.DB.Exec("UPDATE services SET ip = ?, port = ? WHERE id = ?", newIpInt, newPort, s.id)
 			if err != nil {
 				log.Printf("[ERROR] updateHostnames: failed to update service ID %d: %v", s.id, err)
 			}
 
-			oldHost, _, _ := net.SplitHostPort(s.currentIPPort)
-			oldIpInt := utils.IpToUint32(oldHost)
-			newIpInt := utils.IpToUint32(resolvedIP)
-			changedIps.IpChanges = append(changedIps.IpChanges, &proto.IpChangeEvent{
-				OldIp: oldIpInt,
-				NewIp: newIpInt,
-			})
+			// Only add to changedIps if the IP changed (not just the port)
+			if s.currentIP != newIpInt {
+				changedIps.IpChanges = append(changedIps.IpChanges, &proto.IpChangeEvent{
+					OldIp: s.currentIP,
+					NewIp: newIpInt,
+				})
+			}
 		}
 	}
 
-	success, err := proto.SendChanedIpData(changedIps, time.Second)
-	if err != nil {
-		log.Printf("[ERROR] updateHostnames: failed to update IPs in agent: %v", err)
-	}
-	log.Println(changedIps)
-	if success {
-		log.Printf("[INFO] updateHostnames: updated IPs in agent")
-	} else {
-		log.Printf("[ERROR] updateHostnames: failed to update IPs in agent")
+	// Only send to agent if there are IP changes
+	if len(changedIps.IpChanges) > 0 {
+		success, err := proto.SendChanedIpData(changedIps, time.Second)
+		if err != nil {
+			log.Printf("[ERROR] updateHostnames: failed to update IPs in agent: %v", err)
+		}
+		log.Println(changedIps)
+		if success {
+			log.Printf("[INFO] updateHostnames: updated %d IPs in agent", len(changedIps.IpChanges))
+		} else {
+			log.Printf("[ERROR] updateHostnames: failed to update IPs in agent")
+		}
 	}
 }

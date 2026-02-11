@@ -15,8 +15,8 @@ func TestGetServices(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"TestService", "localhost:8080", "127.0.0.1:8080", "Test service")
+	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"TestService", "localhost:8080", 0x7F000001, 8080, "Test service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -98,8 +98,8 @@ func TestCreateServiceDuplicate(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"ExistingService", "localhost:8080", "127.0.0.1:8080", "Existing service")
+	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"ExistingService", "localhost:8080", 0x7F000001, 8080, "Existing service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -126,8 +126,8 @@ func TestUpdateService(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	result, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"UpdateService", "localhost:8080", "127.0.0.1:8080", "Update test")
+	result, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"UpdateService", "localhost:8080", 0x7F000001, 8080, "Update test")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -192,8 +192,8 @@ func TestDeleteService(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	result, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"DeleteService", "localhost:8080", "127.0.0.1:8080", "Delete test")
+	result, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"DeleteService", "localhost:8080", 0x7F000001, 8080, "Delete test")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -261,8 +261,8 @@ func TestCreateServiceWithHostnameResolution(t *testing.T) {
 				if service.Hostname != "localhost:8080" {
 					t.Errorf("Expected hostname 'localhost:8080', got '%s'", service.Hostname)
 				}
-				if service.IpPort != "127.0.0.1:8080" {
-					t.Errorf("Expected ip_port '127.0.0.1:8080', got '%s'", service.IpPort)
+				if service.Ip != 0x7F000001 || service.Port != 8080 {
+					t.Errorf("Expected ip 0x7F000001 port 8080, got ip 0x%08X port %d", service.Ip, service.Port)
 				}
 			},
 		},
@@ -278,8 +278,8 @@ func TestCreateServiceWithHostnameResolution(t *testing.T) {
 				if service.Hostname != "192.168.1.1:9000" {
 					t.Errorf("Expected hostname '192.168.1.1:9000', got '%s'", service.Hostname)
 				}
-				if service.IpPort != "192.168.1.1:9000" {
-					t.Errorf("Expected ip_port '192.168.1.1:9000', got '%s'", service.IpPort)
+				if service.Ip != 0xC0A80101 || service.Port != 9000 {
+					t.Errorf("Expected ip 0xC0A80101 port 9000, got ip 0x%08X port %d", service.Ip, service.Port)
 				}
 			},
 		},
@@ -344,8 +344,8 @@ func TestUpdateServiceWithHostnameResolution(t *testing.T) {
 	defer cleanup()
 
 	// Create initial service
-	result, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"UpdateHostnameTest", "localhost:8080", "127.0.0.1:8080", "Initial service")
+	result, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"UpdateHostnameTest", "localhost:8080", 0x7F000001, 8080, "Initial service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -369,8 +369,8 @@ func TestUpdateServiceWithHostnameResolution(t *testing.T) {
 				if service.Hostname != "localhost:9090" {
 					t.Errorf("Expected hostname 'localhost:9090', got '%s'", service.Hostname)
 				}
-				if service.IpPort != "127.0.0.1:9090" {
-					t.Errorf("Expected ip_port '127.0.0.1:9090', got '%s'", service.IpPort)
+				if service.Ip != 0x7F000001 || service.Port != 9090 {
+					t.Errorf("Expected ip 0x7F000001 port 9090, got ip 0x%08X port %d", service.Ip, service.Port)
 				}
 			},
 		},
@@ -432,7 +432,7 @@ func TestCreateServiceErrorMessages(t *testing.T) {
 				Description: "Should fail with format error",
 			},
 			expectedStatus:   http.StatusBadRequest,
-			expectedErrorMsg: "Invalid hostname format",
+			expectedErrorMsg: "invalid hostname format",
 		},
 		{
 			name: "DNS resolution error provides clear message",
@@ -473,19 +473,22 @@ func TestIPAddressOptimization(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
-		name     string
-		hostname string
-		expected string
+		name       string
+		hostname   string
+		expectedIp uint32
+		expectedPort uint16
 	}{
 		{
-			name:     "IPv4 address passes through",
-			hostname: "192.168.1.100:8080",
-			expected: "192.168.1.100:8080",
+			name:       "IPv4 address passes through",
+			hostname:   "192.168.1.100:8080",
+			expectedIp: 0xC0A80164, // 192.168.1.100
+			expectedPort: 8080,
 		},
 		{
-			name:     "Another IPv4 address",
-			hostname: "10.0.0.1:9000",
-			expected: "10.0.0.1:9000",
+			name:       "Another IPv4 address",
+			hostname:   "10.0.0.1:9000",
+			expectedIp: 0x0A000001, // 10.0.0.1
+			expectedPort: 9000,
 		},
 	}
 
@@ -513,8 +516,9 @@ func TestIPAddressOptimization(t *testing.T) {
 				t.Fatalf("Failed to decode response: %v", err)
 			}
 
-			if service.IpPort != tt.expected {
-				t.Errorf("Expected ip_port '%s', got '%s'", tt.expected, service.IpPort)
+			if service.Ip != tt.expectedIp || service.Port != tt.expectedPort {
+				t.Errorf("Expected ip 0x%08X port %d, got ip 0x%08X port %d", 
+					tt.expectedIp, tt.expectedPort, service.Ip, service.Port)
 			}
 		})
 	}

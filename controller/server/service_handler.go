@@ -19,7 +19,7 @@ import (
 func getServices(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	rows, err := database.DB.Query("SELECT id, name, hostname, ip_port, description, created_at FROM services")
+	rows, err := database.DB.Query("SELECT id, name, hostname, ip, port, description, created_at FROM services")
 	if err != nil {
 		log.Printf("[services] get all failed: database query error. %v", err)
 		http.Error(w, "Failed to retrieve services", http.StatusInternalServerError)
@@ -36,7 +36,7 @@ func getServices(w http.ResponseWriter, r *http.Request) {
 		var s models.Service
 		var desc sql.NullString
 
-		if err := rows.Scan(&s.Id, &s.Name, &s.Hostname, &s.IpPort, &desc, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.Id, &s.Name, &s.Hostname, &s.Ip, &s.Port, &desc, &s.CreatedAt); err != nil {
 			log.Printf("[services] get all: row scan error. %v", err)
 			continue
 		}
@@ -71,34 +71,19 @@ func createService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	host, port, err := net.SplitHostPort(newService.Hostname)
+	// Resolve hostname and port
+	ip, port, err := resolveHostnameAndPort(newService.Hostname)
 	if err != nil {
-		log.Printf("[services] invalid address format '%s': %v", newService.Hostname, err)
-		http.Error(w, fmt.Sprintf("Invalid hostname format '%s': %v. Use hostname:port format", newService.Hostname, err), http.StatusBadRequest)
+		log.Printf("[services] create failed: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	// Check if host is already an IP address to avoid DNS lookup
-	var resolvedIP string
-	if ip := net.ParseIP(host); ip != nil {
-		// Host is already an IP address, use it
-		resolvedIP = host
-	} else {
-		// Host is a hostname, resolve it to IP
-		ips, err := utils.ResolveHostname(host)
-		if err != nil || len(ips) == 0 {
-			log.Printf("[services] failed to resolve hostname '%s': %v", host, err)
-			http.Error(w, fmt.Sprintf("DNS resolution failed for hostname '%s': %v", host, err), http.StatusBadRequest)
-			return
-		}
-		resolvedIP = ips[0]
-	}
-
-	newService.IpPort = net.JoinHostPort(resolvedIP, port)
+	newService.Ip = ip
+	newService.Port = port
 
 	result, err := database.DB.Exec(
-		"INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		newService.Name, newService.Hostname, newService.IpPort, newService.Description)
+		"INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		newService.Name, newService.Hostname, newService.Ip, newService.Port, newService.Description)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			log.Printf("[services] create failed for '%s': service name already exists", newService.Name)
@@ -114,7 +99,9 @@ func createService(w http.ResponseWriter, r *http.Request) {
 		newService.Id = int(id)
 	}
 
-	log.Printf("[services] created service '%s' (ID: %d) | Host: %s -> IP: %s", newService.Name, newService.Id, newService.Hostname, newService.IpPort)
+	ipStr := utils.Uint32ToIp(newService.Ip)
+	log.Printf("[services] created service '%s' (ID: %d) | Host: %s -> IP: %s:%d",
+		newService.Name, newService.Id, newService.Hostname, ipStr, newService.Port)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(newService); err != nil {
@@ -144,34 +131,19 @@ func updateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	host, port, err := net.SplitHostPort(service.Hostname)
+	// Resolve hostname and port
+	ip, port, err := resolveHostnameAndPort(service.Hostname)
 	if err != nil {
-		log.Printf("[services] invalid address format '%s': %v", service.Hostname, err)
-		http.Error(w, fmt.Sprintf("Invalid hostname format '%s': %v. Use hostname:port format", service.Hostname, err), http.StatusBadRequest)
+		log.Printf("[services] update failed: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	// Check if host is already an IP address to avoid DNS lookup
-	var resolvedIP string
-	if ip := net.ParseIP(host); ip != nil {
-		// Host is already an IP address, use it
-		resolvedIP = host
-	} else {
-		// Host is a hostname, resolve it to IP
-		ips, err := utils.ResolveHostname(host)
-		if err != nil || len(ips) == 0 {
-			log.Printf("[services] failed to resolve hostname '%s': %v", host, err)
-			http.Error(w, fmt.Sprintf("DNS resolution failed for hostname '%s': %v", host, err), http.StatusBadRequest)
-			return
-		}
-		resolvedIP = ips[0]
-	}
-
-	service.IpPort = net.JoinHostPort(resolvedIP, port)
+	service.Ip = ip
+	service.Port = port
 
 	result, err := database.DB.Exec(
-		"UPDATE services SET name=?, hostname=?, ip_port=?, description=? WHERE id=?",
-		service.Name, service.Hostname, service.IpPort, service.Description, id,
+		"UPDATE services SET name=?, hostname=?, ip=?, port=?, description=? WHERE id=?",
+		service.Name, service.Hostname, service.Ip, service.Port, service.Description, id,
 	)
 	if err != nil {
 		// Check for UNIQUE constraint violation
@@ -192,7 +164,9 @@ func updateService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	service.Id = id
-	log.Printf("[services] updated service '%s' (ID: %d) | Host: %s -> IP: %s", service.Name, service.Id, service.Hostname, service.IpPort)
+	ipStr := utils.Uint32ToIp(service.Ip)
+	log.Printf("[services] updated service '%s' (ID: %d) | Host: %s -> IP: %s:%d",
+		service.Name, service.Id, service.Hostname, ipStr, service.Port)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(service); err != nil {
@@ -228,4 +202,34 @@ func deleteService(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write([]byte("Service deleted successfully")); err != nil {
 		log.Printf("[services] failed to write response: %v", err)
 	}
+}
+
+// resolveHostnameAndPort parses a hostname:port string, resolves the hostname to IP,
+// and returns the IP as uint32 and port as uint16.
+// Returns error if hostname is invalid, DNS resolution fails, or port is invalid.
+func resolveHostnameAndPort(hostnameWithPort string) (uint32, uint16, error) {
+	host, portStr, err := net.SplitHostPort(hostnameWithPort)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid hostname format '%s' (use hostname:port format): %w", hostnameWithPort, err)
+	}
+
+	var resolvedIP string
+	if ip := net.ParseIP(host); ip != nil {
+		resolvedIP = host
+	} else {
+		ips, err := utils.ResolveHostname(host)
+		if err != nil || len(ips) == 0 {
+			return 0, 0, fmt.Errorf("DNS resolution failed for hostname '%s': %w. Verify the hostname is correct and DNS is reachable", host, err)
+		}
+		resolvedIP = ips[0]
+	}
+
+	ipUint32 := utils.IpToUint32(resolvedIP)
+
+	portNum, err := net.LookupPort("tcp", portStr)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid port '%s': %w. Port must be a valid TCP port number (1-65535)", portStr, err)
+	}
+
+	return ipUint32, uint16(portNum), nil
 }

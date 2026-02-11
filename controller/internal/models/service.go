@@ -7,7 +7,8 @@ type Service struct {
 	Id          int       `json:"id"`
 	Description string    `json:"description"`
 	Hostname    string    `json:"hostname"`
-	IpPort      string    `json:"ip_port"`
+	Ip          uint32    `json:"ip"` // network byte order
+	Port        uint16    `json:"port"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 

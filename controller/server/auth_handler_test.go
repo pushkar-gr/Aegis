@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,13 +19,11 @@ import (
 var testJWTKey = []byte("test-secret-key-for-testing")
 
 func setupTestServer(t *testing.T) func() {
-	tempDir := filepath.Join(os.TempDir(), "aegis-server-test-"+t.Name())
-	err := os.MkdirAll(tempDir, 0755)
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
+	tempDir := t.TempDir()
+
 	testDBPath := filepath.Join(tempDir, "test_aegis.db")
 
+	var err error
 	database.DB, err = sql.Open("sqlite3", testDBPath)
 	if err != nil {
 		t.Fatalf("Failed to open test database: %v", err)
@@ -79,7 +76,8 @@ func setupTestServer(t *testing.T) func() {
 			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 			"name" TEXT NOT NULL UNIQUE,
 			"hostname" TEXT NOT NULL,
-			"ip_port" TEXT NOT NULL,
+			"ip" INTEGER NOT NULL,
+			"port" INTEGER NOT NULL,
 			"description" TEXT,
 			"created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);`
@@ -137,7 +135,6 @@ func setupTestServer(t *testing.T) func() {
 		if database.DB != nil {
 			_ = database.DB.Close()
 		}
-		_ = os.RemoveAll(tempDir)
 	}
 }
 

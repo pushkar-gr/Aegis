@@ -1,6 +1,7 @@
 package database
 
 import (
+	"Aegis/controller/internal/utils"
 	"database/sql"
 	"os"
 	"path/filepath"
@@ -70,7 +71,8 @@ CREATE TABLE IF NOT EXISTS services (
 "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 "name" TEXT NOT NULL UNIQUE,
 "hostname" TEXT NOT NULL,
-"ip_port" TEXT NOT NULL,
+"ip" INTEGER NOT NULL,
+"port" INTEGER NOT NULL,
 "description" TEXT,
 "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );`
@@ -277,21 +279,21 @@ func TestGetServiceIPPort(t *testing.T) {
 	defer cleanup()
 
 	// Create a test service
-	result, err := DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"test_service", "192.168.1.100:8080", "192.168.1.100:8080", "Test service")
+	result, err := DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"test_service", "192.168.1.100:8080", 0xC0A80164, 8080, "Test service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
 
 	serviceID, _ := result.LastInsertId()
 
-	ipPort, err := GetServiceIPPort(int(serviceID))
+	ip, port, err := GetServiceIPPort(int(serviceID))
 	if err != nil {
 		t.Errorf("GetServiceIPPort failed: %v", err)
 	}
 
-	if ipPort != "192.168.1.100:8080" {
-		t.Errorf("Expected ip_port '192.168.1.100:8080', got %s", ipPort)
+	if ip != 0xC0A80164 || port != 8080 {
+		t.Errorf("Expected ip_port '192.168.1.100:8080', got %s:%d", utils.Uint32ToIp(ip), port)
 	}
 }
 
@@ -306,8 +308,8 @@ func TestInsertAndDeleteActiveService(t *testing.T) {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
-	_, err = DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"test_service", "192.168.1.100:8080", "192.168.1.100:8080", "Test service")
+	_, err = DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"test_service", "192.168.1.100:8080", 0xC0A80164, 8080, "Test service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -381,8 +383,8 @@ func TestCheckServiceExists(t *testing.T) {
 	defer cleanup()
 
 	// Create test service
-	result, err := DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"test_service", "192.168.1.100:8080", "192.168.1.100:8080", "Test")
+	result, err := DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"test_service", "192.168.1.100:8080", 0xC0A80164, 8080, "Test")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
