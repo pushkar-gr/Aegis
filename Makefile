@@ -174,3 +174,11 @@ test-ip-steal:
 # Full cleanup for test environment
 test-ip-down:
 	docker compose -f $(DOCKER_COMPOSE_TEST) --profile "*" down
+
+# Helper to bump version in Cargo.toml and HTML files
+bump-version:
+	@if [ -z "$(v)" ]; then echo "Usage: make bump-version v=1.1.1"; exit 1; fi
+	@echo "Bumping version to $(v)..."
+	sed -i 's/^version = ".*"/version = "$(v)"/' $(AGENT_DIR)/Cargo.toml
+	sed -i 's/v[0-9.]*-aegis/v$(v)-aegis/' $(CONTROLLER_DIR)/static/pages/*.html
+	@echo "Version bumped to $(v)"
