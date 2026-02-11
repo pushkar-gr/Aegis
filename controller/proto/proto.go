@@ -1,7 +1,6 @@
 package proto
 
 import (
-	"Aegis/controller/internal/utils"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -58,13 +57,13 @@ func Init(agentAddr, certFile, keyFile, caFile, serverName string) error {
 }
 
 // SendSessionData sends a login event to the server
-func SendSessionData(srcIp, dstIp string, port uint32, active bool, timeout time.Duration) (bool, error) {
+func SendSessionData(srcIp, dstIp uint32, port uint32, active bool, timeout time.Duration) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	req := &LoginEvent{
-		SrcIp:    utils.IpToUint32(srcIp),
-		DstIp:    utils.IpToUint32(dstIp),
+		SrcIp:    srcIp,
+		DstIp:    dstIp,
 		DstPort:  port,
 		Activate: active,
 	}

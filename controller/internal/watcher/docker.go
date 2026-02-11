@@ -58,7 +58,7 @@ func handleContainerEvent(cli *client.Client, msg events.Message) {
 	}
 
 	// Check if there is any service using the container name as a hostname
-	serviceID, currentIPPort, servicePort, err := findServiceByHostnamePrefix(containerName)
+	serviceID, currentIP, currentPort, servicePort, err := findServiceByHostnamePrefix(containerName)
 	if err != nil {
 		return
 	}
@@ -70,56 +70,87 @@ func handleContainerEvent(cli *client.Client, msg events.Message) {
 	}
 
 	// Extract IP address
-	var newIP string
+	var newIPStr string
 	for _, network := range json.NetworkSettings.Networks {
 		if network.IPAddress != "" {
-			newIP = network.IPAddress
+			newIPStr = network.IPAddress
 			break
 		}
 	}
 
-	if newIP == "" {
+	if newIPStr == "" {
 		log.Printf("[WARN] Docker watcher: container %s started but has no IP", containerName)
 		return
 	}
 
-	newIPPort := net.JoinHostPort(newIP, servicePort)
+	// Convert new IP to uint32
+	newIP := ipToUint32(newIPStr)
 
-	if newIPPort != currentIPPort {
-		log.Printf("[INFO] Docker Event: Container '%s' started. Updating Service %d IP: %s -> %s",
-			containerName, serviceID, currentIPPort, newIPPort)
+	// Parse port
+	portNum, err := net.LookupPort("tcp", servicePort)
+	if err != nil {
+		log.Printf("[WARN] Docker watcher: invalid port %s: %v", servicePort, err)
+		return
+	}
+	newPort := uint16(portNum)
 
-		_, err := database.DB.Exec("UPDATE services SET ip_port = ? WHERE id = ?", newIPPort, serviceID)
+	if newIP != currentIP || newPort != currentPort {
+		currentIPStr := uint32ToIp(currentIP)
+		log.Printf("[INFO] Docker Event: Container '%s' started. Updating Service %d IP: %s:%d -> %s:%d",
+			containerName, serviceID, currentIPStr, currentPort, newIPStr, newPort)
+
+		_, err := database.DB.Exec("UPDATE services SET ip = ?, port = ? WHERE id = ?", newIP, newPort, serviceID)
 		if err != nil {
 			log.Printf("[ERROR] Docker watcher: failed to update DB: %v", err)
 		}
 	}
 }
 
+// ipToUint32 converts an IP string to uint32 (network byte order)
+func ipToUint32(ipStr string) uint32 {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return 0
+	}
+	ip = ip.To4()
+	if ip == nil {
+		return 0
+	}
+	return uint32(ip[0])<<24 | uint32(ip[1])<<16 | uint32(ip[2])<<8 | uint32(ip[3])
+}
+
+// uint32ToIp converts uint32 (network byte order) to IP string
+func uint32ToIp(ip uint32) string {
+	return fmt.Sprintf("%d.%d.%d.%d",
+		byte(ip>>24), byte(ip>>16), byte(ip>>8), byte(ip))
+}
+
 // findServiceByHostnamePrefix checks if any registered service matches the container name.
-func findServiceByHostnamePrefix(containerName string) (int, string, string, error) {
-	rows, err := database.DB.Query("SELECT id, hostname, ip_port FROM services")
+func findServiceByHostnamePrefix(containerName string) (int, uint32, uint16, string, error) {
+	rows, err := database.DB.Query("SELECT id, hostname, ip, port FROM services")
 	if err != nil {
-		return 0, "", "", err
+		return 0, 0, 0, "", err
 	}
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var id int
-		var hostname, ipPort string
-		if err := rows.Scan(&id, &hostname, &ipPort); err != nil {
+		var hostname string
+		var ip uint32
+		var port uint16
+		if err := rows.Scan(&id, &hostname, &ip, &port); err != nil {
 			continue
 		}
 
-		host, port, _ := net.SplitHostPort(hostname)
+		host, portStr, _ := net.SplitHostPort(hostname)
 		if host == "" {
 			host = hostname
 		}
 
 		if host == containerName {
-			return id, ipPort, port, nil
+			return id, ip, port, portStr, nil
 		}
 	}
 
-	return 0, "", "", fmt.Errorf("not found")
+	return 0, 0, 0, "", fmt.Errorf("not found")
 }

@@ -161,8 +161,8 @@ func TestGetRoleServices(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"RoleService", "localhost:8080", "127.0.0.1:8080", "Role test service")
+	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"RoleService", "localhost:8080", 0x7F000001, 8080, "Role test service")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -227,8 +227,8 @@ func TestAddRoleService(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"AddRoleService", "localhost:8080", "127.0.0.1:8080", "Add role service test")
+	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"AddRoleService", "localhost:8080", 0x7F000001, 8080, "Add role service test")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}
@@ -287,8 +287,8 @@ func TestRemoveRoleService(t *testing.T) {
 	cleanup := setupTestServer(t)
 	defer cleanup()
 
-	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		"RemoveRoleService", "localhost:8080", "127.0.0.1:8080", "Remove role service test")
+	_, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		"RemoveRoleService", "localhost:8080", 0x7F000001, 8080, "Remove role service test")
 	if err != nil {
 		t.Fatalf("Failed to create test service: %v", err)
 	}

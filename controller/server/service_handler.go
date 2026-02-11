@@ -19,7 +19,7 @@ import (
 func getServices(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	rows, err := database.DB.Query("SELECT id, name, hostname, ip_port, description, created_at FROM services")
+	rows, err := database.DB.Query("SELECT id, name, hostname, ip, port, description, created_at FROM services")
 	if err != nil {
 		log.Printf("[services] get all failed: database query error. %v", err)
 		http.Error(w, "Failed to retrieve services", http.StatusInternalServerError)
@@ -36,7 +36,7 @@ func getServices(w http.ResponseWriter, r *http.Request) {
 		var s models.Service
 		var desc sql.NullString
 
-		if err := rows.Scan(&s.Id, &s.Name, &s.Hostname, &s.IpPort, &desc, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.Id, &s.Name, &s.Hostname, &s.Ip, &s.Port, &desc, &s.CreatedAt); err != nil {
 			log.Printf("[services] get all: row scan error. %v", err)
 			continue
 		}
@@ -94,11 +94,19 @@ func createService(w http.ResponseWriter, r *http.Request) {
 		resolvedIP = ips[0]
 	}
 
-	newService.IpPort = net.JoinHostPort(resolvedIP, port)
+	// Convert IP to uint32 and port to uint16
+	newService.Ip = utils.IpToUint32(resolvedIP)
+	portNum, err := net.LookupPort("tcp", port)
+	if err != nil {
+		log.Printf("[services] invalid port '%s': %v", port, err)
+		http.Error(w, fmt.Sprintf("Invalid port '%s': %v", port, err), http.StatusBadRequest)
+		return
+	}
+	newService.Port = uint16(portNum)
 
 	result, err := database.DB.Exec(
-		"INSERT INTO services (name, hostname, ip_port, description) VALUES (?, ?, ?, ?)",
-		newService.Name, newService.Hostname, newService.IpPort, newService.Description)
+		"INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
+		newService.Name, newService.Hostname, newService.Ip, newService.Port, newService.Description)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			log.Printf("[services] create failed for '%s': service name already exists", newService.Name)
@@ -114,7 +122,9 @@ func createService(w http.ResponseWriter, r *http.Request) {
 		newService.Id = int(id)
 	}
 
-	log.Printf("[services] created service '%s' (ID: %d) | Host: %s -> IP: %s", newService.Name, newService.Id, newService.Hostname, newService.IpPort)
+	ipStr := utils.Uint32ToIp(newService.Ip)
+	log.Printf("[services] created service '%s' (ID: %d) | Host: %s -> IP: %s:%d",
+		newService.Name, newService.Id, newService.Hostname, ipStr, newService.Port)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(newService); err != nil {
@@ -167,11 +177,19 @@ func updateService(w http.ResponseWriter, r *http.Request) {
 		resolvedIP = ips[0]
 	}
 
-	service.IpPort = net.JoinHostPort(resolvedIP, port)
+	// Convert IP to uint32 and port to uint16
+	service.Ip = utils.IpToUint32(resolvedIP)
+	portNum, err := net.LookupPort("tcp", port)
+	if err != nil {
+		log.Printf("[services] invalid port '%s': %v", port, err)
+		http.Error(w, fmt.Sprintf("Invalid port '%s': %v", port, err), http.StatusBadRequest)
+		return
+	}
+	service.Port = uint16(portNum)
 
 	result, err := database.DB.Exec(
-		"UPDATE services SET name=?, hostname=?, ip_port=?, description=? WHERE id=?",
-		service.Name, service.Hostname, service.IpPort, service.Description, id,
+		"UPDATE services SET name=?, hostname=?, ip=?, port=?, description=? WHERE id=?",
+		service.Name, service.Hostname, service.Ip, service.Port, service.Description, id,
 	)
 	if err != nil {
 		// Check for UNIQUE constraint violation
@@ -192,7 +210,9 @@ func updateService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	service.Id = id
-	log.Printf("[services] updated service '%s' (ID: %d) | Host: %s -> IP: %s", service.Name, service.Id, service.Hostname, service.IpPort)
+	ipStr := utils.Uint32ToIp(service.Ip)
+	log.Printf("[services] updated service '%s' (ID: %d) | Host: %s -> IP: %s:%d",
+		service.Name, service.Id, service.Hostname, ipStr, service.Port)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(service); err != nil {

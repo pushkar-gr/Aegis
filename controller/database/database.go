@@ -99,7 +99,7 @@ func InitPreparedStatements() error {
 		return fmt.Errorf("failed to prepare password update query: %w", err)
 	}
 
-	stmtGetServiceMap, err = DB.Prepare("SELECT id, ip_port FROM services")
+	stmtGetServiceMap, err = DB.Prepare("SELECT id, ip, port FROM services")
 	if err != nil {
 		return fmt.Errorf("failed to prepare service map query: %w", err)
 	}
@@ -109,7 +109,7 @@ func InitPreparedStatements() error {
 		return fmt.Errorf("failed to prepare active users query: %w", err)
 	}
 
-	stmtGetServiceIPPort, err = DB.Prepare("SELECT ip_port FROM services WHERE id = ?")
+	stmtGetServiceIPPort, err = DB.Prepare("SELECT ip, port FROM services WHERE id = ?")
 	if err != nil {
 		return fmt.Errorf("failed to prepare service IP port query: %w", err)
 	}
@@ -186,9 +186,9 @@ func GetPasswordHash(username string) (string, error) {
 }
 
 // SyncActiveSessions performs a bulk update of the user_active_services table.
-// This function efficiently synchronizes the active sessions by:
-// 1. Inserting/updating sessions from the provided list
-// 2. Removing stale sessions not in the provided list
+// This function synchronizes the active sessions by:
+// Inserting/updating sessions from the provided list
+// Removing stale sessions not in the provided list
 func SyncActiveSessions(sessions []ActiveSessionSync) error {
 	if len(sessions) == 0 {
 		// If no sessions, delete all active sessions
@@ -284,9 +284,13 @@ func GetServiceMap() (map[string]int, error) {
 	svcMap := make(map[string]int)
 	for rows.Next() {
 		var id int
-		var ipPort string
-		if err := rows.Scan(&id, &ipPort); err == nil {
-			svcMap[ipPort] = id
+		var ip uint32
+		var port uint16
+		if err := rows.Scan(&id, &ip, &port); err == nil {
+			ipStr := fmt.Sprintf("%d.%d.%d.%d:%d",
+				byte(ip>>24), byte(ip>>16), byte(ip>>8), byte(ip),
+				port)
+			svcMap[ipStr] = id
 		}
 	}
 	return svcMap, nil
@@ -310,11 +314,15 @@ func GetActiveServiceUsers() (map[int][]int, error) {
 	return activeMap, nil
 }
 
-// GetServiceIPPort retrieves the IP:port string for a service ID.
-func GetServiceIPPort(serviceID int) (string, error) {
-	var ipPort string
-	err := stmtGetServiceIPPort.QueryRow(serviceID).Scan(&ipPort)
-	return ipPort, err
+// GetServiceIPPort retrieves the IP and port for a service ID and returns them as "ip:port" string.
+func GetServiceIPPort(serviceID int) (uint32, uint16, error) {
+	var ip uint32
+	var port uint16
+	err := stmtGetServiceIPPort.QueryRow(serviceID).Scan(&ip, &port)
+	if err != nil {
+		return 0, 0, err
+	}
+	return ip, port, nil
 }
 
 // InsertActiveService adds or updates an active service session.

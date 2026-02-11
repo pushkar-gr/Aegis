@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -27,12 +26,12 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 
 	// Logic: Union of Role-based services AND User-specific extra services
 	rows, err := database.DB.Query(`
-		SELECT s.id, s.name, s.hostname, s.ip_port, s.description, s.created_at
+		SELECT s.id, s.name, s.hostname, s.ip, s.port, s.description, s.created_at
 		FROM services s
 		JOIN role_services rs ON s.id = rs.service_id
 		WHERE rs.role_id = ?
 		UNION
-		SELECT s.id, s.name, s.hostname, s.ip_port, s.description, s.created_at
+		SELECT s.id, s.name, s.hostname, s.ip, s.port, s.description, s.created_at
 		FROM services s
 		JOIN user_extra_services ues ON s.id = ues.service_id
 		WHERE ues.user_id = ?`, roleID, userID)
@@ -52,7 +51,7 @@ func getMyServices(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var s models.Service
 		var desc sql.NullString
-		if err := rows.Scan(&s.Id, &s.Name, &s.Hostname, &s.IpPort, &desc, &s.CreatedAt); err == nil {
+		if err := rows.Scan(&s.Id, &s.Name, &s.Hostname, &s.Ip, &s.Port, &desc, &s.CreatedAt); err == nil {
 			s.Description = desc.String
 			services = append(services, s)
 		}
@@ -75,7 +74,7 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := database.DB.Query(`
-		SELECT s.id, s.name, s.hostname, s.ip_port, s.description, s.created_at, uas.time_left, uas.updated_at
+		SELECT s.id, s.name, s.hostname, s.ip, s.port, s.description, s.created_at, uas.time_left, uas.updated_at
 		FROM services s
 		JOIN user_active_services uas ON s.id = uas.service_id
 		WHERE uas.user_id = ?
@@ -96,7 +95,7 @@ func getMyActiveServices(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var as models.ActiveService
 		var desc sql.NullString
-		if err := rows.Scan(&as.Id, &as.Name, &as.Hostname, &as.IpPort, &desc, &as.CreatedAt, &as.TimeLeft, &as.UpdatedAt); err == nil {
+		if err := rows.Scan(&as.Id, &as.Name, &as.Hostname, &as.Ip, &as.Port, &desc, &as.CreatedAt, &as.TimeLeft, &as.UpdatedAt); err == nil {
 			as.Description = desc.String
 			services = append(services, as)
 		}
@@ -150,10 +149,10 @@ func selectActiveService(w http.ResponseWriter, r *http.Request) {
 
 	// Get client IP
 	clientIP := utils.GetClientIP(r)
-	log.Printf("[dashboard] activating service ID %d for user ID %d from IP %s to %s:%d", req.ServiceID, userID, clientIP, dstIP, dstPort)
+	log.Printf("[dashboard] activating service ID %d for user ID %d from IP %s to %d:%d", req.ServiceID, userID, clientIP, dstIP, dstPort)
 
 	// Call SendSessionData to activate the session
-	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, true, time.Second)
+	success, err := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, dstPort, true, time.Second)
 	if err != nil {
 		log.Printf("[dashboard] SendSessionData failed for service ID %d: %v", req.ServiceID, err)
 		http.Error(w, "Failed to activate session", http.StatusInternalServerError)
@@ -202,10 +201,10 @@ func deselectActiveService(w http.ResponseWriter, r *http.Request) {
 
 	// Get client IP
 	clientIP := utils.GetClientIP(r)
-	log.Printf("[dashboard] deactivating service ID %d for user ID %d from IP %s to %s:%d", svcID, userID, clientIP, dstIP, dstPort)
+	log.Printf("[dashboard] deactivating service ID %d for user ID %d from IP %s to %d:%d", svcID, userID, clientIP, dstIP, dstPort)
 
 	// Call SendSessionData to deactivate the session
-	success, err := proto.SendSessionData(clientIP, dstIP, dstPort, false, time.Second)
+	success, err := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, dstPort, false, time.Second)
 	if err != nil {
 		log.Printf("[dashboard] SendSessionData failed for service ID %d deactivation: %v", svcID, err)
 	} else if !success {
@@ -237,22 +236,11 @@ func resolveCurrentUser(r *http.Request) (int, int, error) {
 
 // parseServiceIPPort retrieves and parses service IP and port from database.
 // Returns destination IP, port.
-func parseServiceIPPort(serviceID int) (string, uint32, error) {
-	ipPort, err := database.GetServiceIPPort(serviceID)
+func parseServiceIPPort(serviceID int) (uint32, uint32, error) {
+	ip, port, err := database.GetServiceIPPort(serviceID)
 	if err != nil {
-		return "", 0, err
+		return 0, 0, err
 	}
 
-	// Use net.SplitHostPort to properly handle both IPv4:port and [IPv6]:port formats
-	host, portStr, err := net.SplitHostPort(ipPort)
-	if err != nil {
-		return "", 0, err
-	}
-
-	port, err := strconv.ParseUint(portStr, 10, 32)
-	if err != nil {
-		return "", 0, err
-	}
-
-	return host, uint32(port), nil
+	return ip, uint32(port), nil
 }

@@ -1,27 +1,28 @@
--- Enable Write-Ahead Logging for concurrency
+-- Enable Write-Ahead logging for concurrency
 PRAGMA journal_mode=WAL;
 
--- Enforce Foreign Key constraints
+-- Enforce foreign key constraints
 PRAGMA foreign_keys = ON;
 
--- 1. Roles Table
+-- Roles table
 CREATE TABLE IF NOT EXISTS roles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
     description TEXT
 );
 
--- 2. Services Table
+-- Services table
 CREATE TABLE IF NOT EXISTS services (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     hostname TEXT NOT NULL,
-    ip_port TEXT NOT NULL,
+    ip INTEGER NOT NULL,
+    port INTEGER NOT NULL,
     description TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Users Table
+-- Users table
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
     FOREIGN KEY(role_id) REFERENCES roles(id)
 );
 
--- 4. Role Services (Base permissions for a role)
+-- Role services (Base permissions for a role)
 CREATE TABLE IF NOT EXISTS role_services (
     role_id INTEGER,
     service_id INTEGER,
@@ -40,7 +41,7 @@ CREATE TABLE IF NOT EXISTS role_services (
     FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE CASCADE
 );
 
--- 5. User Extra Services (Specific extra permissions for a user)
+-- User extra services (Specific extra permissions for a user)
 CREATE TABLE IF NOT EXISTS user_extra_services (
     user_id INTEGER,
     service_id INTEGER,
@@ -49,7 +50,7 @@ CREATE TABLE IF NOT EXISTS user_extra_services (
     FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE CASCADE
 );
 
--- 6. User Active Services (Services the user has currently "Selected")
+-- User active services (Services the user has currently "Selected")
 CREATE TABLE IF NOT EXISTS user_active_services (
     user_id INTEGER NOT NULL,
     service_id INTEGER NOT NULL,
@@ -60,15 +61,13 @@ CREATE TABLE IF NOT EXISTS user_active_services (
     FOREIGN KEY(service_id) REFERENCES services(id) ON DELETE CASCADE
 );
 
--- --- SEED DATA ---
-
--- Seed Roles
+-- Seed roles
 INSERT OR IGNORE INTO roles (name, description) VALUES 
 ('root', 'Super Administrator with full access'),
 ('admin', 'Administrator with management access'),
 ('user', 'Standard user');
 
--- Seed Root User
+-- Seed root user
 -- username: root, password root
 INSERT INTO users (username, password, role_id, is_active)
 SELECT 'root', '$2a$12$ZJtnuD8QGgPA4298uOuDF./HHup/v2oDUFJuJ19IIr52OnJ4DOaU6', id, 1
