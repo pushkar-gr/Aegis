@@ -15,7 +15,7 @@ use libbpf_rs::{
 };
 use nix::time::{ClockId, clock_gettime};
 use std::{fs, path::Path};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 // Pin paths
 const BPF_FS_PATH: &str = "/sys/fs/bpf/aegis";
@@ -105,6 +105,9 @@ impl<'a> Bpf<'a> {
             bytemuck::bytes_of(&val),
             MapFlags::ANY,
         )?;
+
+        debug!("Added rule {} -> {}:{}", src_ip, dest_ip, dest_port);
+
         Ok(())
     }
 
@@ -120,6 +123,151 @@ impl<'a> Bpf<'a> {
             .session
             .delete(bytemuck::bytes_of(&key))
             .map_err(|e| anyhow!(e))
+    }
+
+    /// Updates all session rules that use the old destination IP to use the new destination IP.
+    pub fn update_dest_ip(&self, old_dest_ip: u32, new_dest_ip: u32) -> Result<usize> {
+        if old_dest_ip == new_dest_ip {
+            info!(
+                "IP unchanged (old: {}, new: {}), skipping update",
+                old_dest_ip, new_dest_ip
+            );
+            return Ok(0);
+        }
+
+        // Find all sessions with the old destination IP
+        let sessions_to_update: Vec<(u32, u16, session_val)> = self
+            .skel
+            .maps
+            .session
+            .keys()
+            .filter_map(|key_bytes| {
+                // Validate key size
+                if key_bytes.len() != std::mem::size_of::<session_key>() {
+                    warn!(
+                        "Invalid session key size: {}, expected {}",
+                        key_bytes.len(),
+                        std::mem::size_of::<session_key>()
+                    );
+                    return None;
+                }
+
+                // Validate alignment
+                let is_aligned = (key_bytes.as_ptr() as usize)
+                    .is_multiple_of(std::mem::align_of::<session_key>());
+                if !is_aligned {
+                    warn!(
+                        "Misaligned session key at address {:#x}, expected alignment {}",
+                        key_bytes.as_ptr() as usize,
+                        std::mem::align_of::<session_key>()
+                    );
+                    return None;
+                }
+
+                let key: &session_key = bytemuck::from_bytes(&key_bytes);
+
+                // Only process sessions with the old destination IP
+                if key.dest_ip == old_dest_ip {
+                    if let Ok(Some(val_bytes)) =
+                        self.skel.maps.session.lookup(&key_bytes, MapFlags::ANY)
+                    {
+                        // Validate value size
+                        if val_bytes.len() != std::mem::size_of::<session_val>() {
+                            warn!(
+                                "Invalid session value size: {}, expected {}",
+                                val_bytes.len(),
+                                std::mem::size_of::<session_val>()
+                            );
+                            return None;
+                        }
+
+                        // Validate alignment
+                        let is_aligned = (val_bytes.as_ptr() as usize)
+                            .is_multiple_of(std::mem::align_of::<session_val>());
+                        if !is_aligned {
+                            warn!(
+                                "Misaligned session value at address {:#x}, expected alignment {}",
+                                val_bytes.as_ptr() as usize,
+                                std::mem::align_of::<session_val>()
+                            );
+                            return None;
+                        }
+
+                        let val: &session_val = bytemuck::from_bytes(&val_bytes);
+                        Some((key.src_ip, key.dest_port, *val))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let total_to_update = sessions_to_update.len();
+
+        if total_to_update > 0 {
+            debug!(
+                "Updating {} sessions from old IP to new IP",
+                total_to_update
+            );
+
+            let mut successful_updates = 0;
+
+            for (src_ip, dest_port, val) in sessions_to_update {
+                // Remove the old rule
+                let old_key = session_key {
+                    dest_ip: old_dest_ip,
+                    src_ip,
+                    dest_port,
+                };
+                if let Err(e) = self.skel.maps.session.delete(bytemuck::bytes_of(&old_key)) {
+                    warn!("Failed to delete old rule: {}", e);
+                    continue;
+                }
+
+                // Add the new rule with the same session value
+                let new_key = session_key {
+                    dest_ip: new_dest_ip,
+                    src_ip,
+                    dest_port,
+                };
+                if let Err(e) = self.skel.maps.session.update(
+                    bytemuck::bytes_of(&new_key),
+                    bytemuck::bytes_of(&val),
+                    MapFlags::ANY,
+                ) {
+                    error!("Failed to add new rule: {}", e);
+                    if let Err(restore_err) = self.skel.maps.session.update(
+                        bytemuck::bytes_of(&old_key),
+                        bytemuck::bytes_of(&val),
+                        MapFlags::ANY,
+                    ) {
+                        error!(
+                            "Failed to restore old rule after update failure: {}",
+                            restore_err
+                        );
+                    }
+                    continue;
+                }
+
+                successful_updates += 1;
+            }
+
+            if successful_updates > 0 {
+                debug!("Successfully updated {} session rules", successful_updates);
+            }
+            if successful_updates < total_to_update {
+                warn!(
+                    "Only {} of {} sessions were successfully updated",
+                    successful_updates, total_to_update
+                );
+            }
+
+            Ok(successful_updates)
+        } else {
+            Ok(0)
+        }
     }
 
     /// Removes all stale firewall rules from the map.

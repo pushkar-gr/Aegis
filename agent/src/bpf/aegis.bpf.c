@@ -104,7 +104,8 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
   }
 
   // Allow traffic to controller or DNS
-  if (dst_port == 53 || (dst_port == CONTROLLER_PORT && iph->daddr == CONTROLLER_IP)) {
+  if (dst_port == 53 ||
+      (dst_port == CONTROLLER_PORT && iph->daddr == CONTROLLER_IP)) {
     return XDP_PASS;
   }
 

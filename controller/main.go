@@ -162,6 +162,10 @@ func updateIpFromHostnames(updateIpIterval time.Duration) {
 
 // syncHostnameIPs updates IP addresses of all entries in the services table periodically
 func syncHostnameIPs() {
+	changedIps := &proto.IpChangeList{
+		IpChanges: []*proto.IpChangeEvent{},
+	}
+
 	// Query all services
 	rows, err := database.DB.Query("SELECT id, hostname, ip_port FROM services")
 	if err != nil {
@@ -214,10 +218,30 @@ func syncHostnameIPs() {
 		// Update DB if different
 		if newIPPort != s.currentIPPort {
 			log.Printf("[INFO] Service %d (%s) IP changed: %s -> %s. Updating DB.", s.id, s.hostname, s.currentIPPort, newIPPort)
+
 			_, err := database.DB.Exec("UPDATE services SET ip_port = ? WHERE id = ?", newIPPort, s.id)
 			if err != nil {
 				log.Printf("[ERROR] updateHostnames: failed to update service ID %d: %v", s.id, err)
 			}
+
+			oldHost, _, _ := net.SplitHostPort(s.currentIPPort)
+			oldIpInt := utils.IpToUint32(oldHost)
+			newIpInt := utils.IpToUint32(resolvedIP)
+			changedIps.IpChanges = append(changedIps.IpChanges, &proto.IpChangeEvent{
+				OldIp: oldIpInt,
+				NewIp: newIpInt,
+			})
 		}
+	}
+
+	success, err := proto.SendChanedIpData(changedIps, time.Second)
+	if err != nil {
+		log.Printf("[ERROR] updateHostnames: failed to update IPs in agent: %v", err)
+	}
+	log.Println(changedIps)
+	if success {
+		log.Printf("[INFO] updateHostnames: updated IPs in agent")
+	} else {
+		log.Printf("[ERROR] updateHostnames: failed to update IPs in agent")
 	}
 }

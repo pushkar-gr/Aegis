@@ -52,6 +52,7 @@ services:
     command: >
       sh -c "apk add --no-cache dnsmasq &&
       dnsmasq -k \
+      --cache-size=0 \
       --no-resolv \
       --server=127.0.0.11 \
       --log-queries \
@@ -107,6 +108,14 @@ services:
         while true; do 
           echo -e "HTTP/1.1 200 OK\n\nHello from protected service 2" | nc -l -p 8080
         done
+
+  ip-stealer:
+    image: alpine
+    command: sleep infinity
+    container_name: aegis-protected-ip-stealer
+    networks:
+      private_net:
+    profiles: ["manual"]
 
 networks:
   public_net:
