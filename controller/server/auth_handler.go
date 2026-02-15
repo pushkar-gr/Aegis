@@ -56,15 +56,46 @@ func login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	expirationTime := time.Now().Add(jwtTokenLifetime * time.Minute)
+
+	// Get user role name
+	var roleName string
+	err = database.DB.QueryRow(`
+		SELECT r.name FROM roles r
+		INNER JOIN users u ON u.role_id = r.id
+		WHERE u.username = ?`, creds.Username).Scan(&roleName)
+	if err != nil {
+		log.Printf("[auth] failed to get role for user '%s': %v", creds.Username, err)
+		roleName = ""
+	}
+
 	claims := &models.Claims{
 		Username: creds.Username,
+		Role:     roleName,
+		RoleID:   0,
+		Provider: "local",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
-			Issuer:    "go-auth-system",
+			Issuer:    "aegis-controller",
+			Subject:   creds.Username,
 		},
 	}
 
-	tokenString, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtKey)
+	// Get role ID for the claims
+	err = database.DB.QueryRow(`
+		SELECT r.id FROM roles r
+		INNER JOIN users u ON u.role_id = r.id
+		WHERE u.username = ?`, creds.Username).Scan(&claims.RoleID)
+	if err != nil {
+		log.Printf("[auth] failed to get role ID for user '%s': %v", creds.Username, err)
+	}
+
+	var tokenString string
+	if jwtPrivateKey != nil {
+		tokenString, err = utils.GenerateTokenRS256(claims, jwtPrivateKey)
+	} else {
+		tokenString, err = jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtKey)
+	}
+
 	if err != nil {
 		log.Printf("[auth] login failed for user '%s': token generation error - %v", creds.Username, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -82,18 +113,6 @@ func login(w http.ResponseWriter, r *http.Request) {
 	})
 
 	log.Printf("[auth] login successful for user '%s'", creds.Username)
-
-	// Get user role name
-	var roleName string
-	err = database.DB.QueryRow(`
-		SELECT r.name FROM roles r
-		INNER JOIN users u ON u.role_id = r.id
-		WHERE u.username = ?`, creds.Username).Scan(&roleName)
-	if err != nil {
-		log.Printf("[auth] failed to get role for user '%s': %v", creds.Username, err)
-		// Continue without role in response
-		roleName = ""
-	}
 
 	// Return user info with role
 	w.Header().Set("Content-Type", "application/json")
@@ -133,7 +152,7 @@ func logout(w http.ResponseWriter, r *http.Request) {
 
 // updatePassword changes a user's password after verifying the old one.
 // Request: {"old_password": "current", "new_password": "new123"}
-// Response: 200 OK | 400 Bad Request | 401 Unauthorized
+// Response: 200 OK | 400 Bad Request | 401 Unauthorized | 403 Forbidden
 func updatePassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		OldPassword string `json:"old_password"`
@@ -156,6 +175,20 @@ func updatePassword(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		log.Printf("[auth] update password failed: user context missing")
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	var provider sql.NullString
+	err := database.DB.QueryRow("SELECT provider FROM users WHERE username = ?", username).Scan(&provider)
+	if err != nil {
+		log.Printf("[auth] update password failed for user '%s': database error - %v", username, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if provider.Valid && provider.String != "local" {
+		log.Printf("[auth] update password denied for OIDC user '%s' (provider: %s)", username, provider.String)
+		http.Error(w, "Password changes not allowed for SSO users", http.StatusForbidden)
 		return
 	}
 

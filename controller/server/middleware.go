@@ -30,11 +30,15 @@ func authMiddlewareFunc(next http.Handler) http.Handler {
 			return
 		}
 
-		username, err := utils.GetUsernameFromToken(cookie.Value, jwtKey)
-		if err != nil {
-			log.Printf("[middleware] auth failed: token validation error. %v", err)
-			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
-			return
+		var username string
+
+		if jwtPublicKey != nil {
+			username, err = utils.GetUsernameFromTokenRS256(cookie.Value, jwtPublicKey)
+			if err == nil {
+				ctx := context.WithValue(r.Context(), userKey, username)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
 		}
 
 		// Store the username in the request context for subsequent handlers.

@@ -3,10 +3,15 @@ package main
 import (
 	"Aegis/controller/config"
 	"Aegis/controller/database"
+	"Aegis/controller/internal/oidc"
 	"Aegis/controller/internal/utils"
 	"Aegis/controller/internal/watcher"
 	"Aegis/controller/proto"
 	"Aegis/controller/server"
+	"context"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"net"
@@ -35,10 +40,42 @@ func main() {
 			log.Printf("[ERROR] Error closing database: %v", err)
 		}
 	}()
-	// Start the server in a goroutine so the main thread can listen for signals.
-	go server.StartServer(cfg.ServerPort, cfg.CertFile, cfg.KeyFile, []byte(cfg.JwtKey), cfg.JwtTokenLifetime)
 
-	err := proto.Init(cfg.AgentAddress, cfg.AgentCertFile, cfg.AgentKeyFile, cfg.AgentCAFile, cfg.AgentServerName)
+	// Load RSA keys for JWT signing
+	privateKey, publicKey, err := loadRSAKeys(cfg.JwtPrivateKey, cfg.JwtPublicKey)
+	if err != nil {
+		log.Printf("[WARN] Failed to load RSA keys: %v. RS256 signing will not be available.", err)
+		privateKey = nil
+		publicKey = nil
+	} else {
+		log.Printf("[INFO] RSA keys loaded successfully for JWT RS256 signing")
+	}
+
+	// Initialize OIDC manager if enabled
+	var oidcManager *oidc.OIDCManager
+	if cfg.OIDCEnabled {
+		ctx := context.Background()
+		oidcManager, err = oidc.NewOIDCManager(
+			ctx,
+			cfg.OIDCGoogleClientID,
+			cfg.OIDCGoogleSecret,
+			cfg.OIDCGitHubClientID,
+			cfg.OIDCGitHubSecret,
+			cfg.OIDCRedirectURL,
+			cfg.OIDCRoleMappingRules,
+		)
+		if err != nil {
+			log.Printf("[ERROR] Failed to initialize OIDC manager: %v", err)
+			oidcManager = nil
+		} else {
+			log.Printf("[INFO] OIDC manager initialized successfully")
+		}
+	}
+
+	// Start the server in a goroutine so the main thread can listen for signals.
+	go server.StartServer(cfg.ServerPort, cfg.CertFile, cfg.KeyFile, []byte(cfg.JwtKey), cfg.JwtTokenLifetime, privateKey, publicKey, oidcManager)
+
+	err = proto.Init(cfg.AgentAddress, cfg.AgentCertFile, cfg.AgentKeyFile, cfg.AgentCAFile, cfg.AgentServerName)
 	if err != nil {
 		log.Printf("[ERROR] Error starting grpc client: %v", err)
 		return
@@ -55,6 +92,48 @@ func main() {
 	<-quit
 
 	log.Println("[INFO] Interrupt signal received. Shutting down server...")
+}
+
+// loadRSAKeys loads RSA private and public keys from PEM files
+func loadRSAKeys(privateKeyPath, publicKeyPath string) (*rsa.PrivateKey, *rsa.PublicKey, error) {
+	// Load private key
+	privateKeyPEM, err := os.ReadFile(privateKeyPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read private key: %w", err)
+	}
+
+	block, _ := pem.Decode(privateKeyPEM)
+	if block == nil {
+		return nil, nil, fmt.Errorf("failed to decode PEM block containing private key")
+	}
+
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	// Load public key
+	publicKeyPEM, err := os.ReadFile(publicKeyPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read public key: %w", err)
+	}
+
+	block, _ = pem.Decode(publicKeyPEM)
+	if block == nil {
+		return nil, nil, fmt.Errorf("failed to decode PEM block containing public key")
+	}
+
+	publicKeyInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse public key: %w", err)
+	}
+
+	publicKey, ok := publicKeyInterface.(*rsa.PublicKey)
+	if !ok {
+		return nil, nil, fmt.Errorf("not an RSA public key")
+	}
+
+	return privateKey, publicKey, nil
 }
 
 // Connects to gRPC server, pushes updates and listenes to stale updates from agent

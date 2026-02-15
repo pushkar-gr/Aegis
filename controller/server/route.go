@@ -1,6 +1,8 @@
 package server
 
 import (
+	"Aegis/controller/internal/oidc"
+	"crypto/rsa"
 	"log"
 	"net/http"
 	"time"
@@ -8,11 +10,18 @@ import (
 
 var jwtKey []byte
 var jwtTokenLifetime time.Duration
+var jwtPrivateKey *rsa.PrivateKey
+var jwtPublicKey *rsa.PublicKey
+var oidcManager *oidc.OIDCManager
 
 // StartServer configures and starts the TLS-enabled HTTP server.
-func StartServer(port, certFile, keyFile string, jwtKeyByte []byte, jwtTokenLifetimeDuration time.Duration) {
+func StartServer(port, certFile, keyFile string, jwtKeyByte []byte, jwtTokenLifetimeDuration time.Duration, privKey *rsa.PrivateKey, pubKey *rsa.PublicKey, oidcMgr *oidc.OIDCManager) {
 	jwtKey = jwtKeyByte
 	jwtTokenLifetime = jwtTokenLifetimeDuration
+	jwtPrivateKey = privKey
+	jwtPublicKey = pubKey
+	oidcManager = oidcMgr
+
 	mux := http.NewServeMux()
 
 	// Static files
@@ -33,6 +42,13 @@ func StartServer(port, certFile, keyFile string, jwtKeyByte []byte, jwtTokenLife
 	mux.Handle("POST /api/auth/logout", authMiddleware.ThenFunc(logout))
 	mux.Handle("POST /api/auth/password", authMiddleware.ThenFunc(updatePassword))
 	mux.Handle("GET /api/auth/me", authMiddleware.ThenFunc(getCurrentUser))
+
+	// OIDC Authentication
+	if oidcManager != nil {
+		mux.HandleFunc("GET /api/auth/oidc/providers", listOIDCProviders)
+		mux.HandleFunc("GET /api/auth/oidc/login", oidcLogin)
+		mux.HandleFunc("GET /api/auth/oidc/callback", oidcCallback)
+	}
 
 	// Roles (RBAC)
 	mux.Handle("GET /api/roles", adminOrRootOnly.ThenFunc(getRoles))
