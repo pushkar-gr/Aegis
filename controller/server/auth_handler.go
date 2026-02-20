@@ -112,6 +112,34 @@ func login(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 	})
 
+	// Generate and store refresh token
+	refreshToken, err := utils.GenerateSecureToken(32)
+	if err != nil {
+		log.Printf("[auth] failed to generate refresh token for user '%s': %v", creds.Username, err)
+	} else {
+		var userID int
+		err = database.DB.QueryRow("SELECT id FROM users WHERE username = ?", creds.Username).Scan(&userID)
+		if err != nil {
+			log.Printf("[auth] failed to get user ID for refresh token: %v", err)
+		} else {
+			refreshExpiry := time.Now().Add(7 * 24 * time.Hour)
+			err = database.CreateRefreshToken(refreshToken, userID, refreshExpiry)
+			if err != nil {
+				log.Printf("[auth] failed to store refresh token: %v", err)
+			} else {
+				http.SetCookie(w, &http.Cookie{
+					Name:     "refresh_token",
+					Value:    refreshToken,
+					Expires:  refreshExpiry,
+					HttpOnly: true,
+					Secure:   true,
+					Path:     "/api/auth/refresh",
+					SameSite: http.SameSiteStrictMode,
+				})
+			}
+		}
+	}
+
 	log.Printf("[auth] login successful for user '%s'", creds.Username)
 
 	// Return user info with role
@@ -130,6 +158,21 @@ func login(w http.ResponseWriter, r *http.Request) {
 // Input:  Empty body (Cookie required in header)
 // Output: 200 OK (Set-Cookie: token=; Expires=1970...)
 func logout(w http.ResponseWriter, r *http.Request) {
+	var username string
+	if user, ok := r.Context().Value(userKey).(string); ok {
+		username = user
+
+		// Delete all refresh tokens for the user
+		var userID int
+		err := database.DB.QueryRow("SELECT id FROM users WHERE username = ?", username).Scan(&userID)
+		if err == nil {
+			if err := database.DeleteUserRefreshTokens(userID); err != nil {
+				log.Printf("[auth] failed to delete refresh tokens for user '%s': %v", username, err)
+			}
+		}
+	}
+
+	// Clear access token cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "token",
 		Value:    "",
@@ -138,11 +181,19 @@ func logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 	})
 
-	// Get user from context (set by middleware).
-	if username, ok := r.Context().Value(userKey).(string); ok {
-		log.Printf("[auth] user '%v' logged out", username)
+	// Clear refresh token cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Path:     "/api/auth/refresh",
+	})
+
+	if username != "" {
+		log.Printf("[auth] user '%s' logged out", username)
 	} else {
-		log.Println("Logout called (no active user context found)")
+		log.Println("[auth] logout called (no active user context found)")
 	}
 
 	if _, err := w.Write([]byte("Logged out successfully")); err != nil {
@@ -178,12 +229,14 @@ func updatePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if user is OIDC user
 	var provider sql.NullString
-	err := database.DB.QueryRow("SELECT provider FROM users WHERE username = ?", username).Scan(&provider)
+	err := database.DB.QueryRow("SELECT COALESCE(provider, 'local') FROM users WHERE username = ?", username).Scan(&provider)
 	if err != nil {
-		log.Printf("[auth] update password failed for user '%s': database error - %v", username, err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+		// local provider user
+		provider.String = "local"
+		provider.Valid = true
+		log.Printf("[auth] provider column not found, assuming local auth for user '%s'", username)
 	}
 
 	if provider.Valid && provider.String != "local" {
@@ -264,4 +317,93 @@ func getCurrentUser(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(user); err != nil {
 		log.Printf("[auth] failed to encode response: %v", err)
 	}
+}
+
+// refreshToken generates a new access token using a refresh token
+// Response: 200 OK with new token | 401 Unauthorized | 500 Internal Server Error
+func refreshToken(w http.ResponseWriter, r *http.Request) {
+	// Get refresh token from cookie
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		log.Printf("[auth] refresh failed: missing refresh token cookie")
+		http.Error(w, "Refresh token missing", http.StatusUnauthorized)
+		return
+	}
+
+	// Validate refresh token and get user ID
+	userID, err := database.GetRefreshToken(cookie.Value)
+	if err != nil {
+		log.Printf("[auth] refresh failed: invalid or expired refresh token")
+		http.Error(w, "Invalid or expired refresh token", http.StatusUnauthorized)
+		return
+	}
+
+	var username, roleName, provider string
+	var roleID int
+	var isActive bool
+	err = database.DB.QueryRow(`
+		SELECT u.username, r.name, r.id, u.is_active, u.provider
+		FROM users u
+		INNER JOIN roles r ON u.role_id = r.id
+		WHERE u.id = ?`, userID).Scan(&username, &roleName, &roleID, &isActive, &provider)
+
+	if err != nil {
+		log.Printf("[auth] refresh failed: user not found")
+		http.Error(w, "User not found", http.StatusUnauthorized)
+		return
+	}
+
+	if !isActive {
+		log.Printf("[auth] refresh failed for user '%s': account is inactive", username)
+		http.Error(w, "Account is disabled", http.StatusForbidden)
+		return
+	}
+
+	// Generate new access token
+	expirationTime := time.Now().Add(jwtTokenLifetime * time.Minute)
+	claims := &models.Claims{
+		Username: username,
+		Role:     roleName,
+		RoleID:   roleID,
+		Provider: provider,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			Issuer:    "aegis-controller",
+			Subject:   username,
+		},
+	}
+
+	var tokenString string
+	// Use RS256 else fall back to HS256
+	if jwtPrivateKey != nil {
+		tokenString, err = utils.GenerateTokenRS256(claims, jwtPrivateKey)
+	} else {
+		tokenString, err = jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(jwtKey)
+	}
+
+	if err != nil {
+		log.Printf("[auth] refresh failed for user '%s': token generation error - %v", username, err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "token",
+		Value:    tokenString,
+		Expires:  expirationTime,
+		HttpOnly: true,
+		Secure:   true,
+		Path:     "/",
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	log.Printf("[auth] token refreshed successfully for user '%s'", username)
+
+	// Return success
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Token refreshed successfully",
+		"role":    roleName,
+	})
 }

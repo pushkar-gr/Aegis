@@ -84,6 +84,7 @@ func main() {
 	go connectGrpc()
 	go updateIpFromHostnames(cfg.IpUpdateInterval)
 	go watcher.StartDockerWatcher()
+	go cleanupExpiredTokens()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
@@ -92,6 +93,21 @@ func main() {
 	<-quit
 
 	log.Println("[INFO] Interrupt signal received. Shutting down server...")
+}
+
+// cleanupExpiredTokens periodically removes expired refresh tokens from the database
+func cleanupExpiredTokens() {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		err := database.CleanupExpiredRefreshTokens()
+		if err != nil {
+			log.Printf("[ERROR] Failed to cleanup expired refresh tokens: %v", err)
+		} else {
+			log.Printf("[INFO] Cleaned up expired refresh tokens")
+		}
+	}
 }
 
 // loadRSAKeys loads RSA private and public keys from PEM files

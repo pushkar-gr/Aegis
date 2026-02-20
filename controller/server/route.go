@@ -42,6 +42,7 @@ func StartServer(port, certFile, keyFile string, jwtKeyByte []byte, jwtTokenLife
 	mux.Handle("POST /api/auth/logout", authMiddleware.ThenFunc(logout))
 	mux.Handle("POST /api/auth/password", authMiddleware.ThenFunc(updatePassword))
 	mux.Handle("GET /api/auth/me", authMiddleware.ThenFunc(getCurrentUser))
+	mux.HandleFunc("POST /api/auth/refresh", refreshToken)
 
 	// OIDC Authentication
 	if oidcManager != nil {

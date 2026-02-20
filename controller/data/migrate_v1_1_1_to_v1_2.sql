@@ -35,3 +35,18 @@ CREATE INDEX IF NOT EXISTS idx_users_provider_id ON users(provider, provider_id)
 
 -- Create index on email for faster email-based lookups
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- Create refresh_tokens table for token refreshing
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT UNIQUE NOT NULL,
+    user_id INTEGER NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);

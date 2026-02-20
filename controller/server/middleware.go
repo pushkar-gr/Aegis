@@ -40,10 +40,6 @@ func authMiddlewareFunc(next http.Handler) http.Handler {
 				return
 			}
 		}
-
-		// Store the username in the request context for subsequent handlers.
-		ctx := context.WithValue(r.Context(), userKey, username)
-		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

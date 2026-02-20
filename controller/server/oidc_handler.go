@@ -168,6 +168,27 @@ func oidcCallback(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 	})
 
+	refreshToken, err := utils.GenerateSecureToken(32)
+	if err != nil {
+		log.Printf("[oidc] failed to generate refresh token for user '%s': %v", user.Username, err)
+	} else {
+		refreshExpiry := time.Now().Add(7 * 24 * time.Hour)
+		err = database.CreateRefreshToken(refreshToken, user.Id, refreshExpiry)
+		if err != nil {
+			log.Printf("[oidc] failed to store refresh token: %v", err)
+		} else {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "refresh_token",
+				Value:    refreshToken,
+				Expires:  refreshExpiry,
+				HttpOnly: true,
+				Secure:   true,
+				Path:     "/api/auth/refresh",
+				SameSite: http.SameSiteStrictMode,
+			})
+		}
+	}
+
 	log.Printf("[oidc] login successful for user '%s' via %s", user.Username, providerName)
 
 	// Redirect to dashboard
