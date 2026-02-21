@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"testing"
 )
@@ -142,6 +144,93 @@ func TestUint32ToIp(t *testing.T) {
 			result := Uint32ToIp(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected %s, got %s", tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestGetClientIP tests the client IP extraction from HTTP request headers
+func TestGetClientIP(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupReq   func() *http.Request
+		expectedIP string
+	}{
+		{
+			name: "X-Forwarded-For header - single IP",
+			setupReq: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.Header.Set("X-Forwarded-For", "203.0.113.1")
+				return req
+			},
+			expectedIP: "203.0.113.1",
+		},
+		{
+			name: "X-Forwarded-For header - multiple IPs, use first",
+			setupReq: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.Header.Set("X-Forwarded-For", "203.0.113.1, 10.0.0.1, 172.16.0.1")
+				return req
+			},
+			expectedIP: "203.0.113.1",
+		},
+		{
+			name: "X-Real-IP header",
+			setupReq: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.Header.Set("X-Real-IP", "198.51.100.1")
+				return req
+			},
+			expectedIP: "198.51.100.1",
+		},
+		{
+			name: "X-Forwarded-For takes priority over X-Real-IP",
+			setupReq: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.Header.Set("X-Forwarded-For", "203.0.113.1")
+				req.Header.Set("X-Real-IP", "198.51.100.1")
+				return req
+			},
+			expectedIP: "203.0.113.1",
+		},
+		{
+			name: "Fallback to RemoteAddr",
+			setupReq: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.RemoteAddr = "192.0.2.1:12345"
+				return req
+			},
+			expectedIP: "192.0.2.1",
+		},
+		{
+			name: "Invalid X-Forwarded-For falls back to X-Real-IP",
+			setupReq: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.Header.Set("X-Forwarded-For", "not-an-ip")
+				req.Header.Set("X-Real-IP", "198.51.100.1")
+				return req
+			},
+			expectedIP: "198.51.100.1",
+		},
+		{
+			name: "Invalid X-Forwarded-For and X-Real-IP falls back to RemoteAddr",
+			setupReq: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.Header.Set("X-Forwarded-For", "not-an-ip")
+				req.Header.Set("X-Real-IP", "also-not-an-ip")
+				req.RemoteAddr = "10.0.0.1:9999"
+				return req
+			},
+			expectedIP: "10.0.0.1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := tt.setupReq()
+			got := GetClientIP(req)
+			if got != tt.expectedIP {
+				t.Errorf("GetClientIP() = %q, want %q", got, tt.expectedIP)
 			}
 		})
 	}

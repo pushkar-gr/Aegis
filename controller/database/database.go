@@ -379,3 +379,38 @@ func DeleteUserExtraService(userID, serviceID int) error {
 	_, err := stmtDeleteUserExtraService.Exec(userID, serviceID)
 	return err
 }
+
+// CreateRefreshToken stores a new refresh token in the database.
+func CreateRefreshToken(token string, userID int, expiresAt time.Time) error {
+	_, err := DB.Exec("INSERT INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
+		token, userID, expiresAt)
+	return err
+}
+
+// GetRefreshToken gets the refresh token and checks if it is not expired.
+func GetRefreshToken(token string) (userID int, err error) {
+	err = DB.QueryRow(`
+		SELECT user_id
+		FROM refresh_tokens
+		WHERE token = ? AND expires_at > ?
+	`, token, time.Now()).Scan(&userID)
+	return
+}
+
+// DeleteRefreshToken removes the refresh token from the database.
+func DeleteRefreshToken(token string) error {
+	_, err := DB.Exec("DELETE FROM refresh_tokens WHERE token = ?", token)
+	return err
+}
+
+// DeleteUserRefreshTokens removes all refresh tokens for a user.
+func DeleteUserRefreshTokens(userID int) error {
+	_, err := DB.Exec("DELETE FROM refresh_tokens WHERE user_id = ?", userID)
+	return err
+}
+
+// CleanupExpiredRefreshTokens removes all expired refresh tokens.
+func CleanupExpiredRefreshTokens() error {
+	_, err := DB.Exec("DELETE FROM refresh_tokens WHERE expires_at <= CURRENT_TIMESTAMP")
+	return err
+}

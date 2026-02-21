@@ -80,6 +80,14 @@ const API = {
         return user;
     },
 
+    async getOIDCProviders() {
+        return this.request('GET', '/api/auth/oidc/providers');
+    },
+
+    oidcLogin(provider) {
+        window.location.href = `${this.baseURL}/api/auth/oidc/login?provider=${provider}`;
+    },
+
     // User dashboard endpoints
     async getMyServices() {
         return this.request('GET', '/api/me/services');

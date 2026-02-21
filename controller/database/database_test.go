@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -125,6 +126,20 @@ FOREIGN KEY(service_id) REFERENCES services(id)
 	if err := InitPreparedStatements(); err != nil {
 		t.Fatalf("Failed to prepare statements: %v", err)
 	}
+
+	// Create refresh_tokens table
+	createRefreshTokensTable := `
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+"token" TEXT NOT NULL UNIQUE,
+"user_id" INTEGER NOT NULL,
+"expires_at" DATETIME NOT NULL,
+FOREIGN KEY(user_id) REFERENCES users(id)
+);`
+	if _, err := DB.Exec(createRefreshTokensTable); err != nil {
+		t.Fatalf("Failed to create refresh_tokens table: %v", err)
+	}
+
 	return func() {
 		if stmtGetUserCredentials != nil {
 			_ = stmtGetUserCredentials.Close()
@@ -407,5 +422,306 @@ func TestCheckServiceExists(t *testing.T) {
 	}
 	if exists {
 		t.Error("Expected service to not exist")
+	}
+}
+
+func TestGetServiceMap(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Insert test services
+	_, err := DB.Exec("INSERT INTO services (name, hostname, ip, port) VALUES (?, ?, ?, ?)",
+		"svc1", "10.0.0.1:80", 0x0A000001, 80)
+	if err != nil {
+		t.Fatalf("Failed to insert service: %v", err)
+	}
+	_, err = DB.Exec("INSERT INTO services (name, hostname, ip, port) VALUES (?, ?, ?, ?)",
+		"svc2", "192.168.1.1:443", 0xC0A80101, 443)
+	if err != nil {
+		t.Fatalf("Failed to insert service: %v", err)
+	}
+
+	svcMap, err := GetServiceMap()
+	if err != nil {
+		t.Fatalf("GetServiceMap failed: %v", err)
+	}
+
+	if len(svcMap) != 2 {
+		t.Errorf("Expected 2 services in map, got %d", len(svcMap))
+	}
+
+	if _, ok := svcMap["10.0.0.1:80"]; !ok {
+		t.Error("Expected '10.0.0.1:80' in service map")
+	}
+	if _, ok := svcMap["192.168.1.1:443"]; !ok {
+		t.Error("Expected '192.168.1.1:443' in service map")
+	}
+}
+
+func TestGetActiveServiceUsers(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Insert test user and service
+	_, err := DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "u1", "pw")
+	if err != nil {
+		t.Fatalf("Failed to insert user: %v", err)
+	}
+	_, err = DB.Exec("INSERT INTO services (name, hostname, ip, port) VALUES (?, ?, ?, ?)", "s1", "10.0.0.1:80", 0x0A000001, 80)
+	if err != nil {
+		t.Fatalf("Failed to insert service: %v", err)
+	}
+
+	err = InsertActiveService(1, 1, 60)
+	if err != nil {
+		t.Fatalf("InsertActiveService failed: %v", err)
+	}
+
+	activeMap, err := GetActiveServiceUsers()
+	if err != nil {
+		t.Fatalf("GetActiveServiceUsers failed: %v", err)
+	}
+
+	users, ok := activeMap[1]
+	if !ok {
+		t.Fatal("Expected service ID 1 in active map")
+	}
+	if len(users) != 1 || users[0] != 1 {
+		t.Errorf("Expected user ID 1 for service 1, got %v", users)
+	}
+}
+
+func TestSyncActiveSessions(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Set up user and services
+	_, err := DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "u1", "pw")
+	if err != nil {
+		t.Fatalf("Failed to insert user: %v", err)
+	}
+	_, err = DB.Exec("INSERT INTO services (name, hostname, ip, port) VALUES (?, ?, ?, ?)", "s1", "10.0.0.1:80", 0x0A000001, 80)
+	if err != nil {
+		t.Fatalf("Failed to insert service: %v", err)
+	}
+	_, err = DB.Exec("INSERT INTO services (name, hostname, ip, port) VALUES (?, ?, ?, ?)", "s2", "10.0.0.2:80", 0x0A000002, 80)
+	if err != nil {
+		t.Fatalf("Failed to insert service: %v", err)
+	}
+
+	// Insert initial active session
+	err = InsertActiveService(1, 1, 60)
+	if err != nil {
+		t.Fatalf("InsertActiveService failed: %v", err)
+	}
+
+	// Sync: keep service 1 with new time_left, add service 2, remove stale ones
+	sessions := []ActiveSessionSync{
+		{UserID: 1, ServiceID: 1, TimeLeft: 30},
+		{UserID: 1, ServiceID: 2, TimeLeft: 45},
+	}
+	err = SyncActiveSessions(sessions)
+	if err != nil {
+		t.Fatalf("SyncActiveSessions failed: %v", err)
+	}
+
+	var count int
+	err = DB.QueryRow("SELECT COUNT(*) FROM user_active_services WHERE user_id = 1").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to query: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("Expected 2 active sessions, got %d", count)
+	}
+
+	// Sync with empty list - should remove all
+	err = SyncActiveSessions([]ActiveSessionSync{})
+	if err != nil {
+		t.Fatalf("SyncActiveSessions (empty) failed: %v", err)
+	}
+
+	err = DB.QueryRow("SELECT COUNT(*) FROM user_active_services").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to query: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 active sessions after empty sync, got %d", count)
+	}
+}
+
+func TestInsertAndDeleteRoleService(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Insert a service
+	_, err := DB.Exec("INSERT INTO services (name, hostname, ip, port) VALUES (?, ?, ?, ?)",
+		"svc_role", "10.0.0.1:80", 0x0A000001, 80)
+	if err != nil {
+		t.Fatalf("Failed to insert service: %v", err)
+	}
+
+	// Insert role-service link (role_id=1 is 'admin')
+	err = InsertRoleService(1, 1)
+	if err != nil {
+		t.Errorf("InsertRoleService failed: %v", err)
+	}
+
+	var count int
+	err = DB.QueryRow("SELECT COUNT(*) FROM role_services WHERE role_id=1 AND service_id=1").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to query: %v", err)
+	}
+	if count != 1 {
+		t.Error("Expected role-service link to exist")
+	}
+
+	// Insert again (idempotent via OR IGNORE)
+	err = InsertRoleService(1, 1)
+	if err != nil {
+		t.Errorf("InsertRoleService (duplicate) should not fail: %v", err)
+	}
+
+	// Delete
+	err = DeleteRoleService(1, 1)
+	if err != nil {
+		t.Errorf("DeleteRoleService failed: %v", err)
+	}
+
+	err = DB.QueryRow("SELECT COUNT(*) FROM role_services WHERE role_id=1 AND service_id=1").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to query: %v", err)
+	}
+	if count != 0 {
+		t.Error("Expected role-service link to be removed")
+	}
+}
+
+func TestInsertAndDeleteUserExtraService(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Insert user and service
+	_, err := DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "u1", "pw")
+	if err != nil {
+		t.Fatalf("Failed to insert user: %v", err)
+	}
+	_, err = DB.Exec("INSERT INTO services (name, hostname, ip, port) VALUES (?, ?, ?, ?)",
+		"svc_extra", "10.0.0.1:80", 0x0A000001, 80)
+	if err != nil {
+		t.Fatalf("Failed to insert service: %v", err)
+	}
+
+	err = InsertUserExtraService(1, 1)
+	if err != nil {
+		t.Errorf("InsertUserExtraService failed: %v", err)
+	}
+
+	var count int
+	err = DB.QueryRow("SELECT COUNT(*) FROM user_extra_services WHERE user_id=1 AND service_id=1").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to query: %v", err)
+	}
+	if count != 1 {
+		t.Error("Expected user-extra-service link to exist")
+	}
+
+	// Idempotent insert
+	err = InsertUserExtraService(1, 1)
+	if err != nil {
+		t.Errorf("InsertUserExtraService (duplicate) should not fail: %v", err)
+	}
+
+	err = DeleteUserExtraService(1, 1)
+	if err != nil {
+		t.Errorf("DeleteUserExtraService failed: %v", err)
+	}
+
+	err = DB.QueryRow("SELECT COUNT(*) FROM user_extra_services WHERE user_id=1 AND service_id=1").Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to query: %v", err)
+	}
+	if count != 0 {
+		t.Error("Expected user-extra-service link to be removed")
+	}
+}
+
+func TestCreateAndGetRefreshToken(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Insert a user
+	result, err := DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "tokenuser", "pw")
+	if err != nil {
+		t.Fatalf("Failed to insert user: %v", err)
+	}
+	userID, _ := result.LastInsertId()
+
+	token := "test-refresh-token-xyz"
+	expiry := time.Now().Add(7 * 24 * time.Hour)
+
+	err = CreateRefreshToken(token, int(userID), expiry)
+	if err != nil {
+		t.Fatalf("CreateRefreshToken failed: %v", err)
+	}
+
+	// Get the token
+	gotUserID, err := GetRefreshToken(token)
+	if err != nil {
+		t.Fatalf("GetRefreshToken failed: %v", err)
+	}
+	if gotUserID != int(userID) {
+		t.Errorf("Expected userID %d, got %d", userID, gotUserID)
+	}
+
+	// Get non-existent token
+	_, err = GetRefreshToken("nonexistent-token")
+	if err == nil {
+		t.Error("Expected error for non-existent token")
+	}
+
+	// Delete the token
+	err = DeleteRefreshToken(token)
+	if err != nil {
+		t.Fatalf("DeleteRefreshToken failed: %v", err)
+	}
+
+	_, err = GetRefreshToken(token)
+	if err == nil {
+		t.Error("Expected error after deleting refresh token")
+	}
+}
+
+func TestDeleteUserRefreshTokens(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	result, err := DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "tokenuser2", "pw")
+	if err != nil {
+		t.Fatalf("Failed to insert user: %v", err)
+	}
+	userID, _ := result.LastInsertId()
+
+	expiry := time.Now().Add(7 * 24 * time.Hour)
+	err = CreateRefreshToken("token1", int(userID), expiry)
+	if err != nil {
+		t.Fatalf("CreateRefreshToken failed: %v", err)
+	}
+	err = CreateRefreshToken("token2", int(userID), expiry)
+	if err != nil {
+		t.Fatalf("CreateRefreshToken failed: %v", err)
+	}
+
+	err = DeleteUserRefreshTokens(int(userID))
+	if err != nil {
+		t.Fatalf("DeleteUserRefreshTokens failed: %v", err)
+	}
+
+	var count int
+	err = DB.QueryRow("SELECT COUNT(*) FROM refresh_tokens WHERE user_id = ?", userID).Scan(&count)
+	if err != nil {
+		t.Fatalf("Failed to query: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("Expected 0 refresh tokens after delete, got %d", count)
 	}
 }

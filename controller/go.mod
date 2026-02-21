@@ -3,16 +3,19 @@ module Aegis/controller
 go 1.25.7
 
 require (
+	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/docker/docker v27.1.1+incompatible
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/justinas/alice v1.2.0
 	github.com/mattn/go-sqlite3 v1.14.33
 	golang.org/x/crypto v0.47.0
+	golang.org/x/oauth2 v0.35.0
 	google.golang.org/grpc v1.78.0
 	google.golang.org/protobuf v1.36.11
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
@@ -20,6 +23,7 @@ require (
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
