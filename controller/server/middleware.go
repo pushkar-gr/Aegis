@@ -34,12 +34,19 @@ func authMiddlewareFunc(next http.Handler) http.Handler {
 
 		if jwtPublicKey != nil {
 			username, err = utils.GetUsernameFromTokenRS256(cookie.Value, jwtPublicKey)
-			if err == nil {
-				ctx := context.WithValue(r.Context(), userKey, username)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
+		} else {
+			// fallback for HMAC
+			username, err = utils.GetUsernameFromToken(cookie.Value, []byte(jwtKey))
 		}
+
+		if err == nil {
+			ctx := context.WithValue(r.Context(), userKey, username)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		log.Printf("[middleware] auth failed: token invalid - %v", err)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 }
 
