@@ -65,6 +65,7 @@ func setupTestServer(t *testing.T) func() {
 			"password" TEXT NOT NULL,
 			"role_id" INTEGER NOT NULL DEFAULT 2,
 			"is_active" INTEGER NOT NULL DEFAULT 1,
+			"provider" TEXT NOT NULL DEFAULT 'local',
 			FOREIGN KEY(role_id) REFERENCES roles(id)
 		);`
 	if _, err := database.DB.Exec(createUsersTable); err != nil {
@@ -127,6 +128,18 @@ func setupTestServer(t *testing.T) func() {
 	// We need to call the database initialization to prepare the statements
 	if err := database.InitPreparedStatements(); err != nil {
 		t.Fatalf("Failed to initialize prepared statements: %v", err)
+	}
+
+	createRefreshTokensTable := `
+		CREATE TABLE IF NOT EXISTS refresh_tokens (
+			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+			"token" TEXT NOT NULL UNIQUE,
+			"user_id" INTEGER NOT NULL,
+			"expires_at" DATETIME NOT NULL,
+			FOREIGN KEY(user_id) REFERENCES users(id)
+		);`
+	if _, err := database.DB.Exec(createRefreshTokensTable); err != nil {
+		t.Fatalf("Failed to create refresh_tokens table: %v", err)
 	}
 
 	jwtKey = testJWTKey
@@ -358,5 +371,135 @@ func TestUpdatePassword(t *testing.T) {
 				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
 			}
 		})
+	}
+}
+
+func TestGetCurrentUser(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	hashedPassword, _ := utils.HashPassword("TestPass123!")
+	_, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		"currentuser", hashedPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	// Test with valid user context
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	ctx := contextWithUser(req.Context(), "currentuser")
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	getCurrentUser(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d. Response: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var result struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+		RoleId   int    `json:"role_id"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	if result.Username != "currentuser" {
+		t.Errorf("Expected username 'currentuser', got '%s'", result.Username)
+	}
+	if result.Role == "" {
+		t.Error("Expected non-empty role")
+	}
+}
+
+func TestGetCurrentUserUnauthorized(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// No user context set
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	w := httptest.NewRecorder()
+
+	getCurrentUser(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d", http.StatusUnauthorized, w.Code)
+	}
+}
+
+func TestRefreshToken(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	hashedPassword, _ := utils.HashPassword("TestPass123!")
+	result, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
+		"refreshuser", hashedPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+	userID, _ := result.LastInsertId()
+
+	// Create a valid refresh token
+	token, err := utils.GenerateSecureToken(32)
+	if err != nil {
+		t.Fatalf("Failed to generate token: %v", err)
+	}
+	expiry := time.Now().Add(7 * 24 * time.Hour)
+	if err := database.CreateRefreshToken(token, int(userID), expiry); err != nil {
+		t.Fatalf("Failed to create refresh token: %v", err)
+	}
+
+	// Test refresh with valid token
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: token})
+	w := httptest.NewRecorder()
+
+	refreshToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d, got %d. Response: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	// Verify new token cookie was set
+	cookies := w.Result().Cookies()
+	found := false
+	for _, cookie := range cookies {
+		if cookie.Name == "token" && cookie.Value != "" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected new token cookie to be set")
+	}
+}
+
+func TestRefreshTokenMissing(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	w := httptest.NewRecorder()
+
+	refreshToken(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d for missing refresh token, got %d", http.StatusUnauthorized, w.Code)
+	}
+}
+
+func TestRefreshTokenInvalid(t *testing.T) {
+	cleanup := setupTestServer(t)
+	defer cleanup()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/refresh", nil)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "invalid-token-xyz"})
+	w := httptest.NewRecorder()
+
+	refreshToken(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d for invalid refresh token, got %d", http.StatusUnauthorized, w.Code)
 	}
 }

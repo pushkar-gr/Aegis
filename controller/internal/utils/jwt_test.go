@@ -2,6 +2,8 @@ package utils
 
 import (
 	"Aegis/controller/internal/models"
+	"crypto/rand"
+	"crypto/rsa"
 	"testing"
 	"time"
 
@@ -179,5 +181,172 @@ func TestGetUsernameFromTokenSigningMethods(t *testing.T) {
 				t.Errorf("Expected username %s, got %s", testUsername, username)
 			}
 		})
+	}
+}
+
+func generateTestRSAKey(t *testing.T) *rsa.PrivateKey {
+	t.Helper()
+	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Failed to generate RSA key: %v", err)
+	}
+	return privKey
+}
+
+func TestGenerateTokenRS256(t *testing.T) {
+	privKey := generateTestRSAKey(t)
+	testUsername := "testuser"
+
+	claims := &models.Claims{
+		Username: testUsername,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			Issuer:    "aegis-controller",
+		},
+	}
+
+	tokenString, err := GenerateTokenRS256(claims, privKey)
+	if err != nil {
+		t.Fatalf("GenerateTokenRS256 failed: %v", err)
+	}
+	if tokenString == "" {
+		t.Error("Expected non-empty token string")
+	}
+
+	// Verify the token can be parsed with the public key
+	username, err := GetUsernameFromTokenRS256(tokenString, &privKey.PublicKey)
+	if err != nil {
+		t.Errorf("GetUsernameFromTokenRS256 failed: %v", err)
+	}
+	if username != testUsername {
+		t.Errorf("Expected username %s, got %s", testUsername, username)
+	}
+}
+
+func TestGetUsernameFromTokenRS256(t *testing.T) {
+	privKey := generateTestRSAKey(t)
+	testUsername := "rs256user"
+
+	// Create a valid RS256 token
+	claims := &models.Claims{
+		Username: testUsername,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			Issuer:    "aegis-controller",
+		},
+	}
+	validToken, err := GenerateTokenRS256(claims, privKey)
+	if err != nil {
+		t.Fatalf("Failed to create RS256 token: %v", err)
+	}
+
+	// Create an expired RS256 token
+	expiredClaims := &models.Claims{
+		Username: testUsername,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
+		},
+	}
+	expiredToken, err := GenerateTokenRS256(expiredClaims, privKey)
+	if err != nil {
+		t.Fatalf("Failed to create expired RS256 token: %v", err)
+	}
+
+	// Create a different RSA key pair for wrong key test
+	otherKey := generateTestRSAKey(t)
+
+	tests := []struct {
+		name         string
+		tokenString  string
+		shouldError  bool
+		expectedUser string
+	}{
+		{
+			name:         "Valid RS256 token",
+			tokenString:  validToken,
+			shouldError:  false,
+			expectedUser: testUsername,
+		},
+		{
+			name:        "Expired RS256 token",
+			tokenString: expiredToken,
+			shouldError: true,
+		},
+		{
+			name:        "Wrong public key",
+			tokenString: validToken,
+			// Using other key's public key to test wrong key scenario
+			shouldError: true,
+		},
+		{
+			name:        "Malformed token",
+			tokenString: "not.a.valid.token",
+			shouldError: true,
+		},
+		{
+			name:        "Empty token",
+			tokenString: "",
+			shouldError: true,
+		},
+		{
+			name: "HMAC token rejected by RS256 verifier",
+			tokenString: func() string {
+				hmacClaims := &models.Claims{
+					Username: testUsername,
+					RegisteredClaims: jwt.RegisteredClaims{
+						ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+					},
+				}
+				tok := jwt.NewWithClaims(jwt.SigningMethodHS256, hmacClaims)
+				s, _ := tok.SignedString([]byte("secret"))
+				return s
+			}(),
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var pubKey *rsa.PublicKey
+			if tt.name == "Wrong public key" {
+				pubKey = &otherKey.PublicKey
+			} else {
+				pubKey = &privKey.PublicKey
+			}
+			username, err := GetUsernameFromTokenRS256(tt.tokenString, pubKey)
+			if tt.shouldError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if tt.expectedUser != "" && username != tt.expectedUser {
+					t.Errorf("Expected username %s, got %s", tt.expectedUser, username)
+				}
+			}
+		})
+	}
+}
+
+func TestGetUsernameFromTokenRS256WrongKey(t *testing.T) {
+	privKey := generateTestRSAKey(t)
+	otherKey := generateTestRSAKey(t)
+
+	claims := &models.Claims{
+		Username: "testuser",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+		},
+	}
+	tokenString, err := GenerateTokenRS256(claims, privKey)
+	if err != nil {
+		t.Fatalf("Failed to create token: %v", err)
+	}
+
+	_, err = GetUsernameFromTokenRS256(tokenString, &otherKey.PublicKey)
+	if err == nil {
+		t.Error("Expected error when verifying with wrong public key, but got none")
 	}
 }

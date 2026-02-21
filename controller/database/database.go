@@ -392,8 +392,8 @@ func GetRefreshToken(token string) (userID int, err error) {
 	err = DB.QueryRow(`
 		SELECT user_id
 		FROM refresh_tokens
-		WHERE token = ? AND expires_at > CURRENT_TIMESTAMP
-	`, token).Scan(&userID)
+		WHERE token = ? AND expires_at > ?
+	`, token, time.Now()).Scan(&userID)
 	return
 }
 
