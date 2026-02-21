@@ -1,15 +1,124 @@
 use anyhow::{Context, Result};
+use serde::Deserialize;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use tracing::{debug, warn};
 
 use crate::hostname_to_ip::hostname_to_ip;
 
-/// Agent configuration loaded from command-line arguments.
+/// Default path for the TOML configuration file.
+pub const DEFAULT_CONFIG_PATH: &str = "config.toml";
+
+// TOML file structure
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct TomlNetwork {
+    iface: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct TomlController {
+    ip: String,
+    host: String,
+    port: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct TomlCerts {
+    cert_file: String,
+    key_file: String,
+    ca_file: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct TomlSession {
+    lazy_update_timeout_ns: u64,
+    rule_timeout_ns: u64,
+    cleanup_interval_sec: u64,
+    broadcast_channel_size: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct TomlGrpc {
+    port: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct TomlFile {
+    network: TomlNetwork,
+    controller: TomlController,
+    certs: TomlCerts,
+    session: TomlSession,
+    grpc: TomlGrpc,
+}
+
+impl Default for TomlNetwork {
+    fn default() -> Self {
+        Self {
+            iface: "eth0".to_string(),
+        }
+    }
+}
+
+impl Default for TomlController {
+    fn default() -> Self {
+        Self {
+            ip: "172.21.0.5".to_string(),
+            host: String::new(),
+            port: 443,
+        }
+    }
+}
+
+impl Default for TomlCerts {
+    fn default() -> Self {
+        Self {
+            cert_file: "certs/agent.pem".to_string(),
+            key_file: "certs/agent.key".to_string(),
+            ca_file: "certs/ca.pem".to_string(),
+        }
+    }
+}
+
+impl Default for TomlSession {
+    fn default() -> Self {
+        Self {
+            lazy_update_timeout_ns: 1_000_000_000,
+            rule_timeout_ns: 60_000_000_000,
+            cleanup_interval_sec: 30,
+            broadcast_channel_size: 16,
+        }
+    }
+}
+
+impl Default for TomlGrpc {
+    fn default() -> Self {
+        Self { port: 50001 }
+    }
+}
+
+impl Default for TomlFile {
+    fn default() -> Self {
+        Self {
+            network: TomlNetwork::default(),
+            controller: TomlController::default(),
+            certs: TomlCerts::default(),
+            session: TomlSession::default(),
+            grpc: TomlGrpc::default(),
+        }
+    }
+}
+
+/// Agent configuration loaded from a TOML file.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Config<'a> {
+pub struct Config {
     /// Network interface to attach XDP program to
-    pub iface_name: &'a str,
+    pub iface_name: String,
     /// Controller IP address
     pub controller_ip: Ipv4Addr,
     /// Controller port number
@@ -30,365 +139,209 @@ pub struct Config<'a> {
     pub grpc_server_port: u16,
 }
 
-impl<'a> Default for Config<'a> {
+impl Default for Config {
     fn default() -> Self {
+        let tf = TomlFile::default();
+        let controller_ip = Ipv4Addr::from_str(&tf.controller.ip).unwrap();
         Self {
-            iface_name: "eth0",
-            controller_ip: Ipv4Addr::new(172, 21, 0, 5),
-            controller_port: 443,
-            lazy_update_timeout: 1_000_000_000, // 1s
-            cert_file: "certs/agent.pem".to_string(),
-            key_file: "certs/agent.key".to_string(),
-            ca_file: "certs/ca.pem".to_string(),
-            rule_timeout_ns: 60_000_000_000, // 60s
-            cleanup_interval_sec: 30,
-            broadcast_channel_size: 16,
-            grpc_server_port: 50001,
+            iface_name: tf.network.iface,
+            controller_ip,
+            controller_port: tf.controller.port,
+            lazy_update_timeout: tf.session.lazy_update_timeout_ns,
+            cert_file: tf.certs.cert_file,
+            key_file: tf.certs.key_file,
+            ca_file: tf.certs.ca_file,
+            rule_timeout_ns: tf.session.rule_timeout_ns,
+            cleanup_interval_sec: tf.session.cleanup_interval_sec,
+            broadcast_channel_size: tf.session.broadcast_channel_size,
+            grpc_server_port: tf.grpc.port,
         }
     }
 }
 
-impl<'a> Config<'a> {
-    /// Parses configuration from command-line arguments.
-    ///
-    /// Returns the loaded configuration or an error if parsing fails.
-    pub fn load(args: &'a [String]) -> Result<Self> {
-        let mut config = Self::default();
+impl Config {
+    /// Loads configuration from the default `config.toml` path.
+    /// If the file does not exist, defaults are used.
+    pub fn load() -> Result<Self> {
+        Self::load_from_file(DEFAULT_CONFIG_PATH)
+    }
 
-        // Start at index 1 to skip the binary name
-        let mut i = 1;
-
-        while i < args.len() {
-            match args[i].as_str() {
-                // Interface name
-                "-i" | "--iface" => {
-                    if i + 1 < args.len() {
-                        config.iface_name = &args[i + 1];
-                        i += 1;
-                    }
-                }
-
-                // Controller IP
-                "-c" | "--ip" => {
-                    if i + 1 < args.len() {
-                        let ip_str = &args[i + 1];
-                        config.controller_ip = Ipv4Addr::from_str(ip_str)
-                            .with_context(|| format!("Invalid IPv4 address: {}", ip_str))?;
-                        i += 1;
-                    }
-                }
-
-                // Controller host
-                "--host" => {
-                    if i + 1 < args.len() {
-                        config.controller_ip = hostname_to_ip(args[i + 1].clone())?;
-                        i += 1;
-                    }
-                }
-
-                // Controller port
-                "-p" | "--port" => {
-                    if i + 1 < args.len() {
-                        let port_str = &args[i + 1];
-                        config.controller_port = port_str
-                            .parse::<u16>()
-                            .with_context(|| format!("Invalid port number: {}", port_str))?;
-                        i += 1;
-                    }
-                }
-
-                // Session update timeout
-                "-n" | "--update-time" => {
-                    if i + 1 < args.len() {
-                        let time_str = &args[i + 1];
-                        config.lazy_update_timeout = time_str
-                            .parse::<u64>()
-                            .with_context(|| format!("Invalid update-time: {}", time_str))?;
-                        i += 1;
-                    }
-                }
-
-                "--cert-pem" => {
-                    if i + 1 < args.len() {
-                        let certs_path = &args[i + 1];
-                        config.cert_file = certs_path.to_string();
-                    }
-                }
-
-                "--cert-key" => {
-                    if i + 1 < args.len() {
-                        let certs_path = &args[i + 1];
-                        config.key_file = certs_path.to_string();
-                    }
-                }
-                "--cert-ca" => {
-                    if i + 1 < args.len() {
-                        let certs_path = &args[i + 1];
-                        config.ca_file = certs_path.to_string();
-                    }
-                }
-
-                // Rule timeout in nanoseconds
-                "-r" | "--rule-timeout" => {
-                    if i + 1 < args.len() {
-                        let timeout_str = &args[i + 1];
-                        config.rule_timeout_ns = timeout_str
-                            .parse::<u64>()
-                            .with_context(|| format!("Invalid rule-timeout: {}", timeout_str))?;
-                        i += 1;
-                    }
-                }
-
-                // Cleanup interval in seconds
-                "--cleanup-interval" => {
-                    if i + 1 < args.len() {
-                        let interval_str = &args[i + 1];
-                        config.cleanup_interval_sec =
-                            interval_str.parse::<u64>().with_context(|| {
-                                format!("Invalid cleanup-interval: {}", interval_str)
-                            })?;
-                        i += 1;
-                    }
-                }
-
-                // Broadcast channel size
-                "--channel-size" => {
-                    if i + 1 < args.len() {
-                        let size_str = &args[i + 1];
-                        config.broadcast_channel_size = size_str
-                            .parse::<usize>()
-                            .with_context(|| format!("Invalid channel-size: {}", size_str))?;
-                        i += 1;
-                    }
-                }
-
-                // gRPC server port
-                "-g" | "--grpc-port" => {
-                    if i + 1 < args.len() {
-                        let port_str = &args[i + 1];
-                        config.grpc_server_port = port_str
-                            .parse::<u16>()
-                            .with_context(|| format!("Invalid grpc-port: {}", port_str))?;
-                        i += 1;
-                    }
-                }
-
-                // Help
-                "-h" | "--help" => {
-                    Self::print_help();
-                }
-
-                // Unknown argument
-                _ => {
-                    warn!("Unknown argument '{}' - ignoring", args[i]);
-                }
+    /// Loads configuration from an explicit TOML file path.
+    /// If the file does not exist, defaults are used.
+    pub fn load_from_file(path: &str) -> Result<Self> {
+        let tf: TomlFile = match std::fs::read_to_string(path) {
+            Ok(contents) => toml::from_str(&contents)
+                .with_context(|| format!("Failed to parse config file: {}", path))?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                warn!("Config file '{}' not found, using built-in defaults", path);
+                TomlFile::default()
             }
-            i += 1;
-        }
+            Err(e) => {
+                return Err(e).with_context(|| format!("Failed to read config file: {}", path));
+            }
+        };
+        Self::from_toml(tf)
+    }
+
+    fn from_toml(tf: TomlFile) -> Result<Self> {
+        let controller_ip = if !tf.controller.host.is_empty() {
+            hostname_to_ip(tf.controller.host.clone())
+                .with_context(|| format!("Failed to resolve host: {}", tf.controller.host))?
+        } else {
+            Ipv4Addr::from_str(&tf.controller.ip)
+                .with_context(|| format!("Invalid controller.ip: {}", tf.controller.ip))?
+        };
+
+        let config = Self {
+            iface_name: tf.network.iface,
+            controller_ip,
+            controller_port: tf.controller.port,
+            lazy_update_timeout: tf.session.lazy_update_timeout_ns,
+            cert_file: tf.certs.cert_file,
+            key_file: tf.certs.key_file,
+            ca_file: tf.certs.ca_file,
+            rule_timeout_ns: tf.session.rule_timeout_ns,
+            cleanup_interval_sec: tf.session.cleanup_interval_sec,
+            broadcast_channel_size: tf.session.broadcast_channel_size,
+            grpc_server_port: tf.grpc.port,
+        };
 
         debug!("Configuration loaded: {:?}", config);
         Ok(config)
-    }
-
-    /// Prints usage information and exits.
-    fn print_help() {
-        println!("Aegis Agent - Zero Trust Network Firewall");
-        println!("\nUsage: aegis-agent [OPTIONS]");
-        println!("\nOptions:");
-        println!("  -i, --iface <NAME>          Network interface (default: eth0)");
-        println!("  -c, --ip <IP>               Controller IP (default: 172.21.0.5)");
-        println!(
-            "  --host <IP>                 Controller hostname (automically resolves hostname and uses as controller ip)"
-        );
-        println!("  -p, --port <PORT>           Controller port (default: 443)");
-        println!(
-            "  -n, --update-time <NS>      Session update timeout in ns (default: 1000000000)"
-        );
-        println!("  -r, --rule-timeout <NS>     Rule timeout in ns (default: 60000000000)");
-        println!("  -g, --grpc-port <PORT>      gRPC server port (default: 50001)");
-        println!("  --cleanup-interval <SEC>    Cleanup interval in seconds (default: 30)");
-        println!("  --channel-size <SIZE>       Broadcast channel size (default: 16)");
-        println!("  --cert-pem <FILE>           Certificate file (default: certs/agent.pem)");
-        println!("  --cert-key <FILE>           Private key file (default: certs/agent.key)");
-        println!("  --cert-ca <FILE>            CA certificate (default: certs/ca.pem)");
-        println!("  -h, --help                  Show this help message");
-        std::process::exit(0);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn write_toml(content: &str) -> NamedTempFile {
+        let mut f = NamedTempFile::new().expect("Failed to create temp file");
+        f.write_all(content.as_bytes())
+            .expect("Failed to write temp file");
+        f
+    }
 
     #[test]
     fn test_load_defaults() {
-        let args = vec!["program_name".to_string()];
-        let config = Config::load(&args).expect("Failed to load default config");
+        let cfg = Config::default();
+        assert_eq!(cfg.iface_name, "eth0");
+        assert_eq!(cfg.controller_ip, Ipv4Addr::new(172, 21, 0, 5));
+        assert_eq!(cfg.controller_port, 443);
+        assert_eq!(cfg.lazy_update_timeout, 1_000_000_000);
+        assert_eq!(cfg.grpc_server_port, 50001);
+    }
 
-        assert_eq!(config.iface_name, "eth0");
-        assert_eq!(config.controller_ip, Ipv4Addr::new(172, 21, 0, 5));
-        assert_eq!(config.controller_port, 443);
+    #[test]
+    fn test_load_from_file_defaults() {
+        // An empty TOML file should produce the built-in defaults.
+        let f = write_toml("");
+        let cfg = Config::load_from_file(f.path().to_str().unwrap())
+            .expect("Failed to load empty config");
+
+        assert_eq!(cfg.iface_name, "eth0");
+        assert_eq!(cfg.controller_ip, Ipv4Addr::new(172, 21, 0, 5));
+        assert_eq!(cfg.controller_port, 443);
+        assert_eq!(cfg.cert_file, "certs/agent.pem");
+        assert_eq!(cfg.grpc_server_port, 50001);
     }
 
     #[test]
     fn test_load_custom_values() {
-        let args = vec![
-            "aegis".to_string(),
-            "--iface".to_string(),
-            "docker0".to_string(),
-            "--ip".to_string(),
-            "10.0.0.1".to_string(),
-            "--port".to_string(),
-            "8080".to_string(),
-        ];
-        let config = Config::load(&args).expect("Failed to load custom config");
+        let f = write_toml(
+            r#"
+[network]
+iface = "docker0"
 
-        assert_eq!(config.iface_name, "docker0");
-        assert_eq!(config.controller_ip, Ipv4Addr::new(10, 0, 0, 1));
-        assert_eq!(config.controller_port, 8080);
+[controller]
+ip   = "10.0.0.1"
+port = 8080
+
+[certs]
+cert_file = "/custom/cert.pem"
+key_file  = "/custom/key.pem"
+ca_file   = "/custom/ca.pem"
+
+[session]
+lazy_update_timeout_ns  = 5_000_000_000
+rule_timeout_ns         = 120_000_000_000
+cleanup_interval_sec    = 60
+broadcast_channel_size  = 32
+
+[grpc]
+port = 50002
+"#,
+        );
+        let cfg = Config::load_from_file(f.path().to_str().unwrap())
+            .expect("Failed to load custom config");
+
+        assert_eq!(cfg.iface_name, "docker0");
+        assert_eq!(cfg.controller_ip, Ipv4Addr::new(10, 0, 0, 1));
+        assert_eq!(cfg.controller_port, 8080);
+        assert_eq!(cfg.cert_file, "/custom/cert.pem");
+        assert_eq!(cfg.key_file, "/custom/key.pem");
+        assert_eq!(cfg.ca_file, "/custom/ca.pem");
+        assert_eq!(cfg.lazy_update_timeout, 5_000_000_000);
+        assert_eq!(cfg.rule_timeout_ns, 120_000_000_000);
+        assert_eq!(cfg.cleanup_interval_sec, 60);
+        assert_eq!(cfg.broadcast_channel_size, 32);
+        assert_eq!(cfg.grpc_server_port, 50002);
     }
 
     #[test]
-    fn test_load_short_flags() {
-        let args = vec![
-            "aegis".to_string(),
-            "-i".to_string(),
-            "eth1".to_string(),
-            "-c".to_string(),
-            "192.168.1.1".to_string(),
-            "-p".to_string(),
-            "9090".to_string(),
-        ];
-        let config = Config::load(&args).expect("Failed to load short flags");
-
-        assert_eq!(config.iface_name, "eth1");
-        assert_eq!(config.controller_ip, Ipv4Addr::new(192, 168, 1, 1));
-        assert_eq!(config.controller_port, 9090);
+    fn test_missing_file_uses_defaults() {
+        let cfg = Config::load_from_file("/nonexistent/path/config.toml")
+            .expect("Missing file should fall back to defaults");
+        assert_eq!(cfg.iface_name, "eth0");
+        assert_eq!(cfg.controller_port, 443);
     }
 
     #[test]
-    fn test_invalid_ip_format() {
-        let args = vec![
-            "aegis".to_string(),
-            "--ip".to_string(),
-            "999.999.999.999".to_string(),
-        ];
-        let result = Config::load(&args);
+    fn test_invalid_ip_fails() {
+        let f = write_toml(
+            r#"
+[controller]
+ip = "999.999.999.999"
+"#,
+        );
+        let result = Config::load_from_file(f.path().to_str().unwrap());
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_invalid_port_format() {
-        let args = vec![
-            "aegis".to_string(),
-            "--port".to_string(),
-            "invalid_port".to_string(),
-        ];
-        let result = Config::load(&args);
+    fn test_invalid_toml_fails() {
+        let f = write_toml("{ this is not valid toml");
+        let result = Config::load_from_file(f.path().to_str().unwrap());
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_certificate_paths() {
-        let args = vec![
-            "aegis".to_string(),
-            "--cert-pem".to_string(),
-            "/custom/cert.pem".to_string(),
-            "--cert-key".to_string(),
-            "/custom/key.pem".to_string(),
-            "--cert-ca".to_string(),
-            "/custom/ca.pem".to_string(),
-        ];
-        let config = Config::load(&args).expect("Failed to load cert paths");
-
-        assert_eq!(config.cert_file, "/custom/cert.pem");
-        assert_eq!(config.key_file, "/custom/key.pem");
-        assert_eq!(config.ca_file, "/custom/ca.pem");
+    fn test_host_resolution() {
+        let f = write_toml(
+            r#"
+[controller]
+host = "localhost"
+"#,
+        );
+        let cfg = Config::load_from_file(f.path().to_str().unwrap())
+            .expect("Failed to resolve localhost");
+        assert_eq!(cfg.controller_ip, Ipv4Addr::new(127, 0, 0, 1));
     }
 
     #[test]
-    fn test_update_timeout() {
-        let args = vec![
-            "aegis".to_string(),
-            "-n".to_string(),
-            "5000000000".to_string(),
-        ];
-        let config = Config::load(&args).expect("Failed to load update timeout");
-
-        assert_eq!(config.lazy_update_timeout, 5000000000);
-    }
-
-    #[test]
-    fn test_mixed_flags() {
-        let args = vec![
-            "aegis".to_string(),
-            "-i".to_string(),
-            "eth2".to_string(),
-            "--ip".to_string(),
-            "10.1.1.1".to_string(),
-            "-p".to_string(),
-            "8443".to_string(),
-            "--update-time".to_string(),
-            "2000000000".to_string(),
-        ];
-        let config = Config::load(&args).expect("Failed to load mixed flags");
-
-        assert_eq!(config.iface_name, "eth2");
-        assert_eq!(config.controller_ip, Ipv4Addr::new(10, 1, 1, 1));
-        assert_eq!(config.controller_port, 8443);
-        assert_eq!(config.lazy_update_timeout, 2000000000);
-    }
-
-    #[test]
-    fn test_invalid_update_timeout() {
-        let args = vec![
-            "aegis".to_string(),
-            "--update-time".to_string(),
-            "not_a_number".to_string(),
-        ];
-        let result = Config::load(&args);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_unknown_args_ignored() {
-        let args = vec![
-            "aegis".to_string(),
-            "--unknown-flag".to_string(),
-            "value".to_string(),
-            "-i".to_string(),
-            "eth0".to_string(),
-        ];
-        // Should not panic, just log a warning
-        let config = Config::load(&args).expect("Should handle unknown args");
-        assert_eq!(config.iface_name, "eth0");
-    }
-
-    #[test]
-    fn test_load_hostname_flag() {
-        let args = vec![
-            "aegis".to_string(),
-            "--host".to_string(),
-            "localhost".to_string(),
-        ];
-        let config = Config::load(&args).expect("Failed to resolve localhost via flag");
-
-        // Localhost should resolve to 127.0.0.1
-        assert_eq!(config.controller_ip, Ipv4Addr::new(127, 0, 0, 1));
-    }
-
-    #[test]
-    fn test_host_override() {
-        let args = vec![
-            "aegis".to_string(),
-            "--ip".to_string(),
-            "1.1.1.1".to_string(),
-            "--host".to_string(),
-            "localhost".to_string(),
-        ];
-        let config = Config::load(&args).expect("Failed to load config");
-
-        // Should use the localhost IP (127.0.0.1), overriding 1.1.1.1
-        assert_eq!(config.controller_ip, Ipv4Addr::new(127, 0, 0, 1));
+    fn test_host_takes_priority_over_ip() {
+        let f = write_toml(
+            r#"
+[controller]
+ip   = "1.1.1.1"
+host = "localhost"
+"#,
+        );
+        let cfg =
+            Config::load_from_file(f.path().to_str().unwrap()).expect("Failed to load config");
+        // host should win
+        assert_eq!(cfg.controller_ip, Ipv4Addr::new(127, 0, 0, 1));
     }
 }

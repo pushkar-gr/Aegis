@@ -4,13 +4,13 @@
 //!
 //! Responsibilities:
 //! - Load and attach XDP program to network interface
-//! - Parse configuration from command-line arguments
+//! - Parse configuration from `config.toml`
 //! - Run gRPC server for session management
 //!
 //! ## Usage
 //!
 //! ```sh
-//! sudo ./aegis-agent -i eth0 -c controller -p 8080
+//! sudo ./aegis-agent
 //! ```
 
 mod benchmark;
@@ -24,7 +24,7 @@ use crate::grpc_server::session::{Session, SessionList};
 use crate::{bpf::Bpf, config::Config, grpc_server::start_grpc_server};
 use anyhow::{Context, Result};
 use nix::net::if_::if_nametoindex;
-use std::{env, net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, broadcast};
 use tracing::{debug, error, info, warn};
 
@@ -44,12 +44,11 @@ async fn main() -> Result<()> {
     info!("Capabilities verified");
 
     // Load configuration
-    let args: Vec<String> = env::args().collect();
-    let config = Config::load(&args)?;
+    let config = Config::load()?;
     debug!("Configuration: {:?}", config);
 
     // Resolve network interface
-    let interface_index = if_nametoindex(config.iface_name)
+    let interface_index = if_nametoindex(config.iface_name.as_str())
         .with_context(|| format!("Interface '{}' not found", config.iface_name))?
         as i32;
 
