@@ -3,6 +3,7 @@ module Aegis/controller
 go 1.25.7
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/docker/docker v27.1.1+incompatible
 	github.com/golang-jwt/jwt/v5 v5.3.0
