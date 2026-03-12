@@ -47,7 +47,7 @@ struct TomlGrpc {
     port: u16,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Default, Debug, Deserialize)]
 #[serde(default)]
 struct TomlFile {
     network: TomlNetwork,
@@ -102,17 +102,17 @@ impl Default for TomlGrpc {
     }
 }
 
-impl Default for TomlFile {
-    fn default() -> Self {
-        Self {
-            network: TomlNetwork::default(),
-            controller: TomlController::default(),
-            certs: TomlCerts::default(),
-            session: TomlSession::default(),
-            grpc: TomlGrpc::default(),
-        }
-    }
-}
+// impl Default for TomlFile {
+//     fn default() -> Self {
+//         Self {
+//             network: TomlNetwork::default(),
+//             controller: TomlController::default(),
+//             certs: TomlCerts::default(),
+//             session: TomlSession::default(),
+//             grpc: TomlGrpc::default(),
+//         }
+//     }
+// }
 
 /// Agent configuration loaded from a TOML file.
 #[derive(Debug, PartialEq, Eq)]
