@@ -51,10 +51,10 @@ ci: ci-go ci-rust
 ci-go:
 	@echo "--- [CI] Starting Go Controller Checks ---"
 	@echo "[Lint] Running golangci-lint (via Docker)..."
-	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -w /app golangci/golangci-lint:latest golangci-lint run -v
+	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -v "$(shell go env GOMODCACHE):/go/pkg/mod" -w /app golangci/golangci-lint:latest golangci-lint run -v
 	
 	@echo "[Vuln] Running govulncheck (via Docker)..."
-	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -w /app golang:1.25.7 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	docker run --rm --network host -v "$(PWD)/controller:/app" -w /app golang:1.26.1 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	
 	@echo "[Test] Running Unit Tests..."
 	cd $(CONTROLLER_DIR) && JWT_SECRET="test-secret" go test -v ./...
