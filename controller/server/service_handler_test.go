@@ -473,21 +473,21 @@ func TestIPAddressOptimization(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
-		name       string
-		hostname   string
-		expectedIp uint32
+		name         string
+		hostname     string
+		expectedIp   uint32
 		expectedPort uint16
 	}{
 		{
-			name:       "IPv4 address passes through",
-			hostname:   "192.168.1.100:8080",
-			expectedIp: 0xC0A80164, // 192.168.1.100
+			name:         "IPv4 address passes through",
+			hostname:     "192.168.1.100:8080",
+			expectedIp:   0xC0A80164, // 192.168.1.100
 			expectedPort: 8080,
 		},
 		{
-			name:       "Another IPv4 address",
-			hostname:   "10.0.0.1:9000",
-			expectedIp: 0x0A000001, // 10.0.0.1
+			name:         "Another IPv4 address",
+			hostname:     "10.0.0.1:9000",
+			expectedIp:   0x0A000001, // 10.0.0.1
 			expectedPort: 9000,
 		},
 	}
@@ -517,7 +517,7 @@ func TestIPAddressOptimization(t *testing.T) {
 			}
 
 			if service.Ip != tt.expectedIp || service.Port != tt.expectedPort {
-				t.Errorf("Expected ip 0x%08X port %d, got ip 0x%08X port %d", 
+				t.Errorf("Expected ip 0x%08X port %d, got ip 0x%08X port %d",
 					tt.expectedIp, tt.expectedPort, service.Ip, service.Port)
 			}
 		})
