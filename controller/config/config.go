@@ -235,6 +235,10 @@ func LoadFromFile(path string) *Config {
 
 	cfg := buildConfig(tf)
 
+	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
+		cfg.JwtKey = jwtSecret
+	}
+
 	if cfg.JwtKey == "CHANGE_ME" {
 		log.Fatal("[FATAL] auth.jwt_secret in config.toml must be changed from the default placeholder value")
 	}
