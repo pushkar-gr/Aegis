@@ -271,9 +271,9 @@
         let users = [], roles = [], allServices = [], currentUserServices = [];
         let currentTab = 'list';
 
-        if (!requireAuth()) {}
-
         document.addEventListener('DOMContentLoaded', async () => {
+            if (!await requireAuth()) return;
+
              const user = getCurrentUser();
             const role = getUserRole();
             

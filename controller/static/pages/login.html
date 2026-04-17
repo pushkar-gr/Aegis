@@ -163,12 +163,6 @@
 
     <script src="/static/js/api.js"></script>
     <script>
-        // Redirect if already logged in
-        if (getCurrentUser()) {
-            window.location.href = '/static/pages/dashboard.html';
-        }
-
-        // Load OIDC providers on page load
         async function loadOIDCProviders() {
             try {
                 const response = await API.getOIDCProviders();
@@ -218,8 +212,23 @@
             return button;
         }
 
-        // Load OIDC providers
-        loadOIDCProviders();
+        // Redirect if already logged in (localStorage or valid OIDC cookie)
+        (async () => {
+            if (getCurrentUser()) {
+                window.location.href = '/static/pages/dashboard.html';
+                return;
+            }
+            try {
+                const me = await API.getCurrentUser();
+                if (me && me.username) {
+                    window.location.href = '/static/pages/dashboard.html';
+                    return;
+                }
+            } catch (e) {
+                // Not logged in — show login form
+            }
+            loadOIDCProviders();
+        })();
 
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();

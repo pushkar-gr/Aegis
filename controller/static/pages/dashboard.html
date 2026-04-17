@@ -163,11 +163,9 @@
         let selectedServices = [];
         let searchQuery = '';
 
-        if (!requireAuth()) {
-            // Will redirect in requireAuth
-        }
-
         document.addEventListener('DOMContentLoaded', async () => {
+            if (!await requireAuth()) return;
+
             const user = getCurrentUser();
             const role = getUserRole();
             
