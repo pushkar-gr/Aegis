@@ -46,10 +46,10 @@ func (h *ServiceHandler) Create(c *gin.Context) {
 	result, err := h.svcSvc.Create(newService.Name, newService.Hostname, newService.Description)
 	if err != nil {
 		msg := err.Error()
-		switch {
-		case msg == "service name already exists":
+		switch msg {
+		case "service name already exists":
 			c.JSON(http.StatusConflict, gin.H{"error": msg})
-		case msg == "service name and hostname are required":
+		case "service name and hostname are required":
 			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
@@ -78,10 +78,10 @@ func (h *ServiceHandler) Update(c *gin.Context) {
 	result, err := h.svcSvc.Update(id, svc.Name, svc.Hostname, svc.Description)
 	if err != nil {
 		msg := err.Error()
-		switch {
-		case msg == "service not found":
+		switch msg {
+		case "service not found":
 			c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
-		case msg == "service name already exists":
+		case "service name already exists":
 			c.JSON(http.StatusConflict, gin.H{"error": msg})
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
@@ -178,10 +178,10 @@ func (h *ServiceHandler) SelectActiveService(c *gin.Context) {
 
 	if err := h.svcSvc.SelectActiveService(userID, roleID, req.ServiceID, clientIP); err != nil {
 		msg := err.Error()
-		switch {
-		case msg == "forbidden: no access to this service":
+		switch msg {
+		case "forbidden: no access to this service":
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: You do not have access to this service"})
-		case msg == "service not found or invalid configuration":
+		case "service not found or invalid configuration":
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Service not found or invalid configuration"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to activate session"})

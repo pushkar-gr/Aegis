@@ -47,8 +47,13 @@ The system implements a hierarchical Role-Based Access Control (RBAC) model.
 
 #### Logout
 * **Endpoint**: `POST /api/auth/logout`
-* **Description**: Invalidates the current session cookie.
-* **Response**: `200 OK` ("Logged out successfully")
+* **Description**: Invalidates the current session cookie (clears `token` cookie).
+* **Response**: `200 OK`
+
+#### Refresh Token
+* **Endpoint**: `POST /api/auth/refresh`
+* **Description**: Exchanges a valid `refresh_token` cookie for a new access token cookie.
+* **Response**: `200 OK` (sets a new `token` cookie)
 
 #### Update Password
 * **Endpoint**: `POST /api/auth/password`
@@ -73,6 +78,30 @@ The system implements a hierarchical Role-Based Access Control (RBAC) model.
       "role_id": 2
     }
     ```
+
+---
+
+### 1a. OIDC / SSO Authentication
+**Base Access**: Public. Only available when `oidc.enabled = true` in `config.toml`.
+
+#### List OIDC Providers
+* **Endpoint**: `GET /api/auth/oidc/providers`
+* **Description**: Returns the list of configured SSO providers (e.g. `github`).
+* **Response**: `200 OK`
+    ```json
+    { "providers": ["github"] }
+    ```
+* **Response** (OIDC disabled): `501 Not Implemented`
+
+#### Initiate OIDC Login
+* **Endpoint**: `GET /api/auth/oidc/login?provider={name}`
+* **Description**: Redirects the browser to the provider's authorization URL.
+* **Response**: `307 Temporary Redirect`
+
+#### OIDC Callback
+* **Endpoint**: `GET /api/auth/oidc/callback?state={state}&code={code}`
+* **Description**: Handles the authorization code returned by the provider, creates or updates the local user, and sets a session cookie.
+* **Response**: `200 OK` (sets `token` cookie and returns role info)
 
 ---
 
@@ -145,12 +174,14 @@ The system implements a hierarchical Role-Based Access Control (RBAC) model.
       {
         "id": 1,
         "name": "Database",
-        "ip_port": "10.0.0.5:5432",
+        "hostname": "10.0.0.5:5432",
         "description": "Primary DB",
         "created_at": "..."
       }
     ]
     ```
+
+> **Note**: The `hostname` field accepts both IP:port strings (e.g. `10.0.0.5:5432`) and hostname:port strings (e.g. `db.internal:5432`).
 
 #### Create Service
 * **Endpoint**: `POST /api/services`
@@ -159,7 +190,7 @@ The system implements a hierarchical Role-Based Access Control (RBAC) model.
     ```json
     {
       "name": "Web Server",
-      "ip_port": "192.168.1.50:80",
+      "hostname": "192.168.1.50:80",
       "description": "Main public web server"
     }
     ```
@@ -281,9 +312,9 @@ The system implements a hierarchical Role-Based Access Control (RBAC) model.
     ```json
     { "service_id": 1 }
     ```
-* **Response**: `200 OK` ("Service set to active")
+* **Response**: `200 OK`
 
 #### Deselect (Deactivate) Service
 * **Endpoint**: `DELETE /api/me/selected/{svc_id}`
 * **Description**: Deactivates a session for a specific service.
-* **Response**: `200 OK` ("Service removed from active list")
+* **Response**: `200 OK`

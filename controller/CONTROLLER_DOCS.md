@@ -86,5 +86,5 @@ Access is not "always on." To use a service, the user must explicitly "Select" (
 ### Step 4: Deactivation
 When finished, the user can deselect the service, or the session will eventually expire.
 
-* **Action**: `DELETE /api/me/selected/{id}`
+* **Action**: `DELETE /api/me/selected/{svc_id}`
 * **System Response**: The controller signals the agent to close the firewall connection for that specific user-service pair.

@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use std::net::ToSocketAddrs;
 use tracing::info;
 
-/// Resolve hostname and get IP
+/// Resolves a hostname to an `Ipv4Addr`.
 pub fn hostname_to_ip(hostname: String) -> Result<std::net::Ipv4Addr> {
     let socket_str = format!("{}:0", hostname);
     info!("Resolving address: {}", socket_str);

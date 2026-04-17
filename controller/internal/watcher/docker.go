@@ -64,7 +64,7 @@ func handleContainerEvent(cli *client.Client, msg events.Message) {
 		return
 	}
 
-	json, err := cli.ContainerInspect(context.Background(), msg.ID)
+	json, err := cli.ContainerInspect(context.Background(), msg.Actor.ID)
 	if err != nil {
 		log.Printf("[WARN] Docker watcher: failed to inspect container %s: %v", containerName, err)
 		return

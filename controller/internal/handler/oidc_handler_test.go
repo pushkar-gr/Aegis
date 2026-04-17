@@ -186,3 +186,108 @@ func TestUpdatePasswordOIDCUser(t *testing.T) {
 		t.Logf("Response status: %d, body: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestOIDCLogin(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	userRepo, roleRepo := createReposFromDB(t, db)
+	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JWTKey:        []byte("test-secret-key"),
+		TokenLifetime: time.Hour,
+	})
+
+	ctx := context.Background()
+	manager, err := oidcPkg.NewOIDCManager(
+		ctx, "", "",
+		"test-github-client", "test-github-secret",
+		"http://localhost/callback",
+		`{"default_role": "user"}`,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create OIDC manager: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		oidcManager    *oidcPkg.OIDCManager
+		queryParam     string
+		expectedStatus int
+	}{
+		{
+			name:           "OIDC not enabled",
+			oidcManager:    nil,
+			queryParam:     "?provider=github",
+			expectedStatus: http.StatusNotImplemented,
+		},
+		{
+			name:           "Missing provider parameter",
+			oidcManager:    manager,
+			queryParam:     "",
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Invalid provider name",
+			oidcManager:    manager,
+			queryParam:     "?provider=nonexistent",
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "Valid provider redirects",
+			oidcManager:    manager,
+			queryParam:     "?provider=github",
+			expectedStatus: http.StatusTemporaryRedirect,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewOIDCHandler(tt.oidcManager, authSvc, userRepo, roleRepo)
+			r := gin.New()
+			r.GET("/api/auth/oidc/login", h.Login)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/auth/oidc/login"+tt.queryParam, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestOIDCCallbackInvalidState(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	userRepo, roleRepo := createReposFromDB(t, db)
+	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JWTKey:        []byte("test-secret-key"),
+		TokenLifetime: time.Hour,
+	})
+
+	ctx := context.Background()
+	manager, err := oidcPkg.NewOIDCManager(
+		ctx, "", "",
+		"test-github-client", "test-github-secret",
+		"http://localhost/callback",
+		`{"default_role": "user"}`,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create OIDC manager: %v", err)
+	}
+
+	h := NewOIDCHandler(manager, authSvc, userRepo, roleRepo)
+	r := gin.New()
+	r.GET("/api/auth/oidc/callback", h.Callback)
+
+	// State that was never registered — must be rejected.
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/oidc/callback?state=unknown-state&code=test-code", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d for unknown state, got %d", http.StatusBadRequest, w.Code)
+	}
+}

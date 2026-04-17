@@ -42,10 +42,10 @@ func (h *RoleHandler) Create(c *gin.Context) {
 	result, err := h.roleSvc.Create(newRole.Name, newRole.Description)
 	if err != nil {
 		msg := err.Error()
-		switch {
-		case msg == "role name is required":
+		switch msg {
+		case "role name is required":
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Role name is required"})
-		case msg == "role name already exists":
+		case "role name already exists":
 			c.JSON(http.StatusConflict, gin.H{"error": "Error creating role (name must be unique)"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create role"})

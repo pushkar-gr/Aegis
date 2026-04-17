@@ -54,10 +54,10 @@ ci-go:
 	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -v "$(shell go env GOMODCACHE):/go/pkg/mod" -w /app golangci/golangci-lint:latest golangci-lint run -v
 	
 	@echo "[Vuln] Running govulncheck (via Docker)..."
-	docker run --rm --network host -v "$(PWD)/controller:/app" -w /app golang:1.26.1 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	docker run --rm --network host -v "$(PWD)/controller:/app" -w /app golang:1.26.2 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	
 	@echo "[Test] Running Unit Tests..."
-	cd $(CONTROLLER_DIR) && JWT_SECRET="test-secret" go test -v ./...
+	cd $(CONTROLLER_DIR) && go test -v ./...
 	
 	@echo "[Build] Verifying Build..."
 	cd $(CONTROLLER_DIR) && go build -o ../$(BIN_DIR)/controller ./main.go
@@ -113,7 +113,7 @@ test: test-go test-rust
 # Run Go tests (Controller)
 test-go:
 	@echo "Running Controller (Go) tests..."
-	cd $(CONTROLLER_DIR) && JWT_SECRET="test-secret" go test -v ./...
+	cd $(CONTROLLER_DIR) && go test -v ./...
 
 # Run Rust tests (Agent)
 test-rust:

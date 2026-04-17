@@ -134,29 +134,3 @@ func createServiceRepo(t *testing.T, db *sql.DB) (repository.ServiceRepository, 
 	t.Helper()
 	return repository.NewServiceRepository(db)
 }
-func setupTestReposFromPath(t *testing.T, dbPath string) (repository.UserRepository, repository.ServiceRepository, repository.RoleRepository, func()) {
-	t.Helper()
-	db, err := sql.Open("sqlite3", dbPath)
-	if err != nil {
-		t.Fatalf("Failed to open test database: %v", err)
-	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		t.Fatalf("Failed to enable foreign keys: %v", err)
-	}
-	if _, err := db.Exec(testSchema); err != nil {
-		t.Fatalf("Failed to create schema: %v", err)
-	}
-	seedRoles := `INSERT OR IGNORE INTO roles (name, description) VALUES ('admin','Administrator'),('user','User'),('root','Root');`
-	if _, err := db.Exec(seedRoles); err != nil {
-		t.Fatalf("Failed to seed roles: %v", err)
-	}
-	repository.DB = db
-	userRepo, roleRepo := createReposFromDB(t, db)
-	svcRepo, err := repository.NewServiceRepository(db)
-	if err != nil {
-		t.Fatalf("Failed to create service repo: %v", err)
-	}
-	return userRepo, svcRepo, roleRepo, func() { _ = db.Close() }
-}

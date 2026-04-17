@@ -155,12 +155,25 @@ func TestGetRoleServices(t *testing.T) {
 	r := gin.New()
 	r.GET("/api/roles/:id/services", h.GetServices)
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/roles/%d/services", roleID), nil)
-	r.ServeHTTP(w, req)
+	tests := []struct {
+		name           string
+		roleID         string
+		expectedStatus int
+	}{
+		{"Valid role with services", fmt.Sprintf("%d", roleID), http.StatusOK},
+		{"Invalid role ID", "invalid", http.StatusBadRequest},
+	}
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d. Response: %s", http.StatusOK, w.Code, w.Body.String())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/roles/"+tt.roleID+"/services", nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+		})
 	}
 }
 
@@ -178,15 +191,28 @@ func TestAddRoleService(t *testing.T) {
 	r := gin.New()
 	r.POST("/api/roles/:id/services", h.AddService)
 
-	payload := map[string]int{"service_id": int(svcID)}
-	body, _ := json.Marshal(payload)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/roles/1/services", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	tests := []struct {
+		name           string
+		roleID         string
+		body           []byte
+		expectedStatus int
+	}{
+		{"Successful link", "1", mustMarshal(t, map[string]int{"service_id": int(svcID)}), http.StatusOK},
+		{"Invalid role ID", "invalid", mustMarshal(t, map[string]int{"service_id": int(svcID)}), http.StatusBadRequest},
+		{"Invalid JSON body", "1", []byte("not-json"), http.StatusBadRequest},
+	}
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d. Response: %s", http.StatusOK, w.Code, w.Body.String())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/roles/"+tt.roleID+"/services", bytes.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+		})
 	}
 }
 
@@ -208,11 +234,36 @@ func TestRemoveRoleService(t *testing.T) {
 	r := gin.New()
 	r.DELETE("/api/roles/:id/services/:svc_id", h.RemoveService)
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/roles/%d/services/%d", roleID, svcID), nil)
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status %d, got %d. Response: %s", http.StatusOK, w.Code, w.Body.String())
+	tests := []struct {
+		name           string
+		roleID         string
+		svcID          string
+		expectedStatus int
+	}{
+		{"Successful removal", fmt.Sprintf("%d", roleID), fmt.Sprintf("%d", svcID), http.StatusOK},
+		{"Invalid role ID", "invalid", fmt.Sprintf("%d", svcID), http.StatusBadRequest},
+		{"Invalid service ID", fmt.Sprintf("%d", roleID), "invalid", http.StatusBadRequest},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodDelete, "/api/roles/"+tt.roleID+"/services/"+tt.svcID, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+// mustMarshal encodes v to JSON and fails the test on error.
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	return b
 }

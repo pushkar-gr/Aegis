@@ -76,7 +76,7 @@ impl tonic::service::Interceptor for AuthInterceptor {
     }
 }
 
-/// SessionManager service implementation
+/// SessionManager service implementation that handles session add/remove and IP-change events.
 pub struct SessionManagerService {
     modify_rules: ModifyRulesFn,
     update_ip: UpdateIpFn,

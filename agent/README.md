@@ -62,39 +62,76 @@ cd agent
 cargo build --release
 ```
 
-## 🏃 Usage
+## Usage
 
 The Agent requires `CAP_BPF` (or `root`) privileges to load XDP programs into the kernel network interface.
 
 ```bash
-sudo ./target/release/aegis-agent [OPTIONS]
+sudo ./target/release/aegis-agent
 ```
 
-### Configuration Flags
+### Configuration
 
-Configuration is handled via command-line arguments.
+All settings are loaded from a TOML configuration file (default: `config.toml` in the working directory). Copy `config.toml` from the `agent/` directory and adjust the values.
 
-| Flag | Long Flag | Default | Description |
-| --- | --- | --- | --- |
-| `-i` | `--iface` | `eth0` | The network interface to attach the XDP firewall to. |
-| `-c` | `--ip` | `172.21.0.5` | The IPv4 address of the Aegis Controller. |
-| `-p` | `--port` | `443` | The gRPC port of the Controller. |
-| `-n` | `--update-time` | `1000000000`(ns) | Lazy session update interval in eBPF. |
-| N/A | `--cert-pem` | `certs/agent.pem` | Path to the Agent's TLS certificate file for mTLS. |
-| N/A | `--cert-key` | `certs/agent.key` | Path to the Agent's TLS private key file. |
-| N/A | `--cert-ca` | `certs/ca.pem` | Path to the CA certificate to verify the Controller. |
-| `-r` | `--rule-timeout` | `60000000000`(ns) | Time (in ns) before a rule is auto-revoked. |
-| N/A | `--cleanup-interval` | `30`(s) | How often the reaper checks for expired rules. |
-| N/A | `--channel-size` | `16` | Buffer size for the internal command channel. |
-| `-g` | `--grpc-port` | `50001` | The port this Agent listens on for instructions. |
+#### `[network]`
 
-**Example:**
+| Key | Default | Description |
+| --- | --- | --- |
+| `iface` | `eth0` | Network interface to attach the XDP firewall to. |
 
-```bash
-sudo ./target/release/aegis-agent \
-  --iface eth1 \
-  --ip 10.0.0.50 \
-  --grpc-port 50051
+#### `[controller]`
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `host` | `""` | Controller hostname. When non-empty, takes priority over `ip` and is resolved at startup via DNS. |
+| `ip` | `172.21.0.5` | Controller IPv4 address. Used only when `host` is empty. |
+| `port` | `443` | Controller HTTPS port. |
+
+#### `[certs]`
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `cert_file` | `certs/agent.pem` | Path to the Agent's mTLS certificate. |
+| `key_file` | `certs/agent.key` | Path to the Agent's mTLS private key. |
+| `ca_file` | `certs/ca.pem` | CA certificate used to verify the Controller. |
+
+#### `[session]`
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `lazy_update_timeout_ns` | `1000000000` (1 s) | Minimum time (ns) between session timestamp updates in the eBPF map. |
+| `rule_timeout_ns` | `60000000000` (60 s) | Idle time (ns) after which a session rule is revoked. |
+| `cleanup_interval_sec` | `30` | How often (seconds) the cleanup task scans for expired rules. |
+| `broadcast_channel_size` | `16` | Buffer size for the internal session-monitor broadcast channel. |
+
+#### `[grpc]`
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `port` | `50001` | Port this Agent listens on for Controller gRPC connections. |
+
+**Example `config.toml`:**
+
+```toml
+[network]
+iface = "eth1"
+
+[controller]
+host = "aegis-controller"   # or use ip = "10.0.0.50"
+port = 443
+
+[certs]
+cert_file = "certs/agent.pem"
+key_file  = "certs/agent.key"
+ca_file   = "certs/ca.pem"
+
+[session]
+rule_timeout_ns      = 60_000_000_000
+cleanup_interval_sec = 30
+
+[grpc]
+port = 50001
 ```
 
 ## Benchmarking

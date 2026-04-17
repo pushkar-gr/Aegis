@@ -77,10 +77,10 @@ func (h *UserHandler) Delete(c *gin.Context) {
 	requester := c.GetString(middleware.UsernameKey)
 	if err := h.userSvc.Delete(id, requester); err != nil {
 		msg := err.Error()
-		switch {
-		case msg == "user not found":
+		switch msg {
+		case "user not found":
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		case msg == "forbidden: cannot modify root user":
+		case "forbidden: cannot modify root user":
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot delete root user"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
@@ -111,10 +111,10 @@ func (h *UserHandler) UpdateRole(c *gin.Context) {
 	requester := c.GetString(middleware.UsernameKey)
 	if err := h.userSvc.UpdateRole(id, req.RoleId, requester); err != nil {
 		msg := err.Error()
-		switch {
-		case msg == "user not found":
+		switch msg {
+		case "user not found":
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		case msg == "forbidden: cannot modify root user":
+		case "forbidden: cannot modify root user":
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot modify root user role"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user role"})

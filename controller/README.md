@@ -35,43 +35,70 @@ go build -o bin/aegis-controller .
 ## Usage
 
 ```bash
-./bin/aegis-controller [flags]
+./bin/aegis-controller
 ```
 
 ### Configuration
 
-The Controller supports both Environment Variables and Command Line Flags. CLI flags has more priority.
+All settings are loaded from a TOML configuration file (default: `config.toml` in the working directory). Copy `config.toml` from the repository root, adjust the values, and place it next to the binary.
 
-**Core Settings:**
+> **Override**: The `JWT_SECRET` environment variable, if set, always overrides `auth.jwt_secret` in the file. This is convenient for container deployments.
 
-| Env Variable | CLI Flag | Default | Description |
-| --- | --- | --- | --- |
-| `DB_DIR` | N/A | `./data` | Directory to store the SQLite database. |
-| `SERVER_PORT` | `-port` | `:443` | The port the HTTP/gRPC server listens on. |
-| `CERT_FILE` | `-cert` | `certs/server.crt` | TLS Certificate path. |
-| `KEY_FILE` | `-key` | `certs/server.key` | TLS Private Key path. |
-| `JWT_SECRET` | N/A | `DEFAULT_JWT_KEY` | JWT key for signing tokens. |
-| `JWT_TOKEN_LIFETIME` | N/A | `60`(s) | JWT access token lifetime. |
+#### `[database]`
 
-**Agent Connection Settings:**
+| Key | Default | Description |
+| --- | --- | --- |
+| `dir` | `./data` | Directory for the SQLite database file. |
+| `max_open_conns` | `1` | Maximum number of open DB connections. |
+| `max_idle_conns` | `1` | Maximum number of idle connections in the pool. |
+| `conn_max_lifetime` | `1h` | Maximum time a DB connection may be reused (Go duration string). |
 
-| Env Variable | Flag | Default | Description |
-| --- | --- | --- | --- |
-| `AGENT_ADDRESS` | `-agent-addr` | `172.21.0.10:50001` | Address of the target Aegis Agent. |
-| `AGENT_CERT_FILE` | N/A | `certs/controller.pem` | mTLS Cert for talking to Agent. |
-| `AGENT_KEY_FILE` | N/A | `certs/controller.key` | mTLS Key for talking to Agent. |
-| `AGENT_CA_FILE` | N/A | `certs/ca.pen` | Trusted CA certificate to verify the Agent's identity. |
-| `AGENT_SERVER_FILE` | N/A | `aegis-agent` | Expected server name (SNI) for TLS verification. |
-| `AGENT_CALL_TIMEOUT` | N/A | `1`(s) | Timeout duration for gRPC calls to the Agent. |
-| `MONITOR_RETRY_DELAY` | N/A | `1`(s) | Wait time before retrying a failed health check. |
+#### `[server]`
 
-**DB settings:**
+| Key | Default | Description |
+| --- | --- | --- |
+| `port` | `:443` | TCP address the HTTPS server listens on (e.g. `:8443`). |
+| `cert_file` | `certs/server.crt` | Path to the TLS certificate. |
+| `key_file` | `certs/server.key` | Path to the TLS private key. |
 
-| Env Variable | Flag | Default | Description |
-| --- | --- | --- | --- |
-| `DB_MAX_OPEN_CONNS` | N/A | `1` | Maximum number of open connections to the database. |
-| `DB_MAX_IDLE_CONNS` | N/A | `1` | Maximum number of idle connections to keep in the pool. |
-| `DB_CONN_MAX_LIFETIME` | N/A | `1`(hrs) | Maximum amount of time a connection may be reused. |
+#### `[agent]`
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `address` | `172.21.0.10:50001` | `host:port` of the Aegis Agent's gRPC listener. |
+| `cert_file` | `certs/controller.pem` | mTLS client certificate sent to the Agent. |
+| `key_file` | `certs/controller.key` | mTLS client private key. |
+| `ca_file` | `certs/ca.pem` | CA certificate used to verify the Agent's identity. |
+| `server_name` | `aegis-agent` | Expected TLS SNI name of the Agent. |
+| `call_timeout` | `1s` | Timeout for individual gRPC calls to the Agent. |
+
+#### `[monitor]`
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `retry_delay` | `5s` | How long to wait before retrying a failed Agent health-check. |
+| `ip_update_interval` | `60s` | How often to push user-IP updates to the Agent. |
+
+#### `[auth]`
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `jwt_secret` | `CHANGE_ME` | Secret used to sign JWT access tokens. **Must be changed.** |
+| `jwt_token_lifetime` | `60s` | Access token lifetime (Go duration string). |
+| `jwt_private_key` | `keys/jwt_private.pem` | RSA/EC private key for asymmetric JWT signing (optional). |
+| `jwt_public_key` | `keys/jwt_public.pem` | Corresponding public key (optional). |
+
+#### `[oidc]`
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `enabled` | `false` | Enable OpenID Connect / OAuth2 SSO. |
+| `google_client_id` | `""` | Google OAuth2 client ID. |
+| `google_secret` | `""` | Google OAuth2 client secret. |
+| `github_client_id` | `""` | GitHub OAuth2 client ID. |
+| `github_secret` | `""` | GitHub OAuth2 client secret. |
+| `redirect_url` | `https://localhost/api/auth/oidc/callback` | OAuth2 redirect URI registered with the provider. |
+| `role_mapping_rules` | `{"domain_mappings":{...}}` | JSON rules that map OIDC attributes to local roles. |
 
 ### Running Tests
 

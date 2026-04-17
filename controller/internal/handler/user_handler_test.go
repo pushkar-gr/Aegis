@@ -223,6 +223,7 @@ func TestUpdateUserRole(t *testing.T) {
 		expectedStatus int
 	}{
 		{"Successful role update", fmt.Sprintf("%d", userID), 1, http.StatusOK},
+		{"Non-existent user", "99999", 1, http.StatusNotFound},
 		{"Invalid user ID", "invalid", 1, http.StatusBadRequest},
 	}
 
@@ -408,6 +409,7 @@ func TestResetUserPassword(t *testing.T) {
 	}{
 		{"Successful password reset", fmt.Sprintf("%d", userID), "NewValidPass123!", http.StatusOK},
 		{"Weak password", fmt.Sprintf("%d", userID), "weak", http.StatusBadRequest},
+		{"Non-existent user", "99999", "NewValidPass123!", http.StatusNotFound},
 		{"Invalid user ID", "invalid", "NewValidPass123!", http.StatusBadRequest},
 	}
 

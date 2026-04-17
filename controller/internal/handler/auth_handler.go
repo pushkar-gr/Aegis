@@ -130,6 +130,7 @@ func (h *AuthHandler) UpdatePassword(c *gin.Context) {
 		case strings.HasPrefix(msg, "password too weak"):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Password" + msg[len("password"):]})
 		default:
+			log.Printf("[auth] password update failed for user '%s': %v", u, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}
 		return

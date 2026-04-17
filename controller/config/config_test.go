@@ -56,6 +56,7 @@ jwt_secret = "test-secret"
 }
 
 func TestLoadFromFileCustomValues(t *testing.T) {
+	t.Setenv("JWT_SECRET", "")
 	tomlContent := `
 [database]
 dir              = "/custom/data"

@@ -365,3 +365,50 @@ func TestRefreshTokenInvalid(t *testing.T) {
 		t.Errorf("Expected status %d for invalid refresh token, got %d", http.StatusUnauthorized, w.Code)
 	}
 }
+
+func TestUpdatePasswordInvalidJSON(t *testing.T) {
+	h, cleanup := newAuthTestRouter(t)
+	defer cleanup()
+
+	r := gin.New()
+	r.POST("/api/auth/password", func(c *gin.Context) {
+		c.Set(middleware.UsernameKey, "someuser")
+	}, h.UpdatePassword)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password", bytes.NewReader([]byte("not-json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status %d for invalid JSON, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestLogoutAnonymous(t *testing.T) {
+	h, cleanup := newAuthTestRouter(t)
+	defer cleanup()
+
+	// Logout without a username in context should still clear cookies and return 200.
+	r := gin.New()
+	r.POST("/api/auth/logout", h.Logout)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status %d for anonymous logout, got %d", http.StatusOK, w.Code)
+	}
+
+	found := false
+	for _, cookie := range w.Result().Cookies() {
+		if cookie.Name == "token" && cookie.Value == "" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected token cookie to be cleared on anonymous logout")
+	}
+}

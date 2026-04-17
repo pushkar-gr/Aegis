@@ -213,6 +213,8 @@ type oidcUserInfo struct {
 	Groups        []string
 }
 
+// exchangeCodeForUserInfo exchanges an OAuth2 authorization code for user information.
+// It supports both standard OIDC providers (via ID token verification) and GitHub OAuth2.
 func (h *OIDCHandler) exchangeCodeForUserInfo(ctx context.Context, provider *oidcPkg.Provider, code string) (*oidcUserInfo, error) {
 	oauth2Token, err := provider.Config.Exchange(ctx, code)
 	if err != nil {
@@ -286,6 +288,8 @@ func (h *OIDCHandler) exchangeCodeForUserInfo(ctx context.Context, provider *oid
 	return userInfo, nil
 }
 
+// getOrCreateOIDCUser looks up an existing OIDC user by provider and subject ID,
+// updating their email if needed, or creates a new user with the mapped role on first login.
 func (h *OIDCHandler) getOrCreateOIDCUser(userInfo *oidcUserInfo, provider, roleName string) (*models.User, error) {
 	user, err := h.userRepo.GetByProviderAndID(provider, userInfo.Subject)
 	if err == nil {
@@ -317,12 +321,15 @@ func (h *OIDCHandler) getOrCreateOIDCUser(userInfo *oidcUserInfo, provider, role
 	return newUser, nil
 }
 
+// generateState creates a cryptographically random, URL-safe state token for CSRF protection.
 func (h *OIDCHandler) generateState() string {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b)
 	return base64.URLEncoding.EncodeToString(b)
 }
 
+// cleanExpiredStates removes state tokens that have passed their expiry time.
+// Must be called with h.stateMu held.
 func (h *OIDCHandler) cleanExpiredStates() {
 	now := time.Now()
 	for state, expiry := range h.states {
@@ -332,6 +339,7 @@ func (h *OIDCHandler) cleanExpiredStates() {
 	}
 }
 
+// generateSecureToken creates a cryptographically random, URL-safe token of n bytes.
 func generateSecureToken(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
