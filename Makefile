@@ -158,23 +158,6 @@ ip-steal:
 logs:
 	docker compose -f $(DOCKER_COMPOSE_MAIN) logs -f
 
-# Start the test environment
-test-ip-up:
-	docker compose -f $(DOCKER_COMPOSE_TEST) up -d --build controller target-app
-
-# Trigger the IP change (Stop target -> Start stealer -> Start target)
-test-ip-steal:
-	@echo "Stopping target-app..."
-	docker stop target-app
-	@echo "Starting IP stealer..."
-	docker compose -f $(DOCKER_COMPOSE_TEST) up -d ip-stealer
-	@echo "Restarting target-app (should get new IP)..."
-	docker start target-app
-
-# Full cleanup for test environment
-test-ip-down:
-	docker compose -f $(DOCKER_COMPOSE_TEST) --profile "*" down
-
 # Helper to bump version in Cargo.toml and HTML files
 bump-version:
 	@if [ -z "$(v)" ]; then echo "Usage: make bump-version v=1.1.1"; exit 1; fi

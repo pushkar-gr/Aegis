@@ -10,6 +10,7 @@ services:
       - NET_ADMIN
     volumes:
       - ./certs:/app/certs
+      - ../controller/config.toml:/app/config.toml
     networks:
       private_net:
     command: >
