@@ -137,6 +137,12 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 	provider, _ := h.oidcManager.GetProvider(providerName)
 	roleName := provider.MapClaimsToRole(userInfo.Email, userInfo.Groups)
 
+	if roleName == "" || roleName == "none" {
+		log.Printf("[oidc] login denied for user '%s' via %s: no role mapping and no default role", userInfo.Email, providerName)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: no role assigned"})
+		return
+	}
+
 	user, err := h.getOrCreateOIDCUser(userInfo, providerName, roleName)
 	if err != nil {
 		log.Printf("[oidc] failed to get or create user: %v", err)
