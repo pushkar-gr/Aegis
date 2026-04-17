@@ -76,7 +76,7 @@ impl tonic::service::Interceptor for AuthInterceptor {
     }
 }
 
-/// SessionManager service implementation
+/// SessionManager service implementation that handles session add/remove and IP-change events.
 pub struct SessionManagerService {
     modify_rules: ModifyRulesFn,
     update_ip: UpdateIpFn,
@@ -219,8 +219,8 @@ impl SessionManager for SessionManagerService {
 }
 
 /// Starts the gRPC server with mTLS authentication.
-pub async fn start_grpc_server<'a>(
-    config: &Config<'a>,
+pub async fn start_grpc_server(
+    config: &Config,
     addr: SocketAddr,
     modify_rules: ModifyRulesFn,
     update_ip: UpdateIpFn,

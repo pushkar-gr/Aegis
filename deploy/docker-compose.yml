@@ -10,6 +10,7 @@ services:
       - NET_ADMIN
     volumes:
       - ./certs:/app/certs
+      - ../controller/config.toml:/app/config.toml
     networks:
       private_net:
     command: >
@@ -34,6 +35,7 @@ services:
       - /sys/fs/bpf:/sys/fs/bpf
       - /sys/kernel/debug:/sys/kernel/debug
       - ./certs:/app/certs
+      - ../agent/config.toml:/app/config.toml
     networks:
       public_net:
         ipv4_address: 172.20.0.10

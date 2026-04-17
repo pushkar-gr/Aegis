@@ -24,7 +24,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.7'
+          go-version: '1.26.2'
           check-latest: true
           cache: true
 
@@ -40,7 +40,7 @@ jobs:
         run: govulncheck ./...
 
       - name: Test
-        run: JWT_SECRET="test-secret" go test -v ./...
+        run: go test -v ./...
 
       - name: Build Binary
         run: go build -o bin/aegis-controller .

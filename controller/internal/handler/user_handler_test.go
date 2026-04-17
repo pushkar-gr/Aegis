@@ -1,8 +1,9 @@
-package server
+package handler
 
 import (
-	"Aegis/controller/database"
+	"Aegis/controller/internal/middleware"
 	"Aegis/controller/internal/models"
+	"Aegis/controller/internal/service"
 	"Aegis/controller/internal/utils"
 	"bytes"
 	"encoding/json"
@@ -10,23 +11,29 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestGetUsers(t *testing.T) {
-	cleanup := setupTestServer(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	hashedPassword, _ := utils.HashPassword("TestPass123!")
-	_, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
-		"user1", hashedPassword)
-	if err != nil {
+	if _, err := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "user1", hashedPassword); err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
-	w := httptest.NewRecorder()
+	userRepo, _ := createReposFromDB(t, db)
+	userSvc := service.NewUserService(userRepo)
+	h := NewUserHandler(userSvc)
 
-	getUsers(w, req)
+	r := gin.New()
+	r.GET("/api/users", h.GetAll)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/users", nil)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status %d, got %d", http.StatusOK, w.Code)
@@ -36,15 +43,20 @@ func TestGetUsers(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&users); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
-
 	if len(users) == 0 {
 		t.Error("Expected at least one user in response")
 	}
 }
 
 func TestCreateUser(t *testing.T) {
-	cleanup := setupTestServer(t)
+	userRepo, _, _, cleanup := setupTestRepos(t)
 	defer cleanup()
+
+	userSvc := service.NewUserService(userRepo)
+	h := NewUserHandler(userSvc)
+
+	r := gin.New()
+	r.POST("/api/users", h.Create)
 
 	tests := []struct {
 		name           string
@@ -54,44 +66,32 @@ func TestCreateUser(t *testing.T) {
 		{
 			name: "Successful user creation",
 			payload: models.UserWithCredentials{
-				Credentials: models.Credentials{
-					Username: "newuser",
-					Password: "ValidPass123!",
-				},
-				RoleId: 2,
+				Credentials: models.Credentials{Username: "newuser", Password: "ValidPass123!"},
+				RoleId:      2,
 			},
 			expectedStatus: http.StatusCreated,
 		},
 		{
 			name: "Invalid username format",
 			payload: models.UserWithCredentials{
-				Credentials: models.Credentials{
-					Username: "ab",
-					Password: "ValidPass123!",
-				},
-				RoleId: 2,
+				Credentials: models.Credentials{Username: "ab", Password: "ValidPass123!"},
+				RoleId:      2,
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name: "Weak password",
 			payload: models.UserWithCredentials{
-				Credentials: models.Credentials{
-					Username: "validuser",
-					Password: "weak",
-				},
-				RoleId: 2,
+				Credentials: models.Credentials{Username: "validuser", Password: "weak"},
+				RoleId:      2,
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name: "Missing role_id",
 			payload: models.UserWithCredentials{
-				Credentials: models.Credentials{
-					Username: "validuser2",
-					Password: "ValidPass123!",
-				},
-				RoleId: 0,
+				Credentials: models.Credentials{Username: "validuser2", Password: "ValidPass123!"},
+				RoleId:      0,
 			},
 			expectedStatus: http.StatusBadRequest,
 		},
@@ -100,11 +100,10 @@ func TestCreateUser(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			body, _ := json.Marshal(tt.payload)
+			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
-
-			createUser(w, req)
+			r.ServeHTTP(w, req)
 
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
@@ -124,30 +123,30 @@ func TestCreateUser(t *testing.T) {
 }
 
 func TestCreateUserDuplicate(t *testing.T) {
-	cleanup := setupTestServer(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	hashedPassword, _ := utils.HashPassword("TestPass123!")
-	_, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
-		"existinguser", hashedPassword)
-	if err != nil {
+	if _, err := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "existinguser", hashedPassword); err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 
-	payload := models.UserWithCredentials{
-		Credentials: models.Credentials{
-			Username: "existinguser",
-			Password: "ValidPass123!",
-		},
-		RoleId: 2,
-	}
+	userRepo, _ := createReposFromDB(t, db)
+	userSvc := service.NewUserService(userRepo)
+	h := NewUserHandler(userSvc)
 
+	r := gin.New()
+	r.POST("/api/users", h.Create)
+
+	payload := models.UserWithCredentials{
+		Credentials: models.Credentials{Username: "existinguser", Password: "ValidPass123!"},
+		RoleId:      2,
+	}
 	body, _ := json.Marshal(payload)
+	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/users", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	createUser(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusConflict {
 		t.Errorf("Expected status %d for duplicate user, got %d", http.StatusConflict, w.Code)
@@ -155,67 +154,67 @@ func TestCreateUserDuplicate(t *testing.T) {
 }
 
 func TestDeleteUser(t *testing.T) {
-	cleanup := setupTestServer(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	hashedPassword, _ := utils.HashPassword("TestPass123!")
-	result, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
-		"deleteuser", hashedPassword)
+	result, err := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "deleteuser", hashedPassword)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 	userID, _ := result.LastInsertId()
+
+	userRepo, _ := createReposFromDB(t, db)
+	userSvc := service.NewUserService(userRepo)
+	h := NewUserHandler(userSvc)
+
+	r := gin.New()
+	r.DELETE("/api/users/:id", func(c *gin.Context) {
+		c.Set(middleware.UsernameKey, "adminuser")
+	}, h.Delete)
 
 	tests := []struct {
 		name           string
 		userID         string
 		expectedStatus int
 	}{
-		{
-			name:           "Successful deletion",
-			userID:         "1",
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "Non-existent user",
-			userID:         "99999",
-			expectedStatus: http.StatusNotFound,
-		},
-		{
-			name:           "Invalid user ID",
-			userID:         "invalid",
-			expectedStatus: http.StatusBadRequest,
-		},
+		{"Successful deletion", fmt.Sprintf("%d", userID), http.StatusOK},
+		{"Non-existent user", "99999", http.StatusNotFound},
+		{"Invalid user ID", "invalid", http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodDelete, "/api/users/"+tt.userID, nil)
-			req.SetPathValue("id", tt.userID)
 			w := httptest.NewRecorder()
-
-			deleteUser(w, req)
+			req := httptest.NewRequest(http.MethodDelete, "/api/users/"+tt.userID, nil)
+			r.ServeHTTP(w, req)
 
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
 			}
 		})
 	}
-
-	_ = userID
 }
 
 func TestUpdateUserRole(t *testing.T) {
-	cleanup := setupTestServer(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	hashedPassword, _ := utils.HashPassword("TestPass123!")
-	result, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
-		"roleuser", hashedPassword)
+	result, err := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "roleuser", hashedPassword)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 	userID, _ := result.LastInsertId()
+
+	userRepo, _ := createReposFromDB(t, db)
+	userSvc := service.NewUserService(userRepo)
+	h := NewUserHandler(userSvc)
+
+	r := gin.New()
+	r.PUT("/api/users/:id/role", func(c *gin.Context) {
+		c.Set(middleware.UsernameKey, "adminuser")
+	}, h.UpdateRole)
 
 	tests := []struct {
 		name           string
@@ -223,90 +222,63 @@ func TestUpdateUserRole(t *testing.T) {
 		newRoleID      int
 		expectedStatus int
 	}{
-		{
-			name:           "Successful role update",
-			userID:         "1",
-			newRoleID:      1,
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "Invalid user ID",
-			userID:         "invalid",
-			newRoleID:      1,
-			expectedStatus: http.StatusBadRequest,
-		},
+		{"Successful role update", fmt.Sprintf("%d", userID), 1, http.StatusOK},
+		{"Non-existent user", "99999", 1, http.StatusNotFound},
+		{"Invalid user ID", "invalid", 1, http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			payload := map[string]int{"role_id": tt.newRoleID}
 			body, _ := json.Marshal(payload)
-			req := httptest.NewRequest(http.MethodPut, "/api/users/"+tt.userID+"/role", bytes.NewReader(body))
-			req.SetPathValue("id", tt.userID)
-			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
-
-			updateUserRole(w, req)
+			req := httptest.NewRequest(http.MethodPut, "/api/users/"+tt.userID+"/role", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
 
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
 			}
 		})
 	}
-
-	_ = userID
 }
 
 func TestGetUserServices(t *testing.T) {
-	cleanup := setupTestServer(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	// Create user and service
 	hashedPassword, _ := utils.HashPassword("TestPass123!")
-	userResult, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
-		"svcuser", hashedPassword)
-	if err != nil {
-		t.Fatalf("Failed to create test user: %v", err)
-	}
+	userResult, _ := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "svcuser", hashedPassword)
 	userID, _ := userResult.LastInsertId()
 
-	svcResult, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
-		"UserSvc", "localhost:8080", 0x7F000001, 8080, "User service")
-	if err != nil {
-		t.Fatalf("Failed to create test service: %v", err)
-	}
+	svcResult, _ := db.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)", "UserSvc", "localhost:8080", 0x7F000001, 8080, "User service")
 	svcID, _ := svcResult.LastInsertId()
 
-	// Assign service to user
-	_, err = database.DB.Exec("INSERT INTO user_extra_services (user_id, service_id) VALUES (?, ?)", userID, svcID)
-	if err != nil {
+	if _, err := db.Exec("INSERT INTO user_extra_services (user_id, service_id) VALUES (?, ?)", userID, svcID); err != nil {
 		t.Fatalf("Failed to assign service to user: %v", err)
 	}
+
+	userRepo, _ := createReposFromDB(t, db)
+	userSvc := service.NewUserService(userRepo)
+	h := NewUserHandler(userSvc)
+
+	r := gin.New()
+	r.GET("/api/users/:id/services", h.GetServices)
 
 	tests := []struct {
 		name           string
 		userID         string
 		expectedStatus int
 	}{
-		{
-			name:           "Get services for user",
-			userID:         fmt.Sprintf("%d", userID),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "Invalid user ID",
-			userID:         "invalid",
-			expectedStatus: http.StatusBadRequest,
-		},
+		{"Get services for user", fmt.Sprintf("%d", userID), http.StatusOK},
+		{"Invalid user ID", "invalid", http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/api/users/"+tt.userID+"/services", nil)
-			req.SetPathValue("id", tt.userID)
 			w := httptest.NewRecorder()
-
-			getUserServices(w, req)
+			req := httptest.NewRequest(http.MethodGet, "/api/users/"+tt.userID+"/services", nil)
+			r.ServeHTTP(w, req)
 
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
@@ -316,26 +288,24 @@ func TestGetUserServices(t *testing.T) {
 }
 
 func TestAddUserService(t *testing.T) {
-	cleanup := setupTestServer(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	// Create user and service
 	hashedPassword, _ := utils.HashPassword("TestPass123!")
-	userResult, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
-		"addsvcuser", hashedPassword)
-	if err != nil {
-		t.Fatalf("Failed to create test user: %v", err)
-	}
+	userResult, _ := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "addsvcuser", hashedPassword)
 	userID, _ := userResult.LastInsertId()
 
-	svcResult, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
-		"AddSvc", "localhost:8080", 0x7F000001, 8080, "Add service")
-	if err != nil {
-		t.Fatalf("Failed to create test service: %v", err)
-	}
+	svcResult, _ := db.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)", "AddSvc", "localhost:8080", 0x7F000001, 8080, "Add service")
 	svcID, _ := svcResult.LastInsertId()
 
-	userIDStr := fmt.Sprintf("%d", userID)
+	userRepo, _ := createReposFromDB(t, db)
+	userSvc := service.NewUserService(userRepo)
+	h := NewUserHandler(userSvc)
+
+	r := gin.New()
+	r.POST("/api/users/:id/services", func(c *gin.Context) {
+		c.Set(middleware.UsernameKey, "adminuser")
+	}, h.AddService)
 
 	tests := []struct {
 		name           string
@@ -343,30 +313,18 @@ func TestAddUserService(t *testing.T) {
 		serviceID      int
 		expectedStatus int
 	}{
-		{
-			name:           "Successful service addition",
-			userID:         userIDStr,
-			serviceID:      int(svcID),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "Invalid user ID",
-			userID:         "invalid",
-			serviceID:      int(svcID),
-			expectedStatus: http.StatusBadRequest,
-		},
+		{"Successful service addition", fmt.Sprintf("%d", userID), int(svcID), http.StatusOK},
+		{"Invalid user ID", "invalid", int(svcID), http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			payload := map[string]int{"service_id": tt.serviceID}
 			body, _ := json.Marshal(payload)
-			req := httptest.NewRequest(http.MethodPost, "/api/users/"+tt.userID+"/services", bytes.NewReader(body))
-			req.SetPathValue("id", tt.userID)
-			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
-
-			addUserService(w, req)
+			req := httptest.NewRequest(http.MethodPost, "/api/users/"+tt.userID+"/services", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
 
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
@@ -376,32 +334,28 @@ func TestAddUserService(t *testing.T) {
 }
 
 func TestRemoveUserService(t *testing.T) {
-	cleanup := setupTestServer(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	hashedPassword, _ := utils.HashPassword("TestPass123!")
-	userResult, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
-		"remsvcuser", hashedPassword)
-	if err != nil {
-		t.Fatalf("Failed to create test user: %v", err)
-	}
+	userResult, _ := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "remsvcuser", hashedPassword)
 	userID, _ := userResult.LastInsertId()
 
-	svcResult, err := database.DB.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)",
-		"RemSvc", "localhost:8080", 0x7F000001, 8080, "Remove service")
-	if err != nil {
-		t.Fatalf("Failed to create test service: %v", err)
-	}
+	svcResult, _ := db.Exec("INSERT INTO services (name, hostname, ip, port, description) VALUES (?, ?, ?, ?, ?)", "RemSvc", "localhost:8080", 0x7F000001, 8080, "Remove service")
 	svcID, _ := svcResult.LastInsertId()
 
-	// Link service to user
-	_, err = database.DB.Exec("INSERT INTO user_extra_services (user_id, service_id) VALUES (?, ?)", userID, svcID)
-	if err != nil {
+	if _, err := db.Exec("INSERT INTO user_extra_services (user_id, service_id) VALUES (?, ?)", userID, svcID); err != nil {
 		t.Fatalf("Failed to link service to user: %v", err)
 	}
 
-	userIDStr := fmt.Sprintf("%d", userID)
-	svcIDStr := fmt.Sprintf("%d", svcID)
+	userRepo, _ := createReposFromDB(t, db)
+	userSvc := service.NewUserService(userRepo)
+	h := NewUserHandler(userSvc)
+
+	r := gin.New()
+	r.DELETE("/api/users/:id/services/:svc_id", func(c *gin.Context) {
+		c.Set(middleware.UsernameKey, "adminuser")
+	}, h.RemoveService)
 
 	tests := []struct {
 		name           string
@@ -409,34 +363,16 @@ func TestRemoveUserService(t *testing.T) {
 		serviceID      string
 		expectedStatus int
 	}{
-		{
-			name:           "Successful service removal",
-			userID:         userIDStr,
-			serviceID:      svcIDStr,
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "Invalid user ID",
-			userID:         "invalid",
-			serviceID:      svcIDStr,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "Invalid service ID",
-			userID:         userIDStr,
-			serviceID:      "invalid",
-			expectedStatus: http.StatusBadRequest,
-		},
+		{"Successful service removal", fmt.Sprintf("%d", userID), fmt.Sprintf("%d", svcID), http.StatusOK},
+		{"Invalid user ID", "invalid", fmt.Sprintf("%d", svcID), http.StatusBadRequest},
+		{"Invalid service ID", fmt.Sprintf("%d", userID), "invalid", http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodDelete, "/api/users/"+tt.userID+"/services/"+tt.serviceID, nil)
-			req.SetPathValue("id", tt.userID)
-			req.SetPathValue("svc_id", tt.serviceID)
 			w := httptest.NewRecorder()
-
-			removeUserService(w, req)
+			req := httptest.NewRequest(http.MethodDelete, "/api/users/"+tt.userID+"/services/"+tt.serviceID, nil)
+			r.ServeHTTP(w, req)
 
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
@@ -446,16 +382,24 @@ func TestRemoveUserService(t *testing.T) {
 }
 
 func TestResetUserPassword(t *testing.T) {
-	cleanup := setupTestServer(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
 	hashedPassword, _ := utils.HashPassword("TestPass123!")
-	result, err := database.DB.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)",
-		"resetuser", hashedPassword)
+	result, err := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "resetuser", hashedPassword)
 	if err != nil {
 		t.Fatalf("Failed to create test user: %v", err)
 	}
 	userID, _ := result.LastInsertId()
+
+	userRepo, _ := createReposFromDB(t, db)
+	userSvc := service.NewUserService(userRepo)
+	h := NewUserHandler(userSvc)
+
+	r := gin.New()
+	r.POST("/api/users/:id/reset-password", func(c *gin.Context) {
+		c.Set(middleware.UsernameKey, "adminuser")
+	}, h.ResetPassword)
 
 	tests := []struct {
 		name           string
@@ -463,42 +407,24 @@ func TestResetUserPassword(t *testing.T) {
 		newPassword    string
 		expectedStatus int
 	}{
-		{
-			name:           "Successful password reset",
-			userID:         "1",
-			newPassword:    "NewValidPass123!",
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "Weak password",
-			userID:         "1",
-			newPassword:    "weak",
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "Invalid user ID",
-			userID:         "invalid",
-			newPassword:    "NewValidPass123!",
-			expectedStatus: http.StatusBadRequest,
-		},
+		{"Successful password reset", fmt.Sprintf("%d", userID), "NewValidPass123!", http.StatusOK},
+		{"Weak password", fmt.Sprintf("%d", userID), "weak", http.StatusBadRequest},
+		{"Non-existent user", "99999", "NewValidPass123!", http.StatusNotFound},
+		{"Invalid user ID", "invalid", "NewValidPass123!", http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			payload := map[string]string{"password": tt.newPassword}
 			body, _ := json.Marshal(payload)
-			req := httptest.NewRequest(http.MethodPost, "/api/users/"+tt.userID+"/reset-password", bytes.NewReader(body))
-			req.SetPathValue("id", tt.userID)
-			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
-
-			resetUserPassword(w, req)
+			req := httptest.NewRequest(http.MethodPost, "/api/users/"+tt.userID+"/reset-password", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
 
 			if w.Code != tt.expectedStatus {
 				t.Errorf("Expected status %d, got %d. Response: %s", tt.expectedStatus, w.Code, w.Body.String())
 			}
 		})
 	}
-
-	_ = userID
 }

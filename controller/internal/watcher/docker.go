@@ -1,7 +1,7 @@
 package watcher
 
 import (
-	"Aegis/controller/database"
+	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/utils"
 	"context"
 	"fmt"
@@ -64,7 +64,7 @@ func handleContainerEvent(cli *client.Client, msg events.Message) {
 		return
 	}
 
-	json, err := cli.ContainerInspect(context.Background(), msg.ID)
+	json, err := cli.ContainerInspect(context.Background(), msg.Actor.ID)
 	if err != nil {
 		log.Printf("[WARN] Docker watcher: failed to inspect container %s: %v", containerName, err)
 		return
@@ -100,7 +100,7 @@ func handleContainerEvent(cli *client.Client, msg events.Message) {
 		log.Printf("[INFO] Docker Event: Container '%s' started. Updating Service %d IP: %s:%d -> %s:%d",
 			containerName, serviceID, currentIPStr, currentPort, newIPStr, newPort)
 
-		_, err := database.DB.Exec("UPDATE services SET ip = ?, port = ? WHERE id = ?", newIP, newPort, serviceID)
+		_, err := repository.DB.Exec("UPDATE services SET ip = ?, port = ? WHERE id = ?", newIP, newPort, serviceID)
 		if err != nil {
 			log.Printf("[ERROR] Docker watcher: failed to update DB: %v", err)
 		}
@@ -110,7 +110,7 @@ func handleContainerEvent(cli *client.Client, msg events.Message) {
 // findServiceByHostnamePrefix checks if any registered service matches the container name.
 func findServiceByHostnamePrefix(containerName string) (int, uint32, uint16, string, error) {
 	pattern := containerName + ":%"
-	rows, err := database.DB.Query("SELECT id, hostname, ip, port FROM services WHERE hostname LIKE ?", pattern)
+	rows, err := repository.DB.Query("SELECT id, hostname, ip, port FROM services WHERE hostname LIKE ?", pattern)
 	if err != nil {
 		return 0, 0, 0, "", fmt.Errorf("query failed: %w", err)
 	}

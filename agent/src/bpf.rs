@@ -320,11 +320,6 @@ impl<'a> Bpf<'a> {
                 return Err(anyhow!("Key data size mismatch during cleanup"));
             }
 
-            // Validate that we have the right amount of data
-            if flat_keys.len() != count * std::mem::size_of::<session_key>() {
-                return Err(anyhow!("Key data size mismatch during cleanup"));
-            }
-
             self.skel.maps.session.delete_batch(
                 &flat_keys,
                 count as u32,

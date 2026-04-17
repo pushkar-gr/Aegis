@@ -42,10 +42,9 @@ There are two components, **Control Plane** (User Authentication and Policy) and
 
 ## Tech Stack
 
-* **Control Plane:** Go (Golang 1.25), gRPC, SQLite.
+* **Control Plane:** Go (Golang 1.25), gRPC, SQLite, OIDC/OAuth2 (Google, GitHub).
 * **Edge Agent:** Rust, libbpf-rs, Tokio, Tonic.
 * **Kernel Hook:** C (eBPF XDP).
-> NOTE: frontend for this project was completly written by gemini.
 
 ## Documentation & Setup
 
@@ -150,7 +149,6 @@ cargo build --release
 * **Layer 7 Deep Packet Inspection (WAF):** Move beyond L3/L4 headers to inspect packet payloads for application layer threats (e.g., SQL Injection, Log4j payloads), combining firewalling with Intrusion Prevention (IPS).
 
 ### Identity & Access Management (IAM)
-* **OIDC Integration:** Replace local database authentication with OpenID Connect (OIDC) (e.g., Google Workspace, Okta, Azure AD) to enable Multi Factor Authentication (MFA) and centralized user management.
 * **Context-Aware Access:** Add policy conditions beyond identity, such as device health (OS version, patch level) or geolocation.
 
 ### Enterprise Operations

@@ -56,6 +56,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/aegis-agent .
+COPY agent/config.toml ./
 
 RUN size=$(stat -c%s ./aegis-agent) && \
     echo "Final Binary Size: $((size/1024))KB" && \
@@ -63,4 +64,4 @@ RUN size=$(stat -c%s ./aegis-agent) && \
         echo "Error: Binary exceeds 5MB limit!"; exit 1; \
     fi
 
-CMD ["./aegis-agent", "-i", "eth1", "--host", "controller"]
+CMD ["./aegis-agent"]

@@ -51,13 +51,13 @@ ci: ci-go ci-rust
 ci-go:
 	@echo "--- [CI] Starting Go Controller Checks ---"
 	@echo "[Lint] Running golangci-lint (via Docker)..."
-	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -w /app golangci/golangci-lint:latest golangci-lint run -v
+	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -v "$(shell go env GOMODCACHE):/go/pkg/mod" -w /app golangci/golangci-lint:latest golangci-lint run -v
 	
 	@echo "[Vuln] Running govulncheck (via Docker)..."
-	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -w /app golang:1.25.7 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	docker run --rm --network host -v "$(PWD)/controller:/app" -w /app golang:1.26.2 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	
 	@echo "[Test] Running Unit Tests..."
-	cd $(CONTROLLER_DIR) && JWT_SECRET="test-secret" go test -v ./...
+	cd $(CONTROLLER_DIR) && go test -v ./...
 	
 	@echo "[Build] Verifying Build..."
 	cd $(CONTROLLER_DIR) && go build -o ../$(BIN_DIR)/controller ./main.go
@@ -113,7 +113,7 @@ test: test-go test-rust
 # Run Go tests (Controller)
 test-go:
 	@echo "Running Controller (Go) tests..."
-	cd $(CONTROLLER_DIR) && JWT_SECRET="test-secret" go test -v ./...
+	cd $(CONTROLLER_DIR) && go test -v ./...
 
 # Run Rust tests (Agent)
 test-rust:
@@ -157,23 +157,6 @@ ip-steal:
 # View Logs
 logs:
 	docker compose -f $(DOCKER_COMPOSE_MAIN) logs -f
-
-# Start the test environment
-test-ip-up:
-	docker compose -f $(DOCKER_COMPOSE_TEST) up -d --build controller target-app
-
-# Trigger the IP change (Stop target -> Start stealer -> Start target)
-test-ip-steal:
-	@echo "Stopping target-app..."
-	docker stop target-app
-	@echo "Starting IP stealer..."
-	docker compose -f $(DOCKER_COMPOSE_TEST) up -d ip-stealer
-	@echo "Restarting target-app (should get new IP)..."
-	docker start target-app
-
-# Full cleanup for test environment
-test-ip-down:
-	docker compose -f $(DOCKER_COMPOSE_TEST) --profile "*" down
 
 # Helper to bump version in Cargo.toml and HTML files
 bump-version:

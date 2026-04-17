@@ -1,0 +1,33 @@
+# Aegis Agent Configuration
+
+[network]
+# Network interface to attach the XDP firewall program to.
+iface = "eth1"
+
+[controller]
+# Controller IPv4 address/hostname. hostname has more priority than ip
+ip = ""
+host = "controller"
+port = 443
+
+[certs]
+cert_file = "certs/agent.pem"
+key_file = "certs/agent.key"
+ca_file = "certs/ca.pem"
+
+[session]
+# How long (ns) to wait before updating a session timestamp.
+lazy_update_timeout_ns = 1_000_000_000 # 1 s
+
+# How long (ns) a rule can stay idle before being cleaned up.
+rule_timeout_ns = 60_000_000_000 # 60 s
+
+# How often (s) the cleanup task runs.
+cleanup_interval_sec = 30
+
+# Size of the internal broadcast channel used for session monitoring.
+broadcast_channel_size = 16
+
+[grpc]
+# Port on which the gRPC server listens for controller connection.
+port = 50001

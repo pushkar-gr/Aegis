@@ -1,0 +1,39 @@
+# Aegis Controller Configuration
+
+[database]
+dir = "./data"
+max_open_conns = 1
+max_idle_conns = 1
+conn_max_lifetime = "1h"
+
+[server]
+port = ":443"
+cert_file = "certs/server.crt"
+key_file = "certs/server.key"
+
+[agent]
+address = "172.21.0.10:50001"
+cert_file = "certs/controller.pem"
+key_file = "certs/controller.key"
+ca_file = "certs/ca.pem"
+server_name = "aegis-agent"
+call_timeout = "1s"
+
+[monitor]
+retry_delay = "5s"
+ip_update_interval = "60s"
+
+[auth]
+jwt_secret = "CHANGE_ME"
+jwt_token_lifetime = "60s"
+jwt_private_key = "keys/jwt_private.pem"
+jwt_public_key = "keys/jwt_public.pem"
+
+[oidc]
+enabled = false
+google_client_id = ""
+google_secret = ""
+github_client_id = ""
+github_secret = ""
+redirect_url = "https://localhost/api/auth/oidc/callback"
+role_mapping_rules = '{"domain_mappings":{"@company.com":"user","admin@company.com":"admin"}}'
