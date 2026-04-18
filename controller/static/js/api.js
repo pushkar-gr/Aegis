@@ -25,7 +25,7 @@ const API = {
                 localStorage.removeItem('currentUser');
                 localStorage.removeItem('userRole');
 
-                if (!endpoint.includes('/auth/login')) {
+                if (!endpoint.includes('/auth/login') && !onLoginPage) {
                     window.location.href = '/static/pages/login.html';
                     return null;
                 }
@@ -190,12 +190,18 @@ function getUserRole() {
     return localStorage.getItem('userRole');
 }
 
-// Check if user is authenticated (Client-side check)
-function requireAuth() {
+// Check if user is authenticated. Falls back to a server-side check for OIDC
+// users who have a valid HttpOnly cookie but no localStorage entry.
+async function requireAuth() {
     const user = getCurrentUser();
-    if (!user) {
-        window.location.href = '/static/pages/login.html';
-        return false;
+    if (user) return true;
+
+    try {
+        const me = await API.getCurrentUser();
+        if (me && me.username) return true;
+    } catch (e) {
+        // Not authenticated
     }
-    return true;
+    window.location.href = '/static/pages/login.html';
+    return false;
 }

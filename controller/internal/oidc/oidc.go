@@ -44,10 +44,6 @@ func NewOIDCManager(ctx context.Context, googleClientID, googleSecret, githubCli
 		return nil, fmt.Errorf("failed to parse role mapping rules: %w", err)
 	}
 
-	if roleMapping.DefaultRole == "" {
-		roleMapping.DefaultRole = "user"
-	}
-
 	if googleClientID != "" && googleSecret != "" {
 		googleProvider, err := oidc.NewProvider(ctx, "https://accounts.google.com")
 		if err != nil {

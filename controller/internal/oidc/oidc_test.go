@@ -145,6 +145,84 @@ func TestOIDCManagerGetProvider(t *testing.T) {
 	}
 }
 
+func TestMapClaimsToRole(t *testing.T) {
+	tests := []struct {
+		name         string
+		mapping      RoleMappingRules
+		email        string
+		groups       []string
+		expectedRole string
+	}{
+		{
+			name: "Exact email match",
+			mapping: RoleMappingRules{
+				DomainMappings: map[string]string{"admin@company.com": "admin"},
+				DefaultRole:    "user",
+			},
+			email:        "admin@company.com",
+			expectedRole: "admin",
+		},
+		{
+			name: "Domain match",
+			mapping: RoleMappingRules{
+				DomainMappings: map[string]string{"@company.com": "user"},
+				DefaultRole:    "none",
+			},
+			email:        "someone@company.com",
+			expectedRole: "user",
+		},
+		{
+			name: "Group match",
+			mapping: RoleMappingRules{
+				GroupMappings: map[string]string{"devs": "developer"},
+				DefaultRole:   "none",
+			},
+			email:        "user@other.com",
+			groups:       []string{"devs"},
+			expectedRole: "developer",
+		},
+		{
+			name: "No match, default_role is none",
+			mapping: RoleMappingRules{
+				DomainMappings: map[string]string{"@company.com": "user"},
+				DefaultRole:    "none",
+			},
+			email:        "outsider@other.com",
+			expectedRole: "none",
+		},
+		{
+			name: "No match, default_role is empty",
+			mapping: RoleMappingRules{
+				DomainMappings: map[string]string{"@company.com": "user"},
+			},
+			email:        "outsider@other.com",
+			expectedRole: "",
+		},
+		{
+			name: "No match, falls back to default role",
+			mapping: RoleMappingRules{
+				DomainMappings: map[string]string{"@company.com": "user"},
+				DefaultRole:    "guest",
+			},
+			email:        "outsider@other.com",
+			expectedRole: "guest",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &Provider{
+				Name:        "test",
+				RoleMapping: &tt.mapping,
+			}
+			role := provider.MapClaimsToRole(tt.email, tt.groups)
+			if role != tt.expectedRole {
+				t.Errorf("Expected role %q, got %q", tt.expectedRole, role)
+			}
+		})
+	}
+}
+
 func TestProviderConfiguration(t *testing.T) {
 	ctx := context.Background()
 	roleMappingJSON := `{
