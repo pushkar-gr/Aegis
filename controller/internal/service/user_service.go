@@ -32,12 +32,16 @@ func NewUserService(userRepo repository.UserRepository) UserService {
 	return &userService{userRepo: userRepo}
 }
 
-func (s *userService) checkRootProtection(targetID int, requesterUsername string) error {
+func (s *userService) checkRootProtectionByUserId(targetID int, requesterUsername string) error {
 	targetRole, err := s.userRepo.GetRoleNameByUserID(targetID)
 	if err != nil {
 		return nil
 	}
 
+	return s.checkRootProtection(targetRole, requesterUsername)
+}
+
+func (s *userService) checkRootProtection(targetRole string, requesterUsername string) error {
 	if targetRole == "root" {
 		requesterRole, err := s.userRepo.GetRoleNameByUsername(requesterUsername)
 		if err != nil {
@@ -56,7 +60,8 @@ func (s *userService) GetAll() ([]models.User, error) {
 
 func (s *userService) Create(username, password string, roleID int, requesterUsername string) (*models.UserWithCredentials, error) {
 	if requesterUsername != "" {
-		if err := s.checkRootProtection(roleID, requesterUsername); err != nil {
+		targetRole, _ := s.userRepo.GetRoleNameByRoleId(roleID)
+		if err := s.checkRootProtection(targetRole, requesterUsername); err != nil {
 			return nil, err
 		}
 	}
@@ -93,7 +98,7 @@ func (s *userService) Create(username, password string, roleID int, requesterUse
 
 func (s *userService) Delete(id int, requesterUsername string) error {
 	if requesterUsername != "" {
-		if err := s.checkRootProtection(id, requesterUsername); err != nil {
+		if err := s.checkRootProtectionByUserId(id, requesterUsername); err != nil {
 			return err
 		}
 	}
@@ -109,10 +114,19 @@ func (s *userService) Delete(id int, requesterUsername string) error {
 
 func (s *userService) UpdateRole(id, roleID int, requesterUsername string) error {
 	if requesterUsername != "" {
-		if err := s.checkRootProtection(id, requesterUsername); err != nil {
+		if err := s.checkRootProtectionByUserId(id, requesterUsername); err != nil {
 			return err
 		}
 	}
+
+	targetRole, err := s.userRepo.GetRoleNameByUserID(roleID)
+	if err != nil {
+		return nil
+	}
+	if targetRole == "root" {
+		return fmt.Errorf("forbidden: cannot become root user")
+	}
+
 	rows, err := s.userRepo.UpdateRole(id, roleID)
 	if err != nil {
 		return fmt.Errorf("failed to update role: %w", err)
@@ -125,7 +139,7 @@ func (s *userService) UpdateRole(id, roleID int, requesterUsername string) error
 
 func (s *userService) ResetPassword(id int, newPassword, requesterUsername string) error {
 	if requesterUsername != "" {
-		if err := s.checkRootProtection(id, requesterUsername); err != nil {
+		if err := s.checkRootProtectionByUserId(id, requesterUsername); err != nil {
 			return err
 		}
 	}
@@ -152,7 +166,7 @@ func (s *userService) GetExtraServices(userID int) ([]models.Service, error) {
 
 func (s *userService) AddExtraService(userID, serviceID int, requesterUsername string) error {
 	if requesterUsername != "" {
-		if err := s.checkRootProtection(userID, requesterUsername); err != nil {
+		if err := s.checkRootProtectionByUserId(userID, requesterUsername); err != nil {
 			return err
 		}
 	}
@@ -161,7 +175,7 @@ func (s *userService) AddExtraService(userID, serviceID int, requesterUsername s
 
 func (s *userService) RemoveExtraService(userID, svcID int, requesterUsername string) error {
 	if requesterUsername != "" {
-		if err := s.checkRootProtection(userID, requesterUsername); err != nil {
+		if err := s.checkRootProtectionByUserId(userID, requesterUsername); err != nil {
 			return err
 		}
 	}

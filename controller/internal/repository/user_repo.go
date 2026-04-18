@@ -18,6 +18,7 @@ type UserRepository interface {
 	Delete(id int) (int64, error)
 	GetRoleNameByUserID(id int) (string, error)
 	GetRoleNameByUsername(username string) (string, error)
+	GetRoleNameByRoleId(roleId int) (string, error)
 	UpdateRole(id, roleID int) (int64, error)
 	ResetPassword(id int, newHash string) (int64, error)
 	GetExtraServices(userID int) ([]models.Service, error)
@@ -48,6 +49,7 @@ type userRepo struct {
 	stmtDelete                  *sql.Stmt
 	stmtGetRoleNameByUserID     *sql.Stmt
 	stmtGetRoleNameByUsername   *sql.Stmt
+	stmtGetRoleNameByRoleId     *sql.Stmt
 	stmtUpdateRole              *sql.Stmt
 	stmtResetPassword           *sql.Stmt
 	stmtGetExtraServices        *sql.Stmt
@@ -79,6 +81,7 @@ func NewUserRepository(db *sql.DB) (UserRepository, error) {
 		&r.stmtDelete:                  "DELETE FROM users WHERE id = ?",
 		&r.stmtGetRoleNameByUserID:     "SELECT r.name FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.id = ?",
 		&r.stmtGetRoleNameByUsername:   "SELECT r.name FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.username = ?",
+		&r.stmtGetRoleNameByRoleId:     "SELECT name FROM roles WHERE id = ?",
 		&r.stmtUpdateRole:              "UPDATE users SET role_id = ? WHERE id = ?",
 		&r.stmtResetPassword:           "UPDATE users SET password = ? WHERE id = ?",
 		&r.stmtGetExtraServices:        "SELECT s.id, s.name, s.hostname, s.ip, s.port, s.description, s.created_at FROM services s JOIN user_extra_services ues ON s.id = ues.service_id WHERE ues.user_id = ?",
@@ -173,6 +176,12 @@ func (r *userRepo) GetRoleNameByUserID(id int) (string, error) {
 func (r *userRepo) GetRoleNameByUsername(username string) (string, error) {
 	var name string
 	err := r.stmtGetRoleNameByUsername.QueryRow(username).Scan(&name)
+	return name, err
+}
+
+func (r *userRepo) GetRoleNameByRoleId(roleId int) (string, error) {
+	var name string
+	err := r.stmtGetRoleNameByRoleId.QueryRow(roleId).Scan(&name)
 	return name, err
 }
 

@@ -119,6 +119,8 @@ func (h *UserHandler) UpdateRole(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		case "forbidden: cannot modify root user":
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot modify root user role"})
+		case "forbidden: cannot become root user":
+			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot become root user"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user role"})
 		}
