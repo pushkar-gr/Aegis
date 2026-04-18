@@ -60,7 +60,7 @@ jobs:
       - name: Install System Deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libbpf-dev libelf-dev pkg-config linux-tools-generic build-essential protobuf-compiler
+          sudo apt-get install -y clang llvm libbpf-dev libelf-dev pkg-config linux-tools-$(uname -r) linux-tools-common build-essential protobuf-compiler
 
       - name: Generate vmlinux.h
         run: |
