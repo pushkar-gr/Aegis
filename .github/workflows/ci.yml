@@ -60,8 +60,19 @@ jobs:
       - name: Install System Deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm libbpf-dev libelf-dev pkg-config linux-tools-$(uname -r) linux-tools-common build-essential protobuf-compiler
-
+          sudo apt-get install -y \
+            clang llvm libbpf-dev libelf-dev pkg-config \
+            linux-tools-common build-essential protobuf-compiler
+      
+      - name: Install bpftool (static binary, kernel-independent)
+        run: |
+          BPFTOOL_VERSION=v7.5.0
+          curl -sL "https://github.com/libbpf/bpftool/releases/download/${BPFTOOL_VERSION}/bpftool-${BPFTOOL_VERSION}-amd64.tar.gz" \
+            | tar -xz
+          sudo mv bpftool /usr/local/bin/bpftool
+          sudo chmod +x /usr/local/bin/bpftool
+          bpftool version
+      
       - name: Generate vmlinux.h
         run: |
           echo "Generating vmlinux.h from CI runner kernel..."
