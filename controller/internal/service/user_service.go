@@ -14,7 +14,7 @@ var usernameRE = regexp.MustCompile("^[a-zA-Z0-9_]{5,30}$")
 // UserService handles user management logic.
 type UserService interface {
 	GetAll() ([]models.User, error)
-	Create(username, password string, roleID int) (*models.UserWithCredentials, error)
+	Create(username, password string, roleID int, requesterUsername string) (*models.UserWithCredentials, error)
 	Delete(id int, requesterUsername string) error
 	UpdateRole(id, roleID int, requesterUsername string) error
 	ResetPassword(id int, newPassword, requesterUsername string) error
@@ -54,7 +54,13 @@ func (s *userService) GetAll() ([]models.User, error) {
 	return s.userRepo.GetAll()
 }
 
-func (s *userService) Create(username, password string, roleID int) (*models.UserWithCredentials, error) {
+func (s *userService) Create(username, password string, roleID int, requesterUsername string) (*models.UserWithCredentials, error) {
+	if requesterUsername != "" {
+		if err := s.checkRootProtection(roleID, requesterUsername); err != nil {
+			return nil, err
+		}
+	}
+
 	if !usernameRE.MatchString(username) {
 		return nil, fmt.Errorf("invalid username format")
 	}

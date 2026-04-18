@@ -43,7 +43,8 @@ func (h *UserHandler) Create(c *gin.Context) {
 		return
 	}
 
-	result, err := h.userSvc.Create(newUser.Credentials.Username, newUser.Credentials.Password, newUser.RoleId)
+	requester := c.GetString(middleware.UsernameKey)
+	result, err := h.userSvc.Create(newUser.Credentials.Username, newUser.Credentials.Password, newUser.RoleId, requester)
 	if err != nil {
 		msg := err.Error()
 		switch {
@@ -55,6 +56,8 @@ func (h *UserHandler) Create(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "Error creating user (name must be unique)"})
 		case strings.HasPrefix(msg, "password too weak"):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Password" + msg[len("password"):]})
+		case msg == "forbidden: cannot modify root user":
+			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot delete root user"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}
