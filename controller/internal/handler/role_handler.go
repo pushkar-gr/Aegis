@@ -68,6 +68,8 @@ func (h *RoleHandler) Delete(c *gin.Context) {
 	if err := h.roleSvc.Delete(id); err != nil {
 		if err.Error() == "role not found" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
+		} else if err.Error() == "forbidden: cannot delete root or admin" {
+			c.JSON(http.StatusForbidden, gin.H{"forbidden": "cannot delete root or admin"})
 		} else {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete role"})
 		}

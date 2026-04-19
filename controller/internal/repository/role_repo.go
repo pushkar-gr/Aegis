@@ -15,6 +15,7 @@ type RoleRepository interface {
 	AddService(roleID, serviceID int) error
 	RemoveService(roleID, serviceID int) error
 	GetIDByName(name string) (int, error)
+	GetNameById(id int) (string, error)
 }
 
 type roleRepo struct {
@@ -26,6 +27,7 @@ type roleRepo struct {
 	stmtAddService    *sql.Stmt
 	stmtRemoveService *sql.Stmt
 	stmtGetIDByName   *sql.Stmt
+	stmtGetNameById   *sql.Stmt
 }
 
 // NewRoleRepository prepares all statements and returns RoleRepository.
@@ -41,6 +43,7 @@ func NewRoleRepository(db *sql.DB) (RoleRepository, error) {
 		&r.stmtAddService:    "INSERT OR IGNORE INTO role_services (role_id, service_id) VALUES (?, ?)",
 		&r.stmtRemoveService: "DELETE FROM role_services WHERE role_id = ? AND service_id = ?",
 		&r.stmtGetIDByName:   "SELECT id FROM roles WHERE name = ?",
+		&r.stmtGetNameById:   "SELECT name FROM roles WHERE id = ?",
 	}
 
 	for stmt, query := range queries {
@@ -120,4 +123,10 @@ func (r *roleRepo) GetIDByName(name string) (int, error) {
 	var id int
 	err := r.stmtGetIDByName.QueryRow(name).Scan(&id)
 	return id, err
+}
+
+func (r *roleRepo) GetNameById(id int) (string, error) {
+	var name string
+	err := r.stmtGetNameById.QueryRow(id).Scan(&name)
+	return name, err
 }
