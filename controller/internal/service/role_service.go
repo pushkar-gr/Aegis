@@ -47,7 +47,7 @@ func (s *roleService) Create(name, description string) (*models.Role, error) {
 func (s *roleService) Delete(id int) error {
 	targetRole, err := s.roleRepo.GetNameById(id)
 	if err != nil {
-		return nil
+		return err
 	}
 	if targetRole == "root" || targetRole == "admin" {
 		return fmt.Errorf("forbidden: cannot delete root or admin")

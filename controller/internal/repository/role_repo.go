@@ -3,6 +3,7 @@ package repository
 import (
 	"Aegis/controller/internal/models"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -125,8 +126,16 @@ func (r *roleRepo) GetIDByName(name string) (int, error) {
 	return id, err
 }
 
+var ErrRoleNotFound = errors.New("role not found")
+
 func (r *roleRepo) GetNameById(id int) (string, error) {
 	var name string
 	err := r.stmtGetNameById.QueryRow(id).Scan(&name)
-	return name, err
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrRoleNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	return name, nil
 }
