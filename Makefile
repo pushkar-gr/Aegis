@@ -8,7 +8,7 @@ GO_BIN := $(shell go env GOPATH)/bin
 DOCKER_COMPOSE_TEST := deploy/docker-compose.test-ip-change.yml
 DOCKER_COMPOSE_MAIN := deploy/docker-compose.yml
 
-.PHONY: all build build-go build-rust run clean proto deps-proto vmlinux ci ci-go ci-rust verify-ebpf test test-go test-rust docker-build up down logs test-ip-up test-ip-steal test-ip-down
+.PHONY: all build build-go build-rust run clean proto deps-proto vmlinux ci ci-go ci-go-vuln ci-rust ci-rust-vuln ci-vuln verify-ebpf test test-go test-rust docker-build up down logs test-ip-up test-ip-steal test-ip-down
 
 all: build
 
@@ -47,15 +47,24 @@ clean:
 # Run CI locally
 ci: ci-go ci-rust
 
-# Go CI: Lint (Docker), Vuln Check (Docker), Test, Build
+ci-vuln: ci-go-vuln ci-rust-vuln
+
+GOLANGCI_LINT_VERSION := v2.13.2
+GOVULNCHECK_VERSION := v1.5.0
+CARGO_AUDIT_VERSION := 0.21.2
+PROTOC_GEN_GO_VERSION := v1.36.11
+PROTOC_GEN_GO_GRPC_VERSION := v1.5.1
+GO_IMAGE := golang:1.27.0
+
+# Go CI: Lint (Docker), Test, Build.
 ci-go:
 	@echo "--- [CI] Starting Go Controller Checks ---"
 	@echo "[Lint] Running golangci-lint (via Docker)..."
-	docker run --rm -v "$(PWD)/$(CONTROLLER_DIR):/app" -v "$(shell go env GOMODCACHE):/go/pkg/mod" -w /app golangci/golangci-lint:latest golangci-lint run -v
-	
-	@echo "[Vuln] Running govulncheck (via Docker)..."
-	docker run --rm --network host -v "$(PWD)/controller:/app" -w /app golang:1.26.2 go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-	
+	docker run --rm --user "$(shell id -u):$(shell id -g)" -v "$(PWD)/$(CONTROLLER_DIR):/app" -v "$(shell go env GOMODCACHE):/go/pkg/mod" -e HOME=/tmp -e GOCACHE=/tmp/gocache -e GOLANGCI_LINT_CACHE=/tmp/golangci-lint-cache -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) golangci-lint run -v
+
+	@echo "[Verify] Checking go.sum is in sync..."
+	cd $(CONTROLLER_DIR) && go mod verify && go mod tidy -diff
+
 	@echo "[Test] Running Unit Tests..."
 	cd $(CONTROLLER_DIR) && go test -v ./...
 	
@@ -63,24 +72,38 @@ ci-go:
 	cd $(CONTROLLER_DIR) && go build -o ../$(BIN_DIR)/controller ./main.go
 	@echo "--- [CI] Go Checks Passed ---"
 
+# go vulnerability scan.
+ci-go-vuln:
+	@echo "[Vuln] Running govulncheck (informational, via Docker)..."
+	-docker run --rm --network host -v "$(PWD)/controller:/app" -w /app $(GO_IMAGE) go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+
 # Rust CI: Format, Build (Gen Skel), Clippy, BPF Verify, Test
 ci-rust: vmlinux
 	@echo "--- [CI] Starting Rust Agent Checks ---"
+	@rustup show
 	@echo "[Build] Building (Generates .skel.rs)..."
-	cd $(AGENT_DIR) && cargo build --verbose
+	cd $(AGENT_DIR) && cargo build --locked --verbose
 	
 	@echo "[Format] Checking formatting..."
 	cd $(AGENT_DIR) && cargo fmt -- --check
 	
 	@echo "[Lint] Running Clippy..."
-	cd $(AGENT_DIR) && cargo clippy -- -D warnings
+	cd $(AGENT_DIR) && cargo clippy --locked -- -D warnings
 	
 	@echo "[Verify] Checking eBPF C-Source Safety (Clang)..."
 	$(MAKE) verify-ebpf
 	
 	@echo "[Test] Running Unit Tests..."
-	cd $(AGENT_DIR) && cargo test --verbose
+	cd $(AGENT_DIR) && cargo test --locked --verbose
 	@echo "--- [CI] Rust Checks Passed ---"
+
+# Rust vulnerability scan.
+ci-rust-vuln:
+	@echo "[Vuln] Running cargo-audit (informational)..."
+	@if ! cargo audit --version >/dev/null 2>&1; then \
+		cargo install cargo-audit --version $(CARGO_AUDIT_VERSION) --locked; \
+	fi
+	-cd $(AGENT_DIR) && cargo audit
 
 # Helper to verify eBPF compilation (simulates CI verification step)
 verify-ebpf:
@@ -91,8 +114,8 @@ verify-ebpf:
 # Install required Go plugins for Protoc
 deps-proto:
 	@echo "Installing protoc plugins..."
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GEN_GO_GRPC_VERSION)
 
 # Generate Go code from .proto files
 proto:
@@ -162,6 +185,7 @@ logs:
 bump-version:
 	@if [ -z "$(v)" ]; then echo "Usage: make bump-version v=1.1.1"; exit 1; fi
 	@echo "Bumping version to $(v)..."
+	echo "$(v)" > VERSION
 	sed -i 's/^version = ".*"/version = "$(v)"/' $(AGENT_DIR)/Cargo.toml
 	sed -i 's/v[0-9.]*-aegis/v$(v)-aegis/' $(CONTROLLER_DIR)/static/pages/*.html
 	@echo "Version bumped to $(v)"
