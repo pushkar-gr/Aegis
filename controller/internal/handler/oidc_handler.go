@@ -268,34 +268,32 @@ func (h *OIDCHandler) exchangeCodeForUserInfo(ctx context.Context, provider *oid
 		var githubUser struct {
 			ID    int64  `json:"id"`
 			Login string `json:"login"`
-			Email string `json:"email"`
 			Name  string `json:"name"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&githubUser); err != nil {
 			return nil, fmt.Errorf("failed to decode user info: %w", err)
 		}
 		userInfo.Subject = fmt.Sprintf("%d", githubUser.ID)
-		userInfo.Email = githubUser.Email
 		userInfo.Name = githubUser.Name
-		userInfo.EmailVerified = true
 
-		if userInfo.Email == "" {
-			emailResp, err := client.Get("https://api.github.com/user/emails")
-			if err == nil {
-				defer func() { _ = emailResp.Body.Close() }()
-				var emails []struct {
-					Email    string `json:"email"`
-					Primary  bool   `json:"primary"`
-					Verified bool   `json:"verified"`
-				}
-				if json.NewDecoder(emailResp.Body).Decode(&emails) == nil {
-					for _, e := range emails {
-						if e.Primary && e.Verified {
-							userInfo.Email = e.Email
-							break
-						}
-					}
-				}
+		emailResp, err := client.Get("https://api.github.com/user/emails")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user emails: %w", err)
+		}
+		defer func() { _ = emailResp.Body.Close() }()
+		var emails []struct {
+			Email    string `json:"email"`
+			Primary  bool   `json:"primary"`
+			Verified bool   `json:"verified"`
+		}
+		if err := json.NewDecoder(emailResp.Body).Decode(&emails); err != nil {
+			return nil, fmt.Errorf("failed to decode user emails: %w", err)
+		}
+		for _, e := range emails {
+			if e.Primary && e.Verified {
+				userInfo.Email = e.Email
+				userInfo.EmailVerified = true
+				break
 			}
 		}
 	}
