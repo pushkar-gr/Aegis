@@ -176,14 +176,6 @@ func TestUpdatePassword(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	oldPassword := "OldPass123!"
-	newPassword := "NewPass456!"
-	hashedOldPassword, _ := utils.HashPassword(oldPassword)
-	_, err := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "passworduser", hashedOldPassword)
-	if err != nil {
-		t.Fatalf("Failed to create test user: %v", err)
-	}
-
 	userRepo, _ := createReposFromDB(t, db)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
 		JWTKey:        []byte("test-secret-key"),
@@ -193,27 +185,39 @@ func TestUpdatePassword(t *testing.T) {
 
 	r := gin.New()
 	r.POST("/api/auth/password", func(c *gin.Context) {
-		c.Set(middleware.UsernameKey, "passworduser")
+		c.Set(middleware.UsernameKey, c.GetHeader("X-Test-User"))
 	}, h.UpdatePassword)
 
 	tests := []struct {
 		name           string
+		username       string
 		oldPassword    string
 		newPassword    string
 		expectedStatus int
 	}{
-		{"Successful password update", oldPassword, newPassword, http.StatusOK},
-		{"Wrong old password", "WrongPass123!", newPassword, http.StatusUnauthorized},
-		{"Weak new password", oldPassword, "weak", http.StatusBadRequest},
+		{"Successful password update", "pwuser1", "OldPass123!", "NewPass456!", http.StatusOK},
+		{"Wrong old password", "pwuser2", "OldPass123!", "NewPass456!", http.StatusUnauthorized},
+		{"Weak new password", "pwuser3", "OldPass123!", "weak", http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			payload := map[string]string{"old_password": tt.oldPassword, "new_password": tt.newPassword}
+			hashed, _ := utils.HashPassword("OldPass123!")
+			_, err := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", tt.username, hashed)
+			if err != nil {
+				t.Fatalf("Failed to create test user: %v", err)
+			}
+
+			oldPw := tt.oldPassword
+			if tt.name == "Wrong old password" {
+				oldPw = "WrongPass123!"
+			}
+			payload := map[string]string{"old_password": oldPw, "new_password": tt.newPassword}
 			body, _ := json.Marshal(payload)
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, "/api/auth/password", bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Test-User", tt.username)
 			r.ServeHTTP(w, req)
 
 			if w.Code != tt.expectedStatus {

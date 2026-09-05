@@ -153,12 +153,15 @@ func (s *authService) Logout(username string) error {
 
 func (s *authService) UpdatePassword(username, oldPassword, newPassword string) error {
 	provider, err := s.userRepo.GetProvider(username)
-	if err == nil && provider != "local" {
-		return fmt.Errorf("password changes not allowed for SSO users")
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("invalid credentials")
+		}
+		return fmt.Errorf("database error: %w", err)
 	}
 
-	if err := utils.ValidatePasswordComplexity(newPassword); err != nil {
-		return fmt.Errorf("password too weak: %w", err)
+	if provider != "local" {
+		return fmt.Errorf("password changes not allowed for SSO users")
 	}
 
 	storedHash, err := s.userRepo.GetPasswordHash(username)
@@ -168,6 +171,10 @@ func (s *authService) UpdatePassword(username, oldPassword, newPassword string) 
 
 	if !utils.CheckPasswordHash(oldPassword, storedHash) {
 		return fmt.Errorf("invalid credentials")
+	}
+
+	if err := utils.ValidatePasswordComplexity(newPassword); err != nil {
+		return fmt.Errorf("password too weak: %w", err)
 	}
 
 	newHash, err := utils.HashPassword(newPassword)
