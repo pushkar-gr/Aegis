@@ -180,6 +180,15 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		Path:     "/",
 		SameSite: http.SameSiteStrictMode,
 	})
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    result.RefreshToken,
+		Expires:  result.RefreshExpiry,
+		HttpOnly: true,
+		Secure:   true,
+		Path:     "/api/auth/refresh",
+		SameSite: http.SameSiteStrictMode,
+	})
 
 	c.JSON(http.StatusOK, gin.H{"message": "Token refreshed successfully", "role": result.RoleName})
 }

@@ -39,9 +39,11 @@ type CurrentUserInfo struct {
 
 // TokenResult is used for RefreshToken.
 type TokenResult struct {
-	TokenString string
-	ExpiresAt   time.Time
-	RoleName    string
+	TokenString   string
+	ExpiresAt     time.Time
+	RoleName      string
+	RefreshToken  string
+	RefreshExpiry time.Time
 }
 
 // dummyHash is used to mitigate timing attack during login.
@@ -206,6 +208,20 @@ func (s *authService) RefreshToken(token string) (*TokenResult, error) {
 		return nil, fmt.Errorf("account disabled")
 	}
 
+	if err := s.userRepo.DeleteRefreshToken(token); err != nil {
+		log.Printf("[auth] failed to delete used refresh token for user '%s': %v", username, err)
+	}
+
+	newRefreshToken, err := utils.GenerateSecureToken(32)
+	if err != nil {
+		return nil, fmt.Errorf("refresh token generation error: %w", err)
+	}
+
+	refreshExpiry := time.Now().Add(7 * 24 * time.Hour)
+	if err := s.userRepo.CreateRefreshToken(newRefreshToken, userID, refreshExpiry); err != nil {
+		return nil, fmt.Errorf("failed to store refresh token: %w", err)
+	}
+
 	expiresAt := time.Now().Add(s.cfg.TokenLifetime)
 	claims := &models.Claims{
 		Username: username,
@@ -225,9 +241,11 @@ func (s *authService) RefreshToken(token string) (*TokenResult, error) {
 	}
 
 	return &TokenResult{
-		TokenString: tokenString,
-		ExpiresAt:   expiresAt,
-		RoleName:    roleName,
+		TokenString:   tokenString,
+		ExpiresAt:     expiresAt,
+		RoleName:      roleName,
+		RefreshToken:  newRefreshToken,
+		RefreshExpiry: refreshExpiry,
 	}, nil
 }
 
