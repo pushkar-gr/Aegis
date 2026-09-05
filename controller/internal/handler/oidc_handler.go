@@ -137,6 +137,12 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 		return
 	}
 
+	if userInfo.Email != "" && !userInfo.EmailVerified {
+		log.Printf("[oidc] login denied for subject '%s' via %s: email not verified", userInfo.Subject, providerName)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: email not verified"})
+		return
+	}
+
 	roleName := provider.MapClaimsToRole(userInfo.Email, userInfo.Groups)
 
 	if roleName == "" || roleName == "none" {
