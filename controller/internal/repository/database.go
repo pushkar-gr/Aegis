@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -23,17 +24,16 @@ func InitDB(dir string, maxOpen, maxIdle int, connMaxLifetime time.Duration) *sq
 		log.Fatalf("[ERROR] [database] init failed: aegis.db not found at %s", dbPath)
 	}
 
+	dsn := fmt.Sprintf("file:%s?_foreign_keys=on", dbPath)
+
 	var err error
-	DB, err = sql.Open("sqlite3", dbPath)
+	DB, err = sql.Open("sqlite3", dsn)
 	if err != nil {
 		log.Fatalf("[ERROR] [database] init failed: %v", err)
 	}
 
 	if _, err := DB.Exec("PRAGMA journal_mode=WAL;"); err != nil {
 		log.Printf("[WARN] [database] WAL mode not enabled: %v", err)
-	}
-	if _, err := DB.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		log.Fatalf("[ERROR] [database] init failed: unable to enable foreign keys: %v", err)
 	}
 
 	DB.SetMaxOpenConns(maxOpen)
