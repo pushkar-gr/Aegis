@@ -44,6 +44,17 @@ type TokenResult struct {
 	RoleName    string
 }
 
+// dummyHash is used to mitigate timing attack during login.
+var dummyHash = mustDummyHash()
+
+func mustDummyHash() string {
+	h, err := utils.HashPassword("dummy-password-for-timing-safety")
+	if err != nil {
+		panic(fmt.Sprintf("failed to init dummy hash: %v", err))
+	}
+	return h
+}
+
 // AuthService handles authentication and token lifecycle.
 type AuthService interface {
 	Login(username, password string) (*LoginResult, error)
@@ -67,7 +78,7 @@ func NewAuthService(userRepo repository.UserRepository, cfg AuthConfig) AuthServ
 func (s *authService) Login(username, password string) (*LoginResult, error) {
 	storedHash, isActive, err := s.userRepo.GetCredentials(username)
 	if err == sql.ErrNoRows {
-		utils.CheckPasswordHash(password, "$2a$12$DUMMYHASH0000000000000000000000000000000000000000")
+		utils.CheckPasswordHash(password, dummyHash)
 		return nil, fmt.Errorf("invalid credentials")
 	}
 	if err != nil {
