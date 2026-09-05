@@ -40,6 +40,28 @@ func JWTAuth(jwtKey []byte, publicKey *rsa.PublicKey) gin.HandlerFunc {
 	}
 }
 
+// OptionalJWTAuth is like JWTAuth but does not aborts the request.
+func OptionalJWTAuth(jwtKey []byte, publicKey *rsa.PublicKey) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cookie, err := c.Cookie("token")
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		var username string
+		if publicKey != nil {
+			username, err = utils.GetUsernameFromTokenRS256(cookie, publicKey)
+		} else {
+			username, err = utils.GetUsernameFromToken(cookie, jwtKey)
+		}
+		if err == nil {
+			c.Set(UsernameKey, username)
+		}
+		c.Next()
+	}
+}
+
 // SecurityHeaders adds security HTTP headers to all responses.
 func SecurityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
