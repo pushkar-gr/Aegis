@@ -19,6 +19,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type stateEntry struct {
+	provider string
+	expiry   time.Time
+}
+
 // OIDCHandler handles OIDC authentication endpoints.
 type OIDCHandler struct {
 	oidcManager *oidcPkg.OIDCManager
@@ -26,7 +31,7 @@ type OIDCHandler struct {
 	userRepo    repository.UserRepository
 	roleRepo    repository.RoleRepository
 	stateMu     sync.Mutex
-	states      map[string]time.Time
+	states      map[string]stateEntry
 }
 
 // NewOIDCHandler creates a new OIDCHandler.
@@ -36,7 +41,7 @@ func NewOIDCHandler(oidcManager *oidcPkg.OIDCManager, authSvc service.AuthServic
 		authSvc:     authSvc,
 		userRepo:    userRepo,
 		roleRepo:    roleRepo,
-		states:      make(map[string]time.Time),
+		states:      make(map[string]stateEntry),
 	}
 }
 
@@ -76,7 +81,9 @@ func (h *OIDCHandler) Login(c *gin.Context) {
 
 	state := h.generateState()
 	h.stateMu.Lock()
-	h.states[state] = time.Now().Add(10 * time.Minute)
+	h.states[state] = stateEntry{provider: providerName, expiry: time.Now().Add(10 * time.Minute)}
+	h.cleanExpiredStates()
+	h.stateMu.Unlock()
 	h.cleanExpiredStates()
 	h.stateMu.Unlock()
 
@@ -98,13 +105,13 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 	}
 
 	h.stateMu.Lock()
-	expiry, ok := h.states[state]
+	entry, ok := h.states[state]
 	if ok {
 		delete(h.states, state)
 	}
 	h.stateMu.Unlock()
 
-	if !ok || time.Now().After(expiry) {
+	if !ok || time.Now().After(entry.expiry) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired state"})
 		return
 	}
@@ -115,26 +122,21 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	var userInfo *oidcUserInfo
-	var providerName string
-	var err error
-
-	for name, provider := range h.oidcManager.Providers {
-		userInfo, err = h.exchangeCodeForUserInfo(c.Request.Context(), provider, code)
-		if err == nil {
-			providerName = name
-			break
-		}
-		log.Printf("[oidc] failed to exchange code with %s: %v", name, err)
+	provider, err := h.oidcManager.GetProvider(entry.provider)
+	if err != nil {
+		log.Printf("[oidc] callback failed: provider '%s' from state no longer configured", entry.provider)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid provider"})
+		return
 	}
+	providerName := entry.provider
 
-	if userInfo == nil {
-		log.Printf("[oidc] callback failed: could not exchange code with any provider")
+	userInfo, err := h.exchangeCodeForUserInfo(c.Request.Context(), provider, code)
+	if err != nil {
+		log.Printf("[oidc] failed to exchange code with %s: %v", providerName, err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication failed"})
 		return
 	}
 
-	provider, _ := h.oidcManager.GetProvider(providerName)
 	roleName := provider.MapClaimsToRole(userInfo.Email, userInfo.Groups)
 
 	if roleName == "" || roleName == "none" {
@@ -338,8 +340,8 @@ func (h *OIDCHandler) generateState() string {
 // Must be called with h.stateMu held.
 func (h *OIDCHandler) cleanExpiredStates() {
 	now := time.Now()
-	for state, expiry := range h.states {
-		if now.After(expiry) {
+	for state, entry := range h.states {
+		if now.After(entry.expiry) {
 			delete(h.states, state)
 		}
 	}
