@@ -11,14 +11,21 @@ import (
 // RequireRole enforces role based access control.
 func RequireRole(repo repository.UserRepository, roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		username, exists := c.Get(UsernameKey)
+		usernameVal, exists := c.Get(UsernameKey)
 		if !exists {
 			log.Printf("[middleware] rbac: user context missing")
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 			return
 		}
 
-		roleName, err := repo.GetRoleNameByUsername(username.(string))
+		username, ok := usernameVal.(string)
+		if !ok || username == "" {
+			log.Printf("[middleware] rbac: user context has unexpected type or is empty")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			return
+		}
+
+		roleName, err := repo.GetRoleNameByUsername(username)
 		if err != nil {
 			log.Printf("[middleware] rbac: failed to get role for user '%s': %v", username, err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
