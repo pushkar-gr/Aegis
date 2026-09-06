@@ -258,6 +258,36 @@ func TestRemoveRoleService(t *testing.T) {
 	}
 }
 
+func TestDeleteRoleInUse(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	result, err := db.Exec("INSERT INTO roles (name, description) VALUES (?, ?)", "in-use-role", "still has users")
+	if err != nil {
+		t.Fatalf("Failed to create test role: %v", err)
+	}
+	roleID, _ := result.LastInsertId()
+
+	if _, err := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, ?, 1)",
+		"someuser", "hash", roleID); err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	_, roleRepo := createReposFromDB(t, db)
+	h := NewRoleHandler(service.NewRoleService(roleRepo))
+
+	r := gin.New()
+	r.DELETE("/api/roles/:id", h.Delete)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/roles/%d", roleID), nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("Expected status %d for role still in use, got %d. Body: %s", http.StatusConflict, w.Code, w.Body.String())
+	}
+}
+
 // mustMarshal encodes v to JSON and fails the test on error.
 func mustMarshal(t *testing.T, v any) []byte {
 	t.Helper()
