@@ -82,15 +82,29 @@ func (h *OIDCHandler) Login(c *gin.Context) {
 	}
 
 	state := h.generateState()
-	h.stateMu.Lock()
-	h.states[state] = stateEntry{provider: providerName, expiry: time.Now().Add(10 * time.Minute)}
-	h.cleanExpiredStates()
-	h.stateMu.Unlock()
-	h.cleanExpiredStates()
-	h.stateMu.Unlock()
+	h.storeState(state, providerName)
 
 	authURL := provider.Config.AuthCodeURL(state)
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
+}
+
+func (h *OIDCHandler) storeState(state, providerName string) {
+	h.stateMu.Lock()
+	defer h.stateMu.Unlock()
+
+	h.states[state] = stateEntry{provider: providerName, expiry: time.Now().Add(10 * time.Minute)}
+	h.cleanExpiredStates()
+}
+
+func (h *OIDCHandler) consumeState(state string) (stateEntry, bool) {
+	h.stateMu.Lock()
+	defer h.stateMu.Unlock()
+
+	entry, ok := h.states[state]
+	if ok {
+		delete(h.states, state)
+	}
+	return entry, ok
 }
 
 // Callback handles the OAuth2 callback after provider authentication.
@@ -106,13 +120,7 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	h.stateMu.Lock()
-	entry, ok := h.states[state]
-	if ok {
-		delete(h.states, state)
-	}
-	h.stateMu.Unlock()
-
+	entry, ok := h.consumeState(state)
 	if !ok || time.Now().After(entry.expiry) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired state"})
 		return
