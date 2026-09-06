@@ -5,6 +5,7 @@ import (
 	oidcPkg "Aegis/controller/internal/oidc"
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/service"
+	"Aegis/controller/internal/utils"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -199,7 +200,7 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 		SameSite: http.SameSiteStrictMode,
 	})
 
-	refreshToken, err := generateSecureToken(32)
+	refreshToken, err := utils.GenerateSecureToken(32)
 	if err != nil {
 		log.Printf("[oidc] failed to generate refresh token: %v", err)
 	} else {
@@ -360,13 +361,4 @@ func (h *OIDCHandler) cleanExpiredStates() {
 			delete(h.states, state)
 		}
 	}
-}
-
-// generateSecureToken creates a cryptographically random, URL-safe token of n bytes.
-func generateSecureToken(n int) (string, error) {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(b), nil
 }
