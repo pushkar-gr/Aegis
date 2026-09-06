@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -154,6 +155,10 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 	user, err := h.getOrCreateOIDCUser(userInfo, providerName, roleName)
 	if err != nil {
 		log.Printf("[oidc] failed to get or create user: %v", err)
+		if errors.Is(err, errAccountCollision) {
+			c.JSON(http.StatusConflict, gin.H{"error": "An account already exists with this email under a different login method"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -300,6 +305,8 @@ func (h *OIDCHandler) exchangeCodeForUserInfo(ctx context.Context, provider *oid
 	return userInfo, nil
 }
 
+var errAccountCollision = errors.New("account collision")
+
 // getOrCreateOIDCUser looks up an existing OIDC user by provider and subject ID,
 // updating their email if needed, or creates a new user with the mapped role on first login.
 func (h *OIDCHandler) getOrCreateOIDCUser(userInfo *oidcUserInfo, provider, roleName string) (*models.User, error) {
@@ -322,6 +329,10 @@ func (h *OIDCHandler) getOrCreateOIDCUser(userInfo *oidcUserInfo, provider, role
 	username := userInfo.Email
 	if username == "" {
 		username = fmt.Sprintf("%s_%s", provider, userInfo.Subject)
+	}
+
+	if _, err := h.userRepo.GetIDByUsername(username); err == nil {
+		return nil, fmt.Errorf("%w: an account already exists for %q under a different login method", errAccountCollision, username)
 	}
 
 	newUser, err := h.userRepo.CreateOIDCUser(username, provider, userInfo.Subject, userInfo.Email, roleID)
