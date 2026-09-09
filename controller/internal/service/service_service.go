@@ -6,6 +6,7 @@ import (
 	"Aegis/controller/internal/utils"
 	"Aegis/controller/proto"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 	"time"
@@ -149,8 +150,15 @@ func (s *serviceService) SelectActiveService(userID, roleID, serviceID int, clie
 
 func (s *serviceService) DeselectActiveService(userID, svcID int, clientIP string) error {
 	dstIP, dstPort, err := s.svcRepo.GetIPPort(svcID)
-	if err == nil {
-		_, _ = proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), false, time.Second)
+	if err != nil {
+		log.Printf("[dashboard] deselect: service %d has no IP/port config, skipping remote deprovision: %v", svcID, err)
+	} else {
+		success, sendErr := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), false, time.Second)
+		if sendErr != nil {
+			log.Printf("[dashboard] deselect: failed to notify remote for user %d / service %d: %v", userID, svcID, sendErr)
+		} else if !success {
+			log.Printf("[dashboard] deselect: remote deactivation for user %d / service %d was not acknowledged", userID, svcID)
+		}
 	}
 	return s.svcRepo.DeleteActiveService(userID, svcID)
 }
