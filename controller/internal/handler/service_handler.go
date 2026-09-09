@@ -6,6 +6,7 @@ import (
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/service"
 	"Aegis/controller/internal/utils"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -114,11 +115,13 @@ func (h *ServiceHandler) Delete(c *gin.Context) {
 	c.String(http.StatusOK, "Service deleted successfully")
 }
 
+var errUnauthenticated = errors.New("unauthenticated: missing user context")
+
 // resolveCurrentUserIDAndRole resolves the user ID and role ID from the Gin context.
 func (h *ServiceHandler) resolveCurrentUserIDAndRole(c *gin.Context) (int, int, error) {
 	username := c.GetString(middleware.UsernameKey)
 	if username == "" {
-		return 0, 0, nil
+		return 0, 0, errUnauthenticated
 	}
 	return h.userRepo.GetIDAndRole(username)
 }

@@ -428,3 +428,25 @@ func TestDeselectActiveServiceInvalidID(t *testing.T) {
 		t.Errorf("Expected status %d for invalid service ID, got %d", http.StatusBadRequest, w.Code)
 	}
 }
+
+func TestGetMyServicesNoAuthContext(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	userRepo, _ := createReposFromDB(t, db)
+	svcRepo, _ := createServiceRepo(t, db)
+	svcSvc := service.NewServiceService(svcRepo)
+	h := NewServiceHandler(svcSvc, userRepo)
+
+	r := gin.New()
+	r.GET("/api/dashboard/services", h.GetMyServices)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/dashboard/services", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d with no auth context, got %d. Body: %s",
+			http.StatusUnauthorized, w.Code, w.Body.String())
+	}
+}
