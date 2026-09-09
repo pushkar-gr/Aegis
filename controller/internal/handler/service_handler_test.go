@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +29,7 @@ func TestGetServices(t *testing.T) {
 		t.Fatalf("Failed to create service repo: %v", err)
 	}
 
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -63,7 +64,7 @@ func TestDeleteService(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -98,7 +99,7 @@ func TestCreateService(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -142,7 +143,7 @@ func TestUpdateService(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -189,7 +190,7 @@ func TestCreateServiceSuccess(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -230,7 +231,7 @@ func TestUpdateServiceSuccess(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -267,7 +268,7 @@ func TestGetMyServices(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -295,7 +296,7 @@ func TestGetMyServicesUnknownUser(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -323,7 +324,7 @@ func TestGetMyActiveServices(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -351,7 +352,7 @@ func TestSelectActiveServiceInvalidBody(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -382,7 +383,7 @@ func TestSelectActiveServiceForbidden(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -412,7 +413,7 @@ func TestDeselectActiveServiceInvalidID(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()
@@ -435,7 +436,7 @@ func TestGetMyServicesNoAuthContext(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	svcRepo, _ := createServiceRepo(t, db)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, time.Second)
 	h := NewServiceHandler(svcSvc, userRepo)
 
 	r := gin.New()

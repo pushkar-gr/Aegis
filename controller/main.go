@@ -63,7 +63,7 @@ func main() {
 	authSvc := service.NewAuthService(userRepo, authCfg)
 	userSvc := service.NewUserService(userRepo, svcRepo)
 	roleSvc := service.NewRoleService(roleRepo, svcRepo)
-	svcSvc := service.NewServiceService(svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, cfg.AgentCallTimeout)
 
 	authHandler := handler.NewAuthHandler(authSvc)
 	userHandler := handler.NewUserHandler(userSvc)
@@ -114,7 +114,11 @@ func main() {
 	}
 
 	grpcMgr := grpcPkg.NewSessionManager(svcRepo, userRepo)
-	go grpcMgr.Start(grpcPkg.SessionConfig{IpUpdateInterval: cfg.IpUpdateInterval})
+	go grpcMgr.Start(grpcPkg.SessionConfig{
+		IpUpdateInterval:  cfg.IpUpdateInterval,
+		AgentCallTimeout:  cfg.AgentCallTimeout,
+		MonitorRetryDelay: cfg.MonitorRetryDelay,
+	})
 
 	go watcher.StartDockerWatcher()
 

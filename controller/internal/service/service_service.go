@@ -25,12 +25,13 @@ type ServiceService interface {
 }
 
 type serviceService struct {
-	svcRepo repository.ServiceRepository
+	svcRepo      repository.ServiceRepository
+	agentTimeout time.Duration
 }
 
 // NewServiceService creates a new ServiceService.
-func NewServiceService(svcRepo repository.ServiceRepository) ServiceService {
-	return &serviceService{svcRepo: svcRepo}
+func NewServiceService(svcRepo repository.ServiceRepository, agentTimeout time.Duration) ServiceService {
+	return &serviceService{svcRepo: svcRepo, agentTimeout: agentTimeout}
 }
 
 // resolveHostnameAndPort parses host:port, resolves DNS, and returns IP and port.
@@ -137,7 +138,7 @@ func (s *serviceService) SelectActiveService(userID, roleID, serviceID int, clie
 		return fmt.Errorf("service not found or invalid configuration")
 	}
 
-	success, err := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), true, time.Second)
+	success, err := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), true, s.agentTimeout)
 	if err != nil {
 		return fmt.Errorf("failed to activate session: %w", err)
 	}
@@ -153,7 +154,7 @@ func (s *serviceService) DeselectActiveService(userID, svcID int, clientIP strin
 	if err != nil {
 		log.Printf("[dashboard] deselect: service %d has no IP/port config, skipping remote deprovision: %v", svcID, err)
 	} else {
-		success, sendErr := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), false, time.Second)
+		success, sendErr := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), false, s.agentTimeout)
 		if sendErr != nil {
 			log.Printf("[dashboard] deselect: failed to notify remote for user %d / service %d: %v", userID, svcID, sendErr)
 		} else if !success {

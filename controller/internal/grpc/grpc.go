@@ -11,20 +11,22 @@ import (
 )
 
 const (
-	baseDelay      = 1 * time.Second
 	maxDelay       = 60 * time.Second
 	resetThreshold = 10 * time.Second
 )
 
 // SessionConfig holds config for the session manager.
 type SessionConfig struct {
-	IpUpdateInterval time.Duration
+	IpUpdateInterval  time.Duration
+	AgentCallTimeout  time.Duration
+	MonitorRetryDelay time.Duration
 }
 
 // SessionManager monitors gRPC streams and keeps session in sync.
 type SessionManager struct {
 	svcRepo  repository.ServiceRepository
 	userRepo repository.UserRepository
+	cfg      SessionConfig
 }
 
 // NewSessionManager creates a new SessionManager.
@@ -34,8 +36,9 @@ func NewSessionManager(svcRepo repository.ServiceRepository, userRepo repository
 
 // Start launches all background goroutines.
 func (m *SessionManager) Start(cfg SessionConfig) {
+	m.cfg = cfg
 	go m.connectGrpc()
-	go m.updateIpFromHostnames(cfg.IpUpdateInterval)
+	go m.updateIpFromHostnames()
 	go m.cleanupExpiredTokens()
 }
 
@@ -52,7 +55,12 @@ func (m *SessionManager) cleanupExpiredTokens() {
 }
 
 func (m *SessionManager) connectGrpc() {
+	baseDelay := m.cfg.MonitorRetryDelay
+	if baseDelay <= 0 {
+		baseDelay = 1 * time.Second
+	}
 	currentDelay := baseDelay
+
 	for {
 		connectStartTime := time.Now()
 
@@ -126,9 +134,9 @@ func (m *SessionManager) connectGrpc() {
 	}
 }
 
-func (m *SessionManager) updateIpFromHostnames(updateInterval time.Duration) {
+func (m *SessionManager) updateIpFromHostnames() {
 	m.syncHostnameIPs()
-	ticker := time.NewTicker(updateInterval)
+	ticker := time.NewTicker(m.cfg.IpUpdateInterval)
 	defer ticker.Stop()
 	for range ticker.C {
 		m.syncHostnameIPs()
@@ -190,7 +198,7 @@ func (m *SessionManager) syncHostnameIPs() {
 	}
 
 	if len(changedIps.IpChanges) > 0 {
-		success, err := proto.SendChanedIpData(changedIps, time.Second)
+		success, err := proto.SendChanedIpData(changedIps, m.cfg.AgentCallTimeout)
 		if err != nil {
 			log.Printf("[ERROR] updateHostnames: failed to update IPs in agent: %v", err)
 		}
