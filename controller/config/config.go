@@ -18,9 +18,10 @@ type Config struct {
 	DBPath string
 
 	// Server settings
-	ServerPort string
-	CertFile   string
-	KeyFile    string
+	ServerPort     string
+	CertFile       string
+	KeyFile        string
+	TrustedProxies []string
 
 	// gRPC Agent connection
 	AgentAddress     string
@@ -65,9 +66,10 @@ type tomlDatabase struct {
 
 // [server] section of config.toml.
 type tomlServer struct {
-	Port     string `toml:"port"`
-	CertFile string `toml:"cert_file"`
-	KeyFile  string `toml:"key_file"`
+	Port           string   `toml:"port"`
+	CertFile       string   `toml:"cert_file"`
+	KeyFile        string   `toml:"key_file"`
+	TrustedProxies []string `toml:"trusted_proxies"`
 }
 
 // [agent] section of config.toml.
@@ -125,9 +127,10 @@ func defaults() tomlFile {
 			ConnMaxLifetime: "1h",
 		},
 		Server: tomlServer{
-			Port:     ":443",
-			CertFile: "certs/server.crt",
-			KeyFile:  "certs/server.key",
+			Port:           ":443",
+			CertFile:       "certs/server.crt",
+			KeyFile:        "certs/server.key",
+			TrustedProxies: []string{},
 		},
 		Agent: tomlAgent{
 			Address:     "172.21.0.10:50001",
@@ -189,6 +192,7 @@ func buildConfig(tf tomlFile) *Config {
 		ServerPort:           tf.Server.Port,
 		CertFile:             tf.Server.CertFile,
 		KeyFile:              tf.Server.KeyFile,
+		TrustedProxies:       tf.Server.TrustedProxies,
 		AgentAddress:         tf.Agent.Address,
 		AgentCertFile:        tf.Agent.CertFile,
 		AgentKeyFile:         tf.Agent.KeyFile,

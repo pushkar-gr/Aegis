@@ -223,6 +223,35 @@ func TestParseDuration(t *testing.T) {
 	}
 }
 
+func TestLoadFromFileTrustedProxies(t *testing.T) {
+	path := writeTOML(t, `
+[auth]
+jwt_secret = "test-secret"
+
+[server]
+trusted_proxies = ["10.0.0.0/8", "192.168.1.1"]
+`)
+	cfg := LoadFromFile(path)
+
+	if len(cfg.TrustedProxies) != 2 {
+		t.Fatalf("TrustedProxies: got %d entries, want 2", len(cfg.TrustedProxies))
+	}
+	if cfg.TrustedProxies[0] != "10.0.0.0/8" || cfg.TrustedProxies[1] != "192.168.1.1" {
+		t.Errorf("TrustedProxies: got %v", cfg.TrustedProxies)
+	}
+}
+
+func TestLoadFromFileTrustedProxiesDefaultEmpty(t *testing.T) {
+	path := writeTOML(t, `[auth]
+jwt_secret = "test-secret"
+`)
+	cfg := LoadFromFile(path)
+
+	if len(cfg.TrustedProxies) != 0 {
+		t.Errorf("TrustedProxies: expected empty by default, got %v", cfg.TrustedProxies)
+	}
+}
+
 // splitLines splits a string into lines without adding newlines.
 func splitLines(s string) []string {
 	var lines []string

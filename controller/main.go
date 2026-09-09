@@ -9,6 +9,7 @@ import (
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/router"
 	"Aegis/controller/internal/service"
+	"Aegis/controller/internal/utils"
 	"Aegis/controller/internal/watcher"
 	"Aegis/controller/proto"
 	"context"
@@ -23,6 +24,10 @@ import (
 
 func main() {
 	cfg := config.Load()
+
+	if err := utils.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("[ERROR] Invalid trusted proxy configuration: %v", err)
+	}
 
 	db := repository.InitDB(cfg.DBDir, cfg.MaxOpenConns, cfg.MaxIdleConns, cfg.ConnMaxLifetime)
 	defer func() {
