@@ -133,11 +133,35 @@ func (r *serviceRepo) Update(id int, name, hostname string, ip uint32, port uint
 }
 
 func (r *serviceRepo) Delete(id int) (int64, error) {
-	res, err := r.stmtDelete.Exec(id)
+	tx, err := r.db.Begin()
 	if err != nil {
 		return 0, err
 	}
-	return res.RowsAffected()
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec("DELETE FROM user_active_services WHERE service_id = ?", id); err != nil {
+		return 0, fmt.Errorf("failed to clear active sessions: %w", err)
+	}
+	if _, err := tx.Exec("DELETE FROM role_services WHERE service_id = ?", id); err != nil {
+		return 0, fmt.Errorf("failed to clear role links: %w", err)
+	}
+	if _, err := tx.Exec("DELETE FROM user_extra_services WHERE service_id = ?", id); err != nil {
+		return 0, fmt.Errorf("failed to clear user extra-service links: %w", err)
+	}
+
+	res, err := tx.Exec("DELETE FROM services WHERE id = ?", id)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return rows, nil
 }
 
 func (r *serviceRepo) GetIPPort(id int) (uint32, uint16, error) {
