@@ -239,8 +239,8 @@ func LoadFromFile(path string) *Config {
 		cfg.JwtKey = jwtSecret
 	}
 
-	if cfg.JwtKey == "CHANGE_ME" {
-		log.Fatal("[FATAL] auth.jwt_secret in config.toml must be changed from the default placeholder value")
+	if cfg.JwtKey == "" || cfg.JwtKey == "CHANGE_ME" {
+		log.Fatal("[FATAL] auth.jwt_secret in config.toml must be set to a non-empty value and changed from the default placeholder")
 	}
 
 	return cfg
