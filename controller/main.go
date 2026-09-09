@@ -62,7 +62,7 @@ func main() {
 
 	authSvc := service.NewAuthService(userRepo, authCfg)
 	userSvc := service.NewUserService(userRepo)
-	roleSvc := service.NewRoleService(roleRepo)
+	roleSvc := service.NewRoleService(roleRepo, svcRepo)
 	svcSvc := service.NewServiceService(svcRepo)
 
 	authHandler := handler.NewAuthHandler(authSvc)
@@ -91,18 +91,20 @@ func main() {
 	}
 
 	authMW := middleware.JWTAuth([]byte(cfg.JwtKey), publicKey)
+	optionalAuthMW := middleware.OptionalJWTAuth([]byte(cfg.JwtKey), publicKey)
 	rootOnly := middleware.RequireRole(userRepo, "root")
 	adminOrRoot := middleware.RequireRole(userRepo, "admin", "root")
 
 	r := router.NewRouter(router.RouterConfig{
-		AuthHandler:    authHandler,
-		UserHandler:    userHandler,
-		RoleHandler:    roleHandler,
-		ServiceHandler: serviceHandler,
-		OIDCHandler:    oidcHandler,
-		AuthMiddleware: authMW,
-		RootOnly:       rootOnly,
-		AdminOrRoot:    adminOrRoot,
+		AuthHandler:            authHandler,
+		UserHandler:            userHandler,
+		RoleHandler:            roleHandler,
+		ServiceHandler:         serviceHandler,
+		OIDCHandler:            oidcHandler,
+		AuthMiddleware:         authMW,
+		OptionalAuthMiddleware: optionalAuthMW,
+		RootOnly:               rootOnly,
+		AdminOrRoot:            adminOrRoot,
 	})
 
 	err = proto.Init(cfg.AgentAddress, cfg.AgentCertFile, cfg.AgentKeyFile, cfg.AgentCAFile, cfg.AgentServerName)

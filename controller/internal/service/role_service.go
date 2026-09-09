@@ -13,6 +13,7 @@ var (
 	ErrRoleNameExists   = errors.New("role name already exists")
 	ErrRoleProtected    = errors.New("forbidden: cannot delete root or admin")
 	ErrRoleInUse        = errors.New("role is still assigned to one or more users")
+	ErrServiceNotFound  = errors.New("service not found")
 )
 
 // RoleService handles role management logic.
@@ -27,11 +28,12 @@ type RoleService interface {
 
 type roleService struct {
 	roleRepo repository.RoleRepository
+	svcRepo  repository.ServiceRepository
 }
 
 // NewRoleService creates a new RoleService.
-func NewRoleService(roleRepo repository.RoleRepository) RoleService {
-	return &roleService{roleRepo: roleRepo}
+func NewRoleService(roleRepo repository.RoleRepository, svcRepo repository.ServiceRepository) RoleService {
+	return &roleService{roleRepo: roleRepo, svcRepo: svcRepo}
 }
 
 func (s *roleService) GetAll() ([]models.Role, error) {
@@ -85,6 +87,16 @@ func (s *roleService) GetServices(roleID int) ([]models.Service, error) {
 }
 
 func (s *roleService) AddService(roleID, serviceID int) error {
+	if _, err := s.roleRepo.GetNameById(roleID); err != nil {
+		return err
+	}
+	exists, err := s.svcRepo.Exists(serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to check service existence: %w", err)
+	}
+	if !exists {
+		return ErrServiceNotFound
+	}
 	return s.roleRepo.AddService(roleID, serviceID)
 }
 

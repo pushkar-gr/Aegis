@@ -28,6 +28,7 @@ type ServiceRepository interface {
 	Create(name, hostname string, ip uint32, port uint16, description string) (int64, error)
 	Update(id int, name, hostname string, ip uint32, port uint16, description string) (int64, error)
 	Delete(id int) (int64, error)
+	Exists(id int) (bool, error)
 	GetIPPort(id int) (uint32, uint16, error)
 	GetServiceMap() (map[string]int, error)
 	GetActiveServiceUsers() (map[int][]int, error)
@@ -162,6 +163,18 @@ func (r *serviceRepo) Delete(id int) (int64, error) {
 		return 0, err
 	}
 	return rows, nil
+}
+
+func (r *serviceRepo) Exists(id int) (bool, error) {
+	var exists int
+	err := r.db.QueryRow("SELECT 1 FROM services WHERE id = ?", id).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *serviceRepo) GetIPPort(id int) (uint32, uint16, error) {

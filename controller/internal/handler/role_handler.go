@@ -120,8 +120,15 @@ func (h *RoleHandler) AddService(c *gin.Context) {
 	}
 
 	if err := h.roleSvc.AddService(roleID, req.ServiceID); err != nil {
-		log.Printf("[roles] add service failed for role %d and service %d: %v", roleID, req.ServiceID, err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to link service to role (check if IDs exist)"})
+		switch {
+		case errors.Is(err, repository.ErrRoleNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
+		case errors.Is(err, service.ErrServiceNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		default:
+			log.Printf("[roles] add service failed for role %d and service %d: %v", roleID, req.ServiceID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link service to role"})
+		}
 		return
 	}
 

@@ -14,10 +14,15 @@ import (
 )
 
 func TestGetRoles(t *testing.T) {
-	_, _, roleRepo, cleanup := setupTestRepos(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	roleSvc := service.NewRoleService(roleRepo)
+	_, roleRepo := createReposFromDB(t, db)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	roleSvc := service.NewRoleService(roleRepo, svcRepo)
 	h := NewRoleHandler(roleSvc)
 
 	r := gin.New()
@@ -41,10 +46,15 @@ func TestGetRoles(t *testing.T) {
 }
 
 func TestCreateRole(t *testing.T) {
-	_, _, roleRepo, cleanup := setupTestRepos(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	roleSvc := service.NewRoleService(roleRepo)
+	_, roleRepo := createReposFromDB(t, db)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	roleSvc := service.NewRoleService(roleRepo, svcRepo)
 	h := NewRoleHandler(roleSvc)
 
 	r := gin.New()
@@ -75,10 +85,15 @@ func TestCreateRole(t *testing.T) {
 }
 
 func TestCreateRoleDuplicate(t *testing.T) {
-	_, _, roleRepo, cleanup := setupTestRepos(t)
+	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	roleSvc := service.NewRoleService(roleRepo)
+	_, roleRepo := createReposFromDB(t, db)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	roleSvc := service.NewRoleService(roleRepo, svcRepo)
 	h := NewRoleHandler(roleSvc)
 
 	r := gin.New()
@@ -107,7 +122,11 @@ func TestDeleteRole(t *testing.T) {
 	roleID, _ := result.LastInsertId()
 
 	_, roleRepo := createReposFromDB(t, db)
-	roleSvc := service.NewRoleService(roleRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	roleSvc := service.NewRoleService(roleRepo, svcRepo)
 	h := NewRoleHandler(roleSvc)
 
 	r := gin.New()
@@ -149,7 +168,11 @@ func TestGetRoleServices(t *testing.T) {
 	}
 
 	_, roleRepo := createReposFromDB(t, db)
-	roleSvc := service.NewRoleService(roleRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	roleSvc := service.NewRoleService(roleRepo, svcRepo)
 	h := NewRoleHandler(roleSvc)
 
 	r := gin.New()
@@ -185,7 +208,11 @@ func TestAddRoleService(t *testing.T) {
 	svcID, _ := svcResult.LastInsertId()
 
 	_, roleRepo := createReposFromDB(t, db)
-	roleSvc := service.NewRoleService(roleRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	roleSvc := service.NewRoleService(roleRepo, svcRepo)
 	h := NewRoleHandler(roleSvc)
 
 	r := gin.New()
@@ -200,6 +227,8 @@ func TestAddRoleService(t *testing.T) {
 		{"Successful link", "1", mustMarshal(t, map[string]int{"service_id": int(svcID)}), http.StatusOK},
 		{"Invalid role ID", "invalid", mustMarshal(t, map[string]int{"service_id": int(svcID)}), http.StatusBadRequest},
 		{"Invalid JSON body", "1", []byte("not-json"), http.StatusBadRequest},
+		{"Nonexistent service", "1", mustMarshal(t, map[string]int{"service_id": 99999}), http.StatusNotFound},
+		{"Nonexistent role", "99999", mustMarshal(t, map[string]int{"service_id": int(svcID)}), http.StatusNotFound},
 	}
 
 	for _, tt := range tests {
@@ -228,7 +257,11 @@ func TestRemoveRoleService(t *testing.T) {
 	}
 
 	_, roleRepo := createReposFromDB(t, db)
-	roleSvc := service.NewRoleService(roleRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	roleSvc := service.NewRoleService(roleRepo, svcRepo)
 	h := NewRoleHandler(roleSvc)
 
 	r := gin.New()
@@ -274,7 +307,11 @@ func TestDeleteRoleInUse(t *testing.T) {
 	}
 
 	_, roleRepo := createReposFromDB(t, db)
-	h := NewRoleHandler(service.NewRoleService(roleRepo))
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	h := NewRoleHandler(service.NewRoleService(roleRepo, svcRepo))
 
 	r := gin.New()
 	r.DELETE("/api/roles/:id", h.Delete)
