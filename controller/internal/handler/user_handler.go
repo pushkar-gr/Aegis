@@ -4,6 +4,7 @@ import (
 	"Aegis/controller/internal/middleware"
 	"Aegis/controller/internal/models"
 	"Aegis/controller/internal/service"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -48,17 +49,20 @@ func (h *UserHandler) Create(c *gin.Context) {
 	if err != nil {
 		msg := err.Error()
 		switch {
-		case msg == "invalid username format":
+		case errors.Is(err, service.ErrInvalidUsername):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid username format"})
-		case msg == "role_id is required":
+		case errors.Is(err, service.ErrRoleIDRequired):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "User role_id is required"})
-		case msg == "username already exists":
+		case errors.Is(err, service.ErrInvalidRole):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
+		case errors.Is(err, service.ErrUsernameExists):
 			c.JSON(http.StatusConflict, gin.H{"error": "Error creating user (name must be unique)"})
 		case strings.HasPrefix(msg, "password too weak"):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Password" + msg[len("password"):]})
-		case msg == "forbidden: cannot modify root user":
-			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot delete root user"})
+		case errors.Is(err, service.ErrCannotModifyRoot):
+			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot create user with root role"})
 		default:
+			log.Printf("[users] create failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}
 		return
@@ -79,13 +83,13 @@ func (h *UserHandler) Delete(c *gin.Context) {
 
 	requester := c.GetString(middleware.UsernameKey)
 	if err := h.userSvc.Delete(id, requester); err != nil {
-		msg := err.Error()
-		switch msg {
-		case "user not found":
+		switch {
+		case errors.Is(err, service.ErrUserNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		case "forbidden: cannot modify root user":
+		case errors.Is(err, service.ErrCannotModifyRoot):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot delete root user"})
 		default:
+			log.Printf("[users] delete failed for ID %d: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
 		}
 		return
@@ -113,15 +117,17 @@ func (h *UserHandler) UpdateRole(c *gin.Context) {
 
 	requester := c.GetString(middleware.UsernameKey)
 	if err := h.userSvc.UpdateRole(id, req.RoleId, requester); err != nil {
-		msg := err.Error()
-		switch msg {
-		case "user not found":
+		switch {
+		case errors.Is(err, service.ErrUserNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		case "forbidden: cannot modify root user":
+		case errors.Is(err, service.ErrInvalidRole):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
+		case errors.Is(err, service.ErrCannotModifyRoot):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot modify root user role"})
-		case "forbidden: cannot become root user":
+		case errors.Is(err, service.ErrCannotBecomeRoot):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot become root user"})
 		default:
+			log.Printf("[users] update role failed for ID %d: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user role"})
 		}
 		return
@@ -151,13 +157,14 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 	if err := h.userSvc.ResetPassword(id, req.Password, requester); err != nil {
 		msg := err.Error()
 		switch {
-		case msg == "user not found":
+		case errors.Is(err, service.ErrUserNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		case msg == "forbidden: cannot modify root user":
+		case errors.Is(err, service.ErrCannotModifyRoot):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot reset root user password"})
 		case strings.HasPrefix(msg, "password too weak"):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Password" + msg[len("password"):]})
 		default:
+			log.Printf("[users] reset password failed for ID %d: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset user password"})
 		}
 		return
@@ -202,11 +209,16 @@ func (h *UserHandler) AddService(c *gin.Context) {
 
 	requester := c.GetString(middleware.UsernameKey)
 	if err := h.userSvc.AddExtraService(userID, req.ServiceID, requester); err != nil {
-		msg := err.Error()
-		if msg == "forbidden: cannot modify root user" {
+		switch {
+		case errors.Is(err, service.ErrUserNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		case errors.Is(err, service.ErrServiceNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		case errors.Is(err, service.ErrCannotModifyRoot):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot modify root user services"})
-		} else {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to assign service to user (check if IDs exist)"})
+		default:
+			log.Printf("[users] add service failed for user %d and service %d: %v", userID, req.ServiceID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to assign service to user"})
 		}
 		return
 	}
@@ -231,10 +243,10 @@ func (h *UserHandler) RemoveService(c *gin.Context) {
 
 	requester := c.GetString(middleware.UsernameKey)
 	if err := h.userSvc.RemoveExtraService(userID, svcID, requester); err != nil {
-		msg := err.Error()
-		if msg == "forbidden: cannot modify root user" {
+		if errors.Is(err, service.ErrCannotModifyRoot) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot modify root user services"})
 		} else {
+			log.Printf("[users] remove service failed for user %d and service %d: %v", userID, svcID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove service from user"})
 		}
 		return

@@ -16,6 +16,7 @@ type UserRepository interface {
 	GetAll() ([]models.User, error)
 	Create(username, hashedPwd string, roleID int) (int64, error)
 	Delete(id int) (int64, error)
+	Exists(id int) (bool, error)
 	GetRoleNameByUserID(id int) (string, error)
 	GetRoleNameByUsername(username string) (string, error)
 	GetRoleNameByRoleId(roleId int) (string, error)
@@ -165,6 +166,18 @@ func (r *userRepo) Delete(id int) (int64, error) {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+func (r *userRepo) Exists(id int) (bool, error) {
+	var exists int
+	err := r.db.QueryRow("SELECT 1 FROM users WHERE id = ?", id).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *userRepo) GetRoleNameByUserID(id int) (string, error) {

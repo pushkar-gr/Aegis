@@ -61,7 +61,7 @@ func main() {
 	}
 
 	authSvc := service.NewAuthService(userRepo, authCfg)
-	userSvc := service.NewUserService(userRepo)
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	roleSvc := service.NewRoleService(roleRepo, svcRepo)
 	svcSvc := service.NewServiceService(svcRepo)
 
