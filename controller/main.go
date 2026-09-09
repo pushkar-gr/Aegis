@@ -120,7 +120,7 @@ func main() {
 		MonitorRetryDelay: cfg.MonitorRetryDelay,
 	})
 
-	go watcher.StartDockerWatcher()
+	go watcher.StartDockerWatcher(cfg.AgentCallTimeout)
 
 	go func() {
 		log.Printf("[INFO] Server initializing on port %s...", cfg.ServerPort)
