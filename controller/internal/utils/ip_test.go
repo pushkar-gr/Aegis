@@ -150,51 +150,38 @@ func TestUint32ToIp(t *testing.T) {
 }
 
 // TestGetClientIP tests the client IP extraction from HTTP request headers
-func TestGetClientIP(t *testing.T) {
+func TestGetClientIP_NoTrustedProxies(t *testing.T) {
+	if err := SetTrustedProxies(nil); err != nil {
+		t.Fatalf("SetTrustedProxies(nil) failed: %v", err)
+	}
+	t.Cleanup(func() { _ = SetTrustedProxies(nil) })
 	tests := []struct {
 		name       string
 		setupReq   func() *http.Request
 		expectedIP string
 	}{
 		{
-			name: "X-Forwarded-For header - single IP",
+			name: "X-Forwarded-For from an untrusted peer is ignored",
 			setupReq: func() *http.Request {
 				req := httptest.NewRequest(http.MethodGet, "/", nil)
 				req.Header.Set("X-Forwarded-For", "203.0.113.1")
+				req.RemoteAddr = "10.0.0.1:12345"
 				return req
 			},
-			expectedIP: "203.0.113.1",
+			expectedIP: "10.0.0.1",
 		},
 		{
-			name: "X-Forwarded-For header - multiple IPs, use first",
-			setupReq: func() *http.Request {
-				req := httptest.NewRequest(http.MethodGet, "/", nil)
-				req.Header.Set("X-Forwarded-For", "203.0.113.1, 10.0.0.1, 172.16.0.1")
-				return req
-			},
-			expectedIP: "203.0.113.1",
-		},
-		{
-			name: "X-Real-IP header",
+			name: "X-Real-IP from an untrusted peer is ignored",
 			setupReq: func() *http.Request {
 				req := httptest.NewRequest(http.MethodGet, "/", nil)
 				req.Header.Set("X-Real-IP", "198.51.100.1")
+				req.RemoteAddr = "10.0.0.2:12345"
 				return req
 			},
-			expectedIP: "198.51.100.1",
+			expectedIP: "10.0.0.2",
 		},
 		{
-			name: "X-Forwarded-For takes priority over X-Real-IP",
-			setupReq: func() *http.Request {
-				req := httptest.NewRequest(http.MethodGet, "/", nil)
-				req.Header.Set("X-Forwarded-For", "203.0.113.1")
-				req.Header.Set("X-Real-IP", "198.51.100.1")
-				return req
-			},
-			expectedIP: "203.0.113.1",
-		},
-		{
-			name: "Fallback to RemoteAddr",
+			name: "Always falls back to RemoteAddr",
 			setupReq: func() *http.Request {
 				req := httptest.NewRequest(http.MethodGet, "/", nil)
 				req.RemoteAddr = "192.0.2.1:12345"
@@ -202,23 +189,66 @@ func TestGetClientIP(t *testing.T) {
 			},
 			expectedIP: "192.0.2.1",
 		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := tt.setupReq()
+			got := GetClientIP(req)
+			if got != tt.expectedIP {
+				t.Errorf("GetClientIP() = %q, want %q", got, tt.expectedIP)
+			}
+		})
+	}
+}
+
+func TestGetClientIP_TrustedProxy(t *testing.T) {
+	if err := SetTrustedProxies([]string{"10.0.0.0/8"}); err != nil {
+		t.Fatalf("SetTrustedProxies failed: %v", err)
+	}
+	t.Cleanup(func() { _ = SetTrustedProxies(nil) })
+
+	tests := []struct {
+		name       string
+		setupReq   func() *http.Request
+		expectedIP string
+	}{
 		{
-			name: "Invalid X-Forwarded-For falls back to X-Real-IP",
+			name: "X-Forwarded-For honored from a trusted proxy",
 			setupReq: func() *http.Request {
 				req := httptest.NewRequest(http.MethodGet, "/", nil)
-				req.Header.Set("X-Forwarded-For", "not-an-ip")
+				req.Header.Set("X-Forwarded-For", "203.0.113.1, 172.16.0.1")
+				req.RemoteAddr = "10.0.0.1:12345"
+				return req
+			},
+			expectedIP: "203.0.113.1",
+		},
+		{
+			name: "X-Real-IP honored from a trusted proxy",
+			setupReq: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
 				req.Header.Set("X-Real-IP", "198.51.100.1")
+				req.RemoteAddr = "10.0.0.1:12345"
 				return req
 			},
 			expectedIP: "198.51.100.1",
 		},
 		{
-			name: "Invalid X-Forwarded-For and X-Real-IP falls back to RemoteAddr",
+			name: "Untrusted peer still ignored even with proxies configured elsewhere",
+			setupReq: func() *http.Request {
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				req.Header.Set("X-Forwarded-For", "203.0.113.1")
+				req.RemoteAddr = "203.0.113.5:12345"
+				return req
+			},
+			expectedIP: "203.0.113.5",
+		},
+		{
+			name: "Invalid forwarded header from a trusted proxy falls back to RemoteAddr",
 			setupReq: func() *http.Request {
 				req := httptest.NewRequest(http.MethodGet, "/", nil)
 				req.Header.Set("X-Forwarded-For", "not-an-ip")
-				req.Header.Set("X-Real-IP", "also-not-an-ip")
-				req.RemoteAddr = "10.0.0.1:9999"
+				req.RemoteAddr = "10.0.0.1:12345"
 				return req
 			},
 			expectedIP: "10.0.0.1",
@@ -234,4 +264,12 @@ func TestGetClientIP(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSetTrustedProxiesInvalidEntry(t *testing.T) {
+	err := SetTrustedProxies([]string{"not-a-valid-entry"})
+	if err == nil {
+		t.Error("Expected error for invalid trusted proxy entry, got none")
+	}
+	_ = SetTrustedProxies(nil)
 }
