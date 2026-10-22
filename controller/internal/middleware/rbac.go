@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"Aegis/controller/internal/repository"
+	"errors"
 	"log"
 	"net/http"
 
@@ -26,6 +27,11 @@ func RequireRole(repo repository.UserRepository, roles ...string) gin.HandlerFun
 		}
 
 		roleName, err := repo.GetRoleNameByUsername(username)
+		if errors.Is(err, repository.ErrNotFound) {
+			log.Printf("[middleware] rbac: user '%s' no longer exists or has no role", username)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
 		if err != nil {
 			log.Printf("[middleware] rbac: failed to get role for user '%s': %v", username, err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})

@@ -3,6 +3,7 @@ package repository
 import (
 	"Aegis/controller/internal/models"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -118,7 +119,7 @@ func (r *serviceRepo) GetAll() ([]models.Service, error) {
 func (r *serviceRepo) Create(name, hostname string, ip uint32, port uint16, description string) (int64, error) {
 	res, err := r.stmtCreate.Exec(name, hostname, ip, port, description)
 	if err != nil {
-		return 0, err
+		return 0, translateWriteError(err)
 	}
 	return res.LastInsertId()
 }
@@ -128,7 +129,7 @@ func (r *serviceRepo) Update(id int, name, hostname string, ip uint32, port uint
 		"UPDATE services SET name=?, hostname=?, ip=?, port=?, description=? WHERE id=?",
 		name, hostname, ip, port, description, id)
 	if err != nil {
-		return 0, err
+		return 0, translateWriteError(err)
 	}
 	return res.RowsAffected()
 }
@@ -168,7 +169,7 @@ func (r *serviceRepo) Delete(id int) (int64, error) {
 func (r *serviceRepo) Exists(id int) (bool, error) {
 	var exists int
 	err := r.db.QueryRow("SELECT 1 FROM services WHERE id = ?", id).Scan(&exists)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {
@@ -330,7 +331,7 @@ func (r *serviceRepo) GetUserActiveServices(userID int) ([]models.ActiveService,
 func (r *serviceRepo) CheckUserServiceAccess(userID, roleID, serviceID int) (bool, error) {
 	var exists int
 	err := r.stmtCheckAccess.QueryRow(roleID, serviceID, userID, serviceID).Scan(&exists)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {

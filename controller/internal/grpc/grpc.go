@@ -199,13 +199,13 @@ func (m *SessionManager) syncHostnameIPs() {
 
 	if len(changedIps.IpChanges) > 0 {
 		success, err := proto.SendChanedIpData(changedIps, m.cfg.AgentCallTimeout)
-		if err != nil {
+		switch {
+		case err != nil:
 			log.Printf("[ERROR] updateHostnames: failed to update IPs in agent: %v", err)
-		}
-		if success {
+		case !success:
+			log.Printf("[ERROR] updateHostnames: agent did not acknowledge IP update")
+		default:
 			log.Printf("[INFO] updateHostnames: updated %d IPs in agent", len(changedIps.IpChanges))
-		} else {
-			log.Printf("[ERROR] updateHostnames: failed to update IPs in agent")
 		}
 	}
 }

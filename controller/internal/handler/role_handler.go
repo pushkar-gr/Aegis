@@ -2,7 +2,6 @@ package handler
 
 import (
 	"Aegis/controller/internal/models"
-	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/service"
 	"errors"
 	"log"
@@ -69,7 +68,7 @@ func (h *RoleHandler) Delete(c *gin.Context) {
 
 	if err := h.roleSvc.Delete(id); err != nil {
 		switch {
-		case errors.Is(err, repository.ErrRoleNotFound):
+		case errors.Is(err, service.ErrRoleNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
 		case errors.Is(err, service.ErrRoleProtected):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Cannot delete root or admin role"})
@@ -121,7 +120,7 @@ func (h *RoleHandler) AddService(c *gin.Context) {
 
 	if err := h.roleSvc.AddService(roleID, req.ServiceID); err != nil {
 		switch {
-		case errors.Is(err, repository.ErrRoleNotFound):
+		case errors.Is(err, service.ErrRoleNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
 		case errors.Is(err, service.ErrServiceNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})

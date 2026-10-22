@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -191,5 +192,35 @@ func TestHashPasswordConsistency(t *testing.T) {
 	}
 	if !CheckPasswordHash(password, hash2) {
 		t.Error("Hash2 failed to validate password")
+	}
+}
+
+func TestValidatePasswordComplexityReturnsPolicyError(t *testing.T) {
+	err := ValidatePasswordComplexity("weak")
+	if err == nil {
+		t.Fatal("expected error for weak password")
+	}
+
+	var policyErr *PasswordPolicyError
+	if !errors.As(err, &policyErr) {
+		t.Fatalf("expected *PasswordPolicyError, got %T", err)
+	}
+	if policyErr.Reason == "" {
+		t.Error("expected a non-empty Reason")
+	}
+	if !strings.HasPrefix(err.Error(), "password too weak: ") {
+		t.Errorf("unexpected error text: %q", err.Error())
+	}
+
+	// Valid passwords must not produce a policy error.
+	if err := ValidatePasswordComplexity("TestPass123!"); err != nil {
+		t.Errorf("unexpected error for valid password: %v", err)
+	}
+}
+
+func TestHashPasswordTooLongIsTyped(t *testing.T) {
+	_, err := HashPassword(strings.Repeat("a", BcryptMaxBytes+1))
+	if !errors.Is(err, ErrPasswordTooLong) {
+		t.Errorf("expected ErrPasswordTooLong, got %v", err)
 	}
 }

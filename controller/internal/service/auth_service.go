@@ -5,7 +5,7 @@ import (
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/utils"
 	"crypto/rsa"
-	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -79,26 +79,25 @@ func NewAuthService(userRepo repository.UserRepository, cfg AuthConfig) AuthServ
 
 func (s *authService) Login(username, password string) (*LoginResult, error) {
 	storedHash, isActive, err := s.userRepo.GetCredentials(username)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, repository.ErrNotFound) {
 		utils.CheckPasswordHash(password, dummyHash)
-		return nil, fmt.Errorf("invalid credentials")
+		return nil, ErrInvalidCredentials
 	}
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
 	if !utils.CheckPasswordHash(password, storedHash) {
-		return nil, fmt.Errorf("invalid credentials")
+		return nil, ErrInvalidCredentials
 	}
 
 	if !isActive {
-		return nil, fmt.Errorf("account disabled")
+		return nil, ErrAccountDisabled
 	}
 
 	roleName, roleID, err := s.userRepo.GetRoleAndIDByUsername(username)
 	if err != nil {
-		log.Printf("[auth] failed to get role for user '%s': %v", username, err)
-		roleID = 0
+		return nil, fmt.Errorf("failed to get role for user %q: %w", username, err)
 	}
 
 	expiresAt := time.Now().Add(s.cfg.TokenLifetime)
@@ -146,7 +145,10 @@ func (s *authService) Login(username, password string) (*LoginResult, error) {
 func (s *authService) Logout(username string) error {
 	userID, err := s.userRepo.GetIDByUsername(username)
 	if err != nil {
-		return nil
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("failed to look up user: %w", err)
 	}
 	return s.userRepo.DeleteUserRefreshTokens(userID)
 }
@@ -154,14 +156,14 @@ func (s *authService) Logout(username string) error {
 func (s *authService) UpdatePassword(username, oldPassword, newPassword string) error {
 	provider, err := s.userRepo.GetProvider(username)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("invalid credentials")
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrInvalidCredentials
 		}
 		return fmt.Errorf("database error: %w", err)
 	}
 
 	if provider != "local" {
-		return fmt.Errorf("password changes not allowed for SSO users")
+		return ErrSSOPasswordChange
 	}
 
 	storedHash, err := s.userRepo.GetPasswordHash(username)
@@ -170,11 +172,11 @@ func (s *authService) UpdatePassword(username, oldPassword, newPassword string) 
 	}
 
 	if !utils.CheckPasswordHash(oldPassword, storedHash) {
-		return fmt.Errorf("invalid credentials")
+		return ErrInvalidCredentials
 	}
 
 	if err := utils.ValidatePasswordComplexity(newPassword); err != nil {
-		return fmt.Errorf("password too weak: %w", err)
+		return err
 	}
 
 	newHash, err := utils.HashPassword(newPassword)
@@ -187,7 +189,7 @@ func (s *authService) UpdatePassword(username, oldPassword, newPassword string) 
 		return fmt.Errorf("update error: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("user not found")
+		return ErrUserNotFound
 	}
 	return nil
 }
@@ -195,6 +197,9 @@ func (s *authService) UpdatePassword(username, oldPassword, newPassword string) 
 func (s *authService) GetCurrentUser(username string) (*CurrentUserInfo, error) {
 	roleName, roleID, err := s.userRepo.GetRoleAndIDByUsername(username)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrUserNotFound
+		}
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 	return &CurrentUserInfo{Username: username, Role: roleName, RoleId: roleID}, nil
@@ -203,16 +208,22 @@ func (s *authService) GetCurrentUser(username string) (*CurrentUserInfo, error) 
 func (s *authService) RefreshToken(token string) (*TokenResult, error) {
 	userID, err := s.userRepo.GetRefreshToken(token)
 	if err != nil {
-		return nil, fmt.Errorf("invalid or expired refresh token")
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrInvalidRefreshToken
+		}
+		return nil, fmt.Errorf("failed to look up refresh token: %w", err)
 	}
 
 	username, roleName, provider, roleID, isActive, err := s.userRepo.GetFullInfoByID(userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found")
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrInvalidRefreshToken
+		}
+		return nil, fmt.Errorf("failed to look up user: %w", err)
 	}
 
 	if !isActive {
-		return nil, fmt.Errorf("account disabled")
+		return nil, ErrAccountDisabled
 	}
 
 	if err := s.userRepo.DeleteRefreshToken(token); err != nil {

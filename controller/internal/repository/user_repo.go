@@ -3,6 +3,7 @@ package repository
 import (
 	"Aegis/controller/internal/models"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -155,7 +156,7 @@ func (r *userRepo) GetAll() ([]models.User, error) {
 func (r *userRepo) Create(username, hashedPwd string, roleID int) (int64, error) {
 	res, err := r.stmtCreate.Exec(username, hashedPwd, roleID)
 	if err != nil {
-		return 0, err
+		return 0, translateWriteError(err)
 	}
 	return res.LastInsertId()
 }
@@ -171,7 +172,7 @@ func (r *userRepo) Delete(id int) (int64, error) {
 func (r *userRepo) Exists(id int) (bool, error) {
 	var exists int
 	err := r.db.QueryRow("SELECT 1 FROM users WHERE id = ?", id).Scan(&exists)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {
@@ -284,7 +285,7 @@ func (r *userRepo) CreateOIDCUser(username, provider, providerID, email string, 
 		"INSERT INTO users (username, password, role_id, is_active, provider, provider_id, email) VALUES (?, NULL, ?, 1, ?, ?, ?)",
 		username, roleID, provider, providerID, email)
 	if err != nil {
-		return nil, err
+		return nil, translateWriteError(err)
 	}
 	id, _ := res.LastInsertId()
 	return &models.User{

@@ -3,7 +3,6 @@ package repository
 import (
 	"Aegis/controller/internal/models"
 	"database/sql"
-	"errors"
 	"fmt"
 )
 
@@ -81,7 +80,7 @@ func (r *roleRepo) GetAll() ([]models.Role, error) {
 func (r *roleRepo) Create(name, description string) (int64, error) {
 	res, err := r.stmtCreate.Exec(name, description)
 	if err != nil {
-		return 0, err
+		return 0, translateWriteError(err)
 	}
 	return res.LastInsertId()
 }
@@ -129,18 +128,10 @@ func (r *roleRepo) GetIDByName(name string) (int, error) {
 	return id, err
 }
 
-var ErrRoleNotFound = errors.New("role not found")
-
 func (r *roleRepo) GetNameById(id int) (string, error) {
 	var name string
 	err := r.stmtGetNameById.QueryRow(id).Scan(&name)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrRoleNotFound
-	}
-	if err != nil {
-		return "", err
-	}
-	return name, nil
+	return name, err
 }
 
 func (r *roleRepo) CountUsersWithRole(roleID int) (int, error) {

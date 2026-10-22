@@ -4,24 +4,12 @@ import (
 	"Aegis/controller/internal/models"
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/utils"
-	"database/sql"
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 )
 
 var usernameRE = regexp.MustCompile("^[a-zA-Z0-9_]{5,30}$")
-
-var (
-	ErrUserNotFound     = errors.New("user not found")
-	ErrCannotModifyRoot = errors.New("forbidden: cannot modify root user")
-	ErrCannotBecomeRoot = errors.New("forbidden: cannot become root user")
-	ErrInvalidUsername  = errors.New("invalid username format")
-	ErrRoleIDRequired   = errors.New("role_id is required")
-	ErrInvalidRole      = errors.New("role does not exist")
-	ErrUsernameExists   = errors.New("username already exists")
-)
 
 // UserService handles user management logic.
 type UserService interface {
@@ -48,7 +36,7 @@ func NewUserService(userRepo repository.UserRepository, svcRepo repository.Servi
 func (s *userService) checkRootProtectionByUserId(targetID int, requesterUsername string) error {
 	targetRole, err := s.userRepo.GetRoleNameByUserID(targetID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, repository.ErrNotFound) {
 			return nil
 		}
 		return fmt.Errorf("failed to verify target user role: %w", err)
@@ -80,8 +68,8 @@ func (s *userService) Create(username, password string, roleID int, requesterUse
 
 	targetRoleName, err := s.userRepo.GetRoleNameByRoleId(roleID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrInvalidRole
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrRoleNotFound
 		}
 		return nil, fmt.Errorf("failed to verify role: %w", err)
 	}
@@ -96,7 +84,7 @@ func (s *userService) Create(username, password string, roleID int, requesterUse
 		return nil, ErrInvalidUsername
 	}
 	if err := utils.ValidatePasswordComplexity(password); err != nil {
-		return nil, fmt.Errorf("password too weak: %w", err)
+		return nil, err
 	}
 
 	hashedPwd, err := utils.HashPassword(password)
@@ -106,7 +94,7 @@ func (s *userService) Create(username, password string, roleID int, requesterUse
 
 	id, err := s.userRepo.Create(username, hashedPwd, roleID)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
+		if errors.Is(err, repository.ErrDuplicate) {
 			return nil, ErrUsernameExists
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
@@ -144,8 +132,8 @@ func (s *userService) UpdateRole(id, roleID int, requesterUsername string) error
 
 	targetRoleName, err := s.userRepo.GetRoleNameByRoleId(roleID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrInvalidRole
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrRoleNotFound
 		}
 		return fmt.Errorf("failed to verify target role: %w", err)
 	}
@@ -170,7 +158,7 @@ func (s *userService) ResetPassword(id int, newPassword, requesterUsername strin
 		}
 	}
 	if err := utils.ValidatePasswordComplexity(newPassword); err != nil {
-		return fmt.Errorf("password too weak: %w", err)
+		return err
 	}
 	hashedPassword, err := utils.HashPassword(newPassword)
 	if err != nil {

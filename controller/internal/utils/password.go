@@ -16,13 +16,26 @@ const (
 	BcryptMaxBytes = 72
 )
 
+// ErrPasswordTooLong is returned when a password exceeds bcrypt's byte limit.
+var ErrPasswordTooLong = errors.New("password exceeds maximum allowed length")
+
+// PasswordPolicyError is returned by ValidatePasswordComplexity when a
+// password does not meet the complexity rules. Reason is safe to show to users.
+type PasswordPolicyError struct {
+	Reason string
+}
+
+func (e *PasswordPolicyError) Error() string {
+	return "password too weak: " + e.Reason
+}
+
 // HashPassword generates a secure bcrypt hash of the provided plain-text password.
 // It returns an error if the password length exceeds the bcrypt maximum.
 func HashPassword(password string) (string, error) {
 	// Bcrypt has a limitation where it truncates passwords longer than 72 bytes.
 	// We explicitly reject them to prevent users from thinking their long password is fully used.
 	if len(password) > BcryptMaxBytes {
-		return "", fmt.Errorf("password exceeds maximum allowed length of %d bytes", BcryptMaxBytes)
+		return "", fmt.Errorf("%w of %d bytes", ErrPasswordTooLong, BcryptMaxBytes)
 	}
 
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), HashingCost)
@@ -43,7 +56,7 @@ func CheckPasswordHash(password, hash string) bool {
 // It enforces: 8-32 chars, 1 upper, 1 lower, 1 number, 1 special.
 func ValidatePasswordComplexity(password string) error {
 	if len(password) < 8 || len(password) > 32 {
-		return errors.New("password length must be between 8 and 32 characters")
+		return &PasswordPolicyError{Reason: "password length must be between 8 and 32 characters"}
 	}
 
 	var (
@@ -67,7 +80,7 @@ func ValidatePasswordComplexity(password string) error {
 	}
 
 	if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
-		return errors.New("password must contain at least one uppercase, one lowercase, one number, and one special character")
+		return &PasswordPolicyError{Reason: "password must contain at least one uppercase, one lowercase, one number, and one special character"}
 	}
 
 	return nil

@@ -8,14 +8,6 @@ import (
 	"strings"
 )
 
-var (
-	ErrRoleNameRequired = errors.New("role name is required")
-	ErrRoleNameExists   = errors.New("role name already exists")
-	ErrRoleProtected    = errors.New("forbidden: cannot delete root or admin")
-	ErrRoleInUse        = errors.New("role is still assigned to one or more users")
-	ErrServiceNotFound  = errors.New("service not found")
-)
-
 // RoleService handles role management logic.
 type RoleService interface {
 	GetAll() ([]models.Role, error)
@@ -47,7 +39,7 @@ func (s *roleService) Create(name, description string) (*models.Role, error) {
 	}
 	id, err := s.roleRepo.Create(name, description)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
+		if errors.Is(err, repository.ErrDuplicate) {
 			return nil, ErrRoleNameExists
 		}
 		return nil, fmt.Errorf("failed to create role: %w", err)
@@ -58,7 +50,10 @@ func (s *roleService) Create(name, description string) (*models.Role, error) {
 func (s *roleService) Delete(id int) error {
 	targetRole, err := s.roleRepo.GetNameById(id)
 	if err != nil {
-		return err
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrRoleNotFound
+		}
+		return fmt.Errorf("failed to look up role: %w", err)
 	}
 	if targetRole == "root" || targetRole == "admin" {
 		return ErrRoleProtected
@@ -77,7 +72,7 @@ func (s *roleService) Delete(id int) error {
 		return fmt.Errorf("failed to delete role: %w", err)
 	}
 	if rows == 0 {
-		return repository.ErrRoleNotFound
+		return ErrRoleNotFound
 	}
 	return nil
 }
@@ -88,7 +83,10 @@ func (s *roleService) GetServices(roleID int) ([]models.Service, error) {
 
 func (s *roleService) AddService(roleID, serviceID int) error {
 	if _, err := s.roleRepo.GetNameById(roleID); err != nil {
-		return err
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrRoleNotFound
+		}
+		return fmt.Errorf("failed to look up role: %w", err)
 	}
 	exists, err := s.svcRepo.Exists(serviceID)
 	if err != nil {

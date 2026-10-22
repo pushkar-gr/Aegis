@@ -329,6 +329,9 @@ func (h *OIDCHandler) getOrCreateOIDCUser(userInfo *oidcUserInfo, provider, role
 		log.Printf("[oidc] found existing user '%s' from provider '%s'", user.Username, provider)
 		return user, nil
 	}
+	if !errors.Is(err, repository.ErrNotFound) {
+		return nil, fmt.Errorf("failed to look up user: %w", err)
+	}
 
 	roleID, err := h.roleRepo.GetIDByName(roleName)
 	if err != nil {
@@ -340,12 +343,16 @@ func (h *OIDCHandler) getOrCreateOIDCUser(userInfo *oidcUserInfo, provider, role
 		username = fmt.Sprintf("%s_%s", provider, userInfo.Subject)
 	}
 
-	if _, err := h.userRepo.GetIDByUsername(username); err == nil {
-		return nil, fmt.Errorf("%w: an account already exists for %q under a different login method", errAccountCollision, username)
-	}
-
 	newUser, err := h.userRepo.CreateOIDCUser(username, provider, userInfo.Subject, userInfo.Email, roleID)
 	if err != nil {
+		if errors.Is(err, repository.ErrDuplicate) {
+			// Either the same identity completed a first login concurrently,
+			// or the username belongs to an account from another login method.
+			if existing, lookupErr := h.userRepo.GetByProviderAndID(provider, userInfo.Subject); lookupErr == nil {
+				return existing, nil
+			}
+			return nil, fmt.Errorf("%w: an account already exists for %q under a different login method", errAccountCollision, username)
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 

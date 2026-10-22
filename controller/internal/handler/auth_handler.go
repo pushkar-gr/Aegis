@@ -3,9 +3,10 @@ package handler
 import (
 	"Aegis/controller/internal/middleware"
 	"Aegis/controller/internal/service"
+	"Aegis/controller/internal/utils"
+	"errors"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -37,12 +38,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	result, err := h.authSvc.Login(req.Username, req.Password)
 	if err != nil {
-		msg := err.Error()
-		switch msg {
-		case "invalid credentials":
+		switch {
+		case errors.Is(err, service.ErrInvalidCredentials):
 			log.Printf("[auth] login failed for user '%s': invalid credentials", req.Username)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
-		case "account disabled":
+		case errors.Is(err, service.ErrAccountDisabled):
 			log.Printf("[auth] login failed for user '%s': account is inactive", req.Username)
 			c.JSON(http.StatusForbidden, gin.H{"error": "Account is disabled"})
 		default:
@@ -121,14 +121,14 @@ func (h *AuthHandler) UpdatePassword(c *gin.Context) {
 	u, _ := username.(string)
 
 	if err := h.authSvc.UpdatePassword(u, req.OldPassword, req.NewPassword); err != nil {
-		msg := err.Error()
+		var policyErr *utils.PasswordPolicyError
 		switch {
-		case msg == "invalid credentials":
+		case errors.Is(err, service.ErrInvalidCredentials):
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
-		case msg == "password changes not allowed for SSO users":
+		case errors.Is(err, service.ErrSSOPasswordChange):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Password changes not allowed for SSO users"})
-		case strings.HasPrefix(msg, "password too weak"):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Password" + msg[len("password"):]})
+		case errors.As(err, &policyErr):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Password too weak: " + policyErr.Reason})
 		default:
 			log.Printf("[auth] password update failed for user '%s': %v", u, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -142,14 +142,20 @@ func (h *AuthHandler) UpdatePassword(c *gin.Context) {
 
 // GetCurrentUser returns the current authenticated user's info.
 func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
-	username, exists := c.Get(middleware.UsernameKey)
-	if !exists {
+	username, ok := c.Get(middleware.UsernameKey)
+	name, isString := username.(string)
+	if !ok || !isString || name == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
 	}
 
-	info, err := h.authSvc.GetCurrentUser(username.(string))
+	info, err := h.authSvc.GetCurrentUser(name)
 	if err != nil {
+		if errors.Is(err, service.ErrUserNotFound) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+		log.Printf("[auth] get current user failed for '%s': %v", name, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -167,7 +173,13 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 	result, err := h.authSvc.RefreshToken(cookie)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired refresh token"})
+		switch {
+		case errors.Is(err, service.ErrInvalidRefreshToken), errors.Is(err, service.ErrAccountDisabled):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired refresh token"})
+		default:
+			log.Printf("[auth] refresh token failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		}
 		return
 	}
 

@@ -4,11 +4,11 @@ import (
 	"Aegis/controller/internal/middleware"
 	"Aegis/controller/internal/models"
 	"Aegis/controller/internal/service"
+	"Aegis/controller/internal/utils"
 	"errors"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -47,18 +47,18 @@ func (h *UserHandler) Create(c *gin.Context) {
 	requester := c.GetString(middleware.UsernameKey)
 	result, err := h.userSvc.Create(newUser.Credentials.Username, newUser.Credentials.Password, newUser.RoleId, requester)
 	if err != nil {
-		msg := err.Error()
+		var policyErr *utils.PasswordPolicyError
 		switch {
 		case errors.Is(err, service.ErrInvalidUsername):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid username format"})
 		case errors.Is(err, service.ErrRoleIDRequired):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "User role_id is required"})
-		case errors.Is(err, service.ErrInvalidRole):
+		case errors.Is(err, service.ErrRoleNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
 		case errors.Is(err, service.ErrUsernameExists):
 			c.JSON(http.StatusConflict, gin.H{"error": "Error creating user (name must be unique)"})
-		case strings.HasPrefix(msg, "password too weak"):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Password" + msg[len("password"):]})
+		case errors.As(err, &policyErr):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Password too weak: " + policyErr.Reason})
 		case errors.Is(err, service.ErrCannotModifyRoot):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot create user with root role"})
 		default:
@@ -120,7 +120,7 @@ func (h *UserHandler) UpdateRole(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrUserNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		case errors.Is(err, service.ErrInvalidRole):
+		case errors.Is(err, service.ErrRoleNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
 		case errors.Is(err, service.ErrCannotModifyRoot):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot modify root user role"})
@@ -155,14 +155,14 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 
 	requester := c.GetString(middleware.UsernameKey)
 	if err := h.userSvc.ResetPassword(id, req.Password, requester); err != nil {
-		msg := err.Error()
+		var policyErr *utils.PasswordPolicyError
 		switch {
 		case errors.Is(err, service.ErrUserNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		case errors.Is(err, service.ErrCannotModifyRoot):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Cannot reset root user password"})
-		case strings.HasPrefix(msg, "password too weak"):
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Password" + msg[len("password"):]})
+		case errors.As(err, &policyErr):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Password too weak: " + policyErr.Reason})
 		default:
 			log.Printf("[users] reset password failed for ID %d: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reset user password"})
