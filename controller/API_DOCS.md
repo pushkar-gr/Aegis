@@ -52,8 +52,8 @@ The system implements a hierarchical Role-Based Access Control (RBAC) model.
 
 #### Refresh Token
 * **Endpoint**: `POST /api/auth/refresh`
-* **Description**: Exchanges a valid `refresh_token` cookie for a new access token cookie.
-* **Response**: `200 OK` (sets a new `token` cookie)
+* **Description**: Exchanges a valid `refresh_token` cookie for a new access token. The refresh token is rotated on each use: a new `refresh_token` cookie is also set, and the previous one is invalidated.
+* **Response**: `200 OK` (sets new `token` and `refresh_token` cookies)
 
 #### Update Password
 * **Endpoint**: `POST /api/auth/password`
@@ -101,7 +101,7 @@ The system implements a hierarchical Role-Based Access Control (RBAC) model.
 #### OIDC Callback
 * **Endpoint**: `GET /api/auth/oidc/callback?state={state}&code={code}`
 * **Description**: Handles the authorization code returned by the provider, creates or updates the local user, and sets a session cookie.
-* **Response**: `200 OK` (sets `token` cookie and returns role info)
+* **Response**: `307 Temporary Redirect` to `/static/pages/dashboard.html` (sets `token` and `refresh_token` cookies)
 
 ---
 
