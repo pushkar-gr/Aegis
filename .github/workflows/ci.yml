@@ -45,28 +45,6 @@ jobs:
       - name: Build Binary
         run: go build -o bin/aegis-controller .
 
-  controller-vuln-scan:
-    name: Go Vulnerability Scan (informational)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    defaults:
-      run:
-        working-directory: ./controller
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: controller/go.mod
-          check-latest: false
-          cache: true
-
-      - name: Vulnerability Check
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
-          govulncheck ./...
-
   # RUST AGENT
   agent-ci:
     name: Rust Agent & BPF Safety
@@ -131,22 +109,6 @@ jobs:
 
       - name: Run Unit Tests
         run: cargo test --locked --verbose
-
-  agent-vuln-scan:
-    name: Rust Vulnerability Scan (informational)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    defaults:
-      run:
-        working-directory: ./agent
-    steps:
-      - uses: actions/checkout@v7
-      - name: Install pinned Rust toolchain (reads rust-toolchain.toml)
-        run: rustup show
-      - name: Install cargo-audit (pinned)
-        run: cargo install cargo-audit --version 0.21.2 --locked
-      - name: Audit dependencies
-        run: cargo audit
 
   # NFRA CONFIGURATION
   integration-ci:

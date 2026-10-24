@@ -21,7 +21,7 @@ toml = "1.0.3"
 serde = { version = "1.0.228", features = ["derive"] }
 
 [build-dependencies]
-libbpf-cargo = "0.27"
+libbpf-cargo = "0.25"
 tonic-build = "0.14"
 tonic-prost-build = "0.14"
 
