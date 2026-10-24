@@ -1,5 +1,5 @@
 # Build Stage
-FROM golang:1.27.0-alpine3.23 AS builder
+FROM golang:1.27.2-alpine3.23 AS builder
 RUN apk add --no-cache gcc musl-dev
 WORKDIR /app
 COPY go.mod ./
