@@ -3,6 +3,7 @@ package handler
 import (
 	"Aegis/controller/internal/models"
 	"Aegis/controller/internal/service"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -41,13 +42,13 @@ func (h *RoleHandler) Create(c *gin.Context) {
 
 	result, err := h.roleSvc.Create(newRole.Name, newRole.Description)
 	if err != nil {
-		msg := err.Error()
-		switch msg {
-		case "role name is required":
+		switch {
+		case errors.Is(err, service.ErrRoleNameRequired):
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Role name is required"})
-		case "role name already exists":
+		case errors.Is(err, service.ErrRoleNameExists):
 			c.JSON(http.StatusConflict, gin.H{"error": "Error creating role (name must be unique)"})
 		default:
+			log.Printf("[roles] create failed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create role"})
 		}
 		return
@@ -66,9 +67,15 @@ func (h *RoleHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.roleSvc.Delete(id); err != nil {
-		if err.Error() == "role not found" {
+		switch {
+		case errors.Is(err, service.ErrRoleNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
-		} else {
+		case errors.Is(err, service.ErrRoleProtected):
+			c.JSON(http.StatusForbidden, gin.H{"error": "Cannot delete root or admin role"})
+		case errors.Is(err, service.ErrRoleInUse):
+			c.JSON(http.StatusConflict, gin.H{"error": "Role is still assigned to one or more users"})
+		default:
+			log.Printf("[roles] delete failed for role ID %d: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete role"})
 		}
 		return
@@ -112,8 +119,15 @@ func (h *RoleHandler) AddService(c *gin.Context) {
 	}
 
 	if err := h.roleSvc.AddService(roleID, req.ServiceID); err != nil {
-		log.Printf("[roles] add service failed for role %d and service %d: %v", roleID, req.ServiceID, err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to link service to role (check if IDs exist)"})
+		switch {
+		case errors.Is(err, service.ErrRoleNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Role not found"})
+		case errors.Is(err, service.ErrServiceNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		default:
+			log.Printf("[roles] add service failed for role %d and service %d: %v", roleID, req.ServiceID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to link service to role"})
+		}
 		return
 	}
 

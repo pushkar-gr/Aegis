@@ -15,17 +15,21 @@ type RoleRepository interface {
 	AddService(roleID, serviceID int) error
 	RemoveService(roleID, serviceID int) error
 	GetIDByName(name string) (int, error)
+	GetNameById(id int) (string, error)
+	CountUsersWithRole(roleID int) (int, error)
 }
 
 type roleRepo struct {
-	db                *sql.DB
-	stmtGetAll        *sql.Stmt
-	stmtCreate        *sql.Stmt
-	stmtDelete        *sql.Stmt
-	stmtGetServices   *sql.Stmt
-	stmtAddService    *sql.Stmt
-	stmtRemoveService *sql.Stmt
-	stmtGetIDByName   *sql.Stmt
+	db                     *sql.DB
+	stmtGetAll             *sql.Stmt
+	stmtCreate             *sql.Stmt
+	stmtDelete             *sql.Stmt
+	stmtGetServices        *sql.Stmt
+	stmtAddService         *sql.Stmt
+	stmtRemoveService      *sql.Stmt
+	stmtGetIDByName        *sql.Stmt
+	stmtGetNameById        *sql.Stmt
+	stmtCountUsersWithRole *sql.Stmt
 }
 
 // NewRoleRepository prepares all statements and returns RoleRepository.
@@ -34,13 +38,15 @@ func NewRoleRepository(db *sql.DB) (RoleRepository, error) {
 	var err error
 
 	queries := map[**sql.Stmt]string{
-		&r.stmtGetAll:        "SELECT id, name, description FROM roles",
-		&r.stmtCreate:        "INSERT INTO roles (name, description) VALUES (?, ?)",
-		&r.stmtDelete:        "DELETE FROM roles WHERE id = ?",
-		&r.stmtGetServices:   "SELECT s.id, s.name, s.hostname, s.ip, s.port, s.description, s.created_at FROM services s INNER JOIN role_services rs ON s.id = rs.service_id WHERE rs.role_id = ?",
-		&r.stmtAddService:    "INSERT OR IGNORE INTO role_services (role_id, service_id) VALUES (?, ?)",
-		&r.stmtRemoveService: "DELETE FROM role_services WHERE role_id = ? AND service_id = ?",
-		&r.stmtGetIDByName:   "SELECT id FROM roles WHERE name = ?",
+		&r.stmtGetAll:             "SELECT id, name, description FROM roles",
+		&r.stmtCreate:             "INSERT INTO roles (name, description) VALUES (?, ?)",
+		&r.stmtDelete:             "DELETE FROM roles WHERE id = ?",
+		&r.stmtGetServices:        "SELECT s.id, s.name, s.hostname, s.ip, s.port, s.description, s.created_at FROM services s INNER JOIN role_services rs ON s.id = rs.service_id WHERE rs.role_id = ?",
+		&r.stmtAddService:         "INSERT OR IGNORE INTO role_services (role_id, service_id) VALUES (?, ?)",
+		&r.stmtRemoveService:      "DELETE FROM role_services WHERE role_id = ? AND service_id = ?",
+		&r.stmtGetIDByName:        "SELECT id FROM roles WHERE name = ?",
+		&r.stmtGetNameById:        "SELECT name FROM roles WHERE id = ?",
+		&r.stmtCountUsersWithRole: "SELECT COUNT(*) FROM users WHERE role_id = ?",
 	}
 
 	for stmt, query := range queries {
@@ -74,7 +80,7 @@ func (r *roleRepo) GetAll() ([]models.Role, error) {
 func (r *roleRepo) Create(name, description string) (int64, error) {
 	res, err := r.stmtCreate.Exec(name, description)
 	if err != nil {
-		return 0, err
+		return 0, translateWriteError(err)
 	}
 	return res.LastInsertId()
 }
@@ -120,4 +126,16 @@ func (r *roleRepo) GetIDByName(name string) (int, error) {
 	var id int
 	err := r.stmtGetIDByName.QueryRow(name).Scan(&id)
 	return id, err
+}
+
+func (r *roleRepo) GetNameById(id int) (string, error) {
+	var name string
+	err := r.stmtGetNameById.QueryRow(id).Scan(&name)
+	return name, err
+}
+
+func (r *roleRepo) CountUsersWithRole(roleID int) (int, error) {
+	var count int
+	err := r.stmtCountUsersWithRole.QueryRow(roleID).Scan(&count)
+	return count, err
 }

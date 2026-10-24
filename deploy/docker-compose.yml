@@ -1,3 +1,5 @@
+x-alpine-image: &alpine-image alpine:3.23.5
+
 services:
   # Control Plane
   controller:
@@ -44,7 +46,7 @@ services:
 
   # DNS for devices in public zone
   dns:
-    image: alpine:latest
+    image: *alpine-image
     container_name: aegis-dns
     hostname: dns-server
     networks:
@@ -62,7 +64,7 @@ services:
 
   # Zone A - Public
   client:
-    image: alpine:latest
+    image: *alpine-image
     container_name: aegis-client
     cap_add: [NET_ADMIN]
     dns:
@@ -80,7 +82,7 @@ services:
 
   # Zone B - Private
   protected_service_1:
-    image: alpine:latest
+    image: *alpine-image
     container_name: aegis-protected-service1
     hostname: protectedservice1
     cap_add: [NET_ADMIN]
@@ -96,7 +98,7 @@ services:
         done
 
   protected_service_2:
-    image: alpine:latest 
+    image: *alpine-image
     container_name: aegis-protected-service2
     hostname: protectedservice2
     cap_add: [NET_ADMIN]
@@ -112,7 +114,7 @@ services:
         done
 
   ip-stealer:
-    image: alpine
+    image: *alpine-image
     command: sleep infinity
     container_name: aegis-protected-ip-stealer
     networks:
@@ -130,4 +132,4 @@ networks:
     ipam:
       config:
         - subnet: 172.21.0.0/24
-    internal: true 
+    internal: true

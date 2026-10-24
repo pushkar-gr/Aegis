@@ -10,14 +10,15 @@ import (
 
 // RouterConfig holds all handlers and middleware for setting up routes.
 type RouterConfig struct {
-	AuthHandler    *handler.AuthHandler
-	UserHandler    *handler.UserHandler
-	RoleHandler    *handler.RoleHandler
-	ServiceHandler *handler.ServiceHandler
-	OIDCHandler    *handler.OIDCHandler
-	AuthMiddleware gin.HandlerFunc
-	RootOnly       gin.HandlerFunc
-	AdminOrRoot    gin.HandlerFunc
+	AuthHandler            *handler.AuthHandler
+	UserHandler            *handler.UserHandler
+	RoleHandler            *handler.RoleHandler
+	ServiceHandler         *handler.ServiceHandler
+	OIDCHandler            *handler.OIDCHandler
+	AuthMiddleware         gin.HandlerFunc
+	OptionalAuthMiddleware gin.HandlerFunc
+	RootOnly               gin.HandlerFunc
+	AdminOrRoot            gin.HandlerFunc
 }
 
 // NewRouter builds and returns the configured Gin router.
@@ -36,7 +37,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	auth := api.Group("/auth")
 	{
 		auth.POST("/login", cfg.AuthHandler.Login)
-		auth.POST("/logout", cfg.AuthMiddleware, cfg.AuthHandler.Logout)
+		auth.POST("/logout", cfg.OptionalAuthMiddleware, cfg.AuthHandler.Logout)
 		auth.POST("/password", cfg.AuthMiddleware, cfg.AuthHandler.UpdatePassword)
 		auth.GET("/me", cfg.AuthMiddleware, cfg.AuthHandler.GetCurrentUser)
 		auth.POST("/refresh", cfg.AuthHandler.RefreshToken)

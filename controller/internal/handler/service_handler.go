@@ -6,6 +6,7 @@ import (
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/service"
 	"Aegis/controller/internal/utils"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -45,14 +46,14 @@ func (h *ServiceHandler) Create(c *gin.Context) {
 
 	result, err := h.svcSvc.Create(newService.Name, newService.Hostname, newService.Description)
 	if err != nil {
-		msg := err.Error()
-		switch msg {
-		case "service name already exists":
-			c.JSON(http.StatusConflict, gin.H{"error": msg})
-		case "service name and hostname are required":
-			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		switch {
+		case errors.Is(err, service.ErrServiceNameExists):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrServiceInputRequired), errors.Is(err, service.ErrInvalidHostname):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			log.Printf("[services] create failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create service"})
 		}
 		return
 	}
@@ -77,14 +78,16 @@ func (h *ServiceHandler) Update(c *gin.Context) {
 
 	result, err := h.svcSvc.Update(id, svc.Name, svc.Hostname, svc.Description)
 	if err != nil {
-		msg := err.Error()
-		switch msg {
-		case "service not found":
+		switch {
+		case errors.Is(err, service.ErrServiceNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
-		case "service name already exists":
-			c.JSON(http.StatusConflict, gin.H{"error": msg})
+		case errors.Is(err, service.ErrServiceNameExists):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, service.ErrServiceInputRequired), errors.Is(err, service.ErrInvalidHostname):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			log.Printf("[services] update failed for ID %d: %v", id, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update service"})
 		}
 		return
 	}
@@ -102,9 +105,10 @@ func (h *ServiceHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.svcSvc.Delete(id); err != nil {
-		if err.Error() == "service not found" {
+		if errors.Is(err, service.ErrServiceNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
 		} else {
+			log.Printf("[services] delete failed for ID %d: %v", id, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete service"})
 		}
 		return
@@ -114,20 +118,33 @@ func (h *ServiceHandler) Delete(c *gin.Context) {
 	c.String(http.StatusOK, "Service deleted successfully")
 }
 
-// resolveCurrentUserIDAndRole resolves the user ID and role ID from the Gin context.
-func (h *ServiceHandler) resolveCurrentUserIDAndRole(c *gin.Context) (int, int, error) {
+// currentUser resolves the user ID and role ID of the authenticated user. On
+// failure it writes the error response (401 when the user cannot be
+// identified, 500 for real failures) and returns ok=false.
+func (h *ServiceHandler) currentUser(c *gin.Context) (userID, roleID int, ok bool) {
 	username := c.GetString(middleware.UsernameKey)
 	if username == "" {
-		return 0, 0, nil
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return 0, 0, false
 	}
-	return h.userRepo.GetIDAndRole(username)
+
+	userID, roleID, err := h.userRepo.GetIDAndRole(username)
+	switch {
+	case err == nil:
+		return userID, roleID, true
+	case errors.Is(err, repository.ErrNotFound):
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	default:
+		log.Printf("[dashboard] failed to resolve user '%s': %v", username, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+	}
+	return 0, 0, false
 }
 
 // GetMyServices returns all services accessible by the current user.
 func (h *ServiceHandler) GetMyServices(c *gin.Context) {
-	userID, roleID, err := h.resolveCurrentUserIDAndRole(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	userID, roleID, ok := h.currentUser(c)
+	if !ok {
 		return
 	}
 
@@ -142,9 +159,8 @@ func (h *ServiceHandler) GetMyServices(c *gin.Context) {
 
 // GetMyActiveServices returns the user's currently active services.
 func (h *ServiceHandler) GetMyActiveServices(c *gin.Context) {
-	userID, _, err := h.resolveCurrentUserIDAndRole(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	userID, _, ok := h.currentUser(c)
+	if !ok {
 		return
 	}
 
@@ -159,9 +175,8 @@ func (h *ServiceHandler) GetMyActiveServices(c *gin.Context) {
 
 // SelectActiveService activates a service for the current user.
 func (h *ServiceHandler) SelectActiveService(c *gin.Context) {
-	userID, roleID, err := h.resolveCurrentUserIDAndRole(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	userID, roleID, ok := h.currentUser(c)
+	if !ok {
 		return
 	}
 
@@ -177,13 +192,19 @@ func (h *ServiceHandler) SelectActiveService(c *gin.Context) {
 	log.Printf("[dashboard] activating service ID %d for user ID %d from IP %s", req.ServiceID, userID, clientIP)
 
 	if err := h.svcSvc.SelectActiveService(userID, roleID, req.ServiceID, clientIP); err != nil {
-		msg := err.Error()
-		switch msg {
-		case "forbidden: no access to this service":
+		switch {
+		case errors.Is(err, service.ErrServiceAccessDenied):
 			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: You do not have access to this service"})
-		case "service not found or invalid configuration":
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Service not found or invalid configuration"})
+		case errors.Is(err, service.ErrServiceNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		case errors.Is(err, service.ErrAgentUnavailable):
+			log.Printf("[dashboard] activate service %d failed: %v", req.ServiceID, err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Agent unavailable, try again later"})
+		case errors.Is(err, service.ErrAgentRejected):
+			log.Printf("[dashboard] activate service %d failed: %v", req.ServiceID, err)
+			c.JSON(http.StatusBadGateway, gin.H{"error": "Agent rejected session activation"})
 		default:
+			log.Printf("[dashboard] activate service %d failed: %v", req.ServiceID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to activate session"})
 		}
 		return
@@ -194,9 +215,8 @@ func (h *ServiceHandler) SelectActiveService(c *gin.Context) {
 
 // DeselectActiveService deactivates a service for the current user.
 func (h *ServiceHandler) DeselectActiveService(c *gin.Context) {
-	userID, _, err := h.resolveCurrentUserIDAndRole(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+	userID, _, ok := h.currentUser(c)
+	if !ok {
 		return
 	}
 

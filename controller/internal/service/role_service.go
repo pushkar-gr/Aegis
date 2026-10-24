@@ -3,6 +3,7 @@ package service
 import (
 	"Aegis/controller/internal/models"
 	"Aegis/controller/internal/repository"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -19,11 +20,12 @@ type RoleService interface {
 
 type roleService struct {
 	roleRepo repository.RoleRepository
+	svcRepo  repository.ServiceRepository
 }
 
 // NewRoleService creates a new RoleService.
-func NewRoleService(roleRepo repository.RoleRepository) RoleService {
-	return &roleService{roleRepo: roleRepo}
+func NewRoleService(roleRepo repository.RoleRepository, svcRepo repository.ServiceRepository) RoleService {
+	return &roleService{roleRepo: roleRepo, svcRepo: svcRepo}
 }
 
 func (s *roleService) GetAll() ([]models.Role, error) {
@@ -31,13 +33,14 @@ func (s *roleService) GetAll() ([]models.Role, error) {
 }
 
 func (s *roleService) Create(name, description string) (*models.Role, error) {
+	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, fmt.Errorf("role name is required")
+		return nil, ErrRoleNameRequired
 	}
 	id, err := s.roleRepo.Create(name, description)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE") {
-			return nil, fmt.Errorf("role name already exists")
+		if errors.Is(err, repository.ErrDuplicate) {
+			return nil, ErrRoleNameExists
 		}
 		return nil, fmt.Errorf("failed to create role: %w", err)
 	}
@@ -45,12 +48,31 @@ func (s *roleService) Create(name, description string) (*models.Role, error) {
 }
 
 func (s *roleService) Delete(id int) error {
+	targetRole, err := s.roleRepo.GetNameById(id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrRoleNotFound
+		}
+		return fmt.Errorf("failed to look up role: %w", err)
+	}
+	if targetRole == "root" || targetRole == "admin" {
+		return ErrRoleProtected
+	}
+
+	count, err := s.roleRepo.CountUsersWithRole(id)
+	if err != nil {
+		return fmt.Errorf("failed to check role usage: %w", err)
+	}
+	if count > 0 {
+		return ErrRoleInUse
+	}
+
 	rows, err := s.roleRepo.Delete(id)
 	if err != nil {
 		return fmt.Errorf("failed to delete role: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("role not found")
+		return ErrRoleNotFound
 	}
 	return nil
 }
@@ -60,6 +82,19 @@ func (s *roleService) GetServices(roleID int) ([]models.Service, error) {
 }
 
 func (s *roleService) AddService(roleID, serviceID int) error {
+	if _, err := s.roleRepo.GetNameById(roleID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrRoleNotFound
+		}
+		return fmt.Errorf("failed to look up role: %w", err)
+	}
+	exists, err := s.svcRepo.Exists(serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to check service existence: %w", err)
+	}
+	if !exists {
+		return ErrServiceNotFound
+	}
 	return s.roleRepo.AddService(roleID, serviceID)
 }
 

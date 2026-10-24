@@ -1,5 +1,12 @@
 // Shared UI components
 
+// Escape a string for safe insertion into HTML
+function escapeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 // Create profile dropdown in header
 function createProfileDropdown() {
     const username = getCurrentUser();
@@ -11,7 +18,7 @@ function createProfileDropdown() {
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                 </svg>
-                <span>${username}</span>
+                <span>${escapeHTML(username)}</span>
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                 </svg>
@@ -83,19 +90,19 @@ function createNavigation(currentPage) {
 function showToast(message, type = 'info') {
     const toastContainer = document.getElementById('toastContainer') || createToastContainer();
     const toast = document.createElement('div');
-    
+ 
     const colors = {
         success: 'bg-green-500',
         error: 'bg-red-500',
         info: 'bg-blue-500',
         warning: 'bg-yellow-500'
     };
-    
+ 
     toast.className = `${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg mb-2`;
     toast.textContent = message;
-    
+ 
     toastContainer.appendChild(toast);
-    
+ 
     setTimeout(() => {
         toast.remove();
     }, 3000);

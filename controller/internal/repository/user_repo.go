@@ -3,6 +3,7 @@ package repository
 import (
 	"Aegis/controller/internal/models"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -16,8 +17,10 @@ type UserRepository interface {
 	GetAll() ([]models.User, error)
 	Create(username, hashedPwd string, roleID int) (int64, error)
 	Delete(id int) (int64, error)
+	Exists(id int) (bool, error)
 	GetRoleNameByUserID(id int) (string, error)
 	GetRoleNameByUsername(username string) (string, error)
+	GetRoleNameByRoleId(roleId int) (string, error)
 	UpdateRole(id, roleID int) (int64, error)
 	ResetPassword(id int, newHash string) (int64, error)
 	GetExtraServices(userID int) ([]models.Service, error)
@@ -48,6 +51,7 @@ type userRepo struct {
 	stmtDelete                  *sql.Stmt
 	stmtGetRoleNameByUserID     *sql.Stmt
 	stmtGetRoleNameByUsername   *sql.Stmt
+	stmtGetRoleNameByRoleId     *sql.Stmt
 	stmtUpdateRole              *sql.Stmt
 	stmtResetPassword           *sql.Stmt
 	stmtGetExtraServices        *sql.Stmt
@@ -79,6 +83,7 @@ func NewUserRepository(db *sql.DB) (UserRepository, error) {
 		&r.stmtDelete:                  "DELETE FROM users WHERE id = ?",
 		&r.stmtGetRoleNameByUserID:     "SELECT r.name FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.id = ?",
 		&r.stmtGetRoleNameByUsername:   "SELECT r.name FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.username = ?",
+		&r.stmtGetRoleNameByRoleId:     "SELECT name FROM roles WHERE id = ?",
 		&r.stmtUpdateRole:              "UPDATE users SET role_id = ? WHERE id = ?",
 		&r.stmtResetPassword:           "UPDATE users SET password = ? WHERE id = ?",
 		&r.stmtGetExtraServices:        "SELECT s.id, s.name, s.hostname, s.ip, s.port, s.description, s.created_at FROM services s JOIN user_extra_services ues ON s.id = ues.service_id WHERE ues.user_id = ?",
@@ -151,7 +156,7 @@ func (r *userRepo) GetAll() ([]models.User, error) {
 func (r *userRepo) Create(username, hashedPwd string, roleID int) (int64, error) {
 	res, err := r.stmtCreate.Exec(username, hashedPwd, roleID)
 	if err != nil {
-		return 0, err
+		return 0, translateWriteError(err)
 	}
 	return res.LastInsertId()
 }
@@ -164,6 +169,18 @@ func (r *userRepo) Delete(id int) (int64, error) {
 	return res.RowsAffected()
 }
 
+func (r *userRepo) Exists(id int) (bool, error) {
+	var exists int
+	err := r.db.QueryRow("SELECT 1 FROM users WHERE id = ?", id).Scan(&exists)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *userRepo) GetRoleNameByUserID(id int) (string, error) {
 	var name string
 	err := r.stmtGetRoleNameByUserID.QueryRow(id).Scan(&name)
@@ -173,6 +190,12 @@ func (r *userRepo) GetRoleNameByUserID(id int) (string, error) {
 func (r *userRepo) GetRoleNameByUsername(username string) (string, error) {
 	var name string
 	err := r.stmtGetRoleNameByUsername.QueryRow(username).Scan(&name)
+	return name, err
+}
+
+func (r *userRepo) GetRoleNameByRoleId(roleId int) (string, error) {
+	var name string
+	err := r.stmtGetRoleNameByRoleId.QueryRow(roleId).Scan(&name)
 	return name, err
 }
 
@@ -262,7 +285,7 @@ func (r *userRepo) CreateOIDCUser(username, provider, providerID, email string, 
 		"INSERT INTO users (username, password, role_id, is_active, provider, provider_id, email) VALUES (?, NULL, ?, 1, ?, ?, ?)",
 		username, roleID, provider, providerID, email)
 	if err != nil {
-		return nil, err
+		return nil, translateWriteError(err)
 	}
 	id, _ := res.LastInsertId()
 	return &models.User{

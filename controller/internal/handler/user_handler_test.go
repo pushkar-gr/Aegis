@@ -25,7 +25,11 @@ func TestGetUsers(t *testing.T) {
 	}
 
 	userRepo, _ := createReposFromDB(t, db)
-	userSvc := service.NewUserService(userRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	h := NewUserHandler(userSvc)
 
 	r := gin.New()
@@ -49,10 +53,10 @@ func TestGetUsers(t *testing.T) {
 }
 
 func TestCreateUser(t *testing.T) {
-	userRepo, _, _, cleanup := setupTestRepos(t)
+	userRepo, svcRepo, _, cleanup := setupTestRepos(t)
 	defer cleanup()
 
-	userSvc := service.NewUserService(userRepo)
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	h := NewUserHandler(userSvc)
 
 	r := gin.New()
@@ -132,7 +136,11 @@ func TestCreateUserDuplicate(t *testing.T) {
 	}
 
 	userRepo, _ := createReposFromDB(t, db)
-	userSvc := service.NewUserService(userRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	h := NewUserHandler(userSvc)
 
 	r := gin.New()
@@ -165,7 +173,11 @@ func TestDeleteUser(t *testing.T) {
 	userID, _ := result.LastInsertId()
 
 	userRepo, _ := createReposFromDB(t, db)
-	userSvc := service.NewUserService(userRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	h := NewUserHandler(userSvc)
 
 	r := gin.New()
@@ -208,7 +220,11 @@ func TestUpdateUserRole(t *testing.T) {
 	userID, _ := result.LastInsertId()
 
 	userRepo, _ := createReposFromDB(t, db)
-	userSvc := service.NewUserService(userRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	h := NewUserHandler(userSvc)
 
 	r := gin.New()
@@ -243,6 +259,87 @@ func TestUpdateUserRole(t *testing.T) {
 	}
 }
 
+func TestUpdateUserRoleCannotBecomeRoot(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	hashedPassword, _ := utils.HashPassword("TestPass123!")
+	result, err := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "promoteuser", hashedPassword)
+	if err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+	userID, _ := result.LastInsertId()
+
+	var rootRoleID int
+	if err := db.QueryRow("SELECT id FROM roles WHERE name = 'root'").Scan(&rootRoleID); err != nil {
+		t.Fatalf("Failed to look up root role ID: %v", err)
+	}
+
+	userRepo, _ := createReposFromDB(t, db)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	userSvc := service.NewUserService(userRepo, svcRepo)
+	h := NewUserHandler(userSvc)
+
+	r := gin.New()
+	r.PUT("/api/users/:id/role", func(c *gin.Context) {
+		c.Set(middleware.UsernameKey, "adminuser")
+	}, h.UpdateRole)
+
+	payload := map[string]int{"role_id": rootRoleID}
+	body, _ := json.Marshal(payload)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/users/%d/role", userID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("Expected status %d when promoting a user to root, got %d. Body: %s",
+			http.StatusForbidden, w.Code, w.Body.String())
+	}
+
+	var actualRoleID int
+	if err := db.QueryRow("SELECT role_id FROM users WHERE id = ?", userID).Scan(&actualRoleID); err != nil {
+		t.Fatalf("Failed to query user role: %v", err)
+	}
+	if actualRoleID == rootRoleID {
+		t.Error("User was promoted to root despite the request being forbidden")
+	}
+}
+
+func TestAddUserServiceNonexistentService(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	hashedPassword, _ := utils.HashPassword("TestPass123!")
+	userResult, _ := db.Exec("INSERT INTO users (username, password, role_id, is_active) VALUES (?, ?, 2, 1)", "svcuser2", hashedPassword)
+	userID, _ := userResult.LastInsertId()
+
+	userRepo, _ := createReposFromDB(t, db)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	h := NewUserHandler(service.NewUserService(userRepo, svcRepo))
+
+	r := gin.New()
+	r.POST("/api/users/:id/services", func(c *gin.Context) {
+		c.Set(middleware.UsernameKey, "adminuser")
+	}, h.AddService)
+
+	body, _ := json.Marshal(map[string]int{"service_id": 99999})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/users/%d/services", userID), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status %d for nonexistent service, got %d. Body: %s", http.StatusNotFound, w.Code, w.Body.String())
+	}
+}
+
 func TestGetUserServices(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -259,7 +356,11 @@ func TestGetUserServices(t *testing.T) {
 	}
 
 	userRepo, _ := createReposFromDB(t, db)
-	userSvc := service.NewUserService(userRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	h := NewUserHandler(userSvc)
 
 	r := gin.New()
@@ -299,7 +400,11 @@ func TestAddUserService(t *testing.T) {
 	svcID, _ := svcResult.LastInsertId()
 
 	userRepo, _ := createReposFromDB(t, db)
-	userSvc := service.NewUserService(userRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	h := NewUserHandler(userSvc)
 
 	r := gin.New()
@@ -349,7 +454,11 @@ func TestRemoveUserService(t *testing.T) {
 	}
 
 	userRepo, _ := createReposFromDB(t, db)
-	userSvc := service.NewUserService(userRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	h := NewUserHandler(userSvc)
 
 	r := gin.New()
@@ -393,7 +502,11 @@ func TestResetUserPassword(t *testing.T) {
 	userID, _ := result.LastInsertId()
 
 	userRepo, _ := createReposFromDB(t, db)
-	userSvc := service.NewUserService(userRepo)
+	svcRepo, err := createServiceRepo(t, db)
+	if err != nil {
+		t.Fatalf("Failed to create service repo: %v", err)
+	}
+	userSvc := service.NewUserService(userRepo, svcRepo)
 	h := NewUserHandler(userSvc)
 
 	r := gin.New()

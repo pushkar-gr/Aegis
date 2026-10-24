@@ -18,14 +18,14 @@ const API = {
 
         try {
             const response = await fetch(`${this.baseURL}${endpoint}`, options);
-            
+ 
             // Handle unauthorized - redirect to login
             if (response.status === 401) {
                 // Clear ALL local state on 401
                 localStorage.removeItem('currentUser');
                 localStorage.removeItem('userRole');
 
-                if (!endpoint.includes('/auth/login') && !onLoginPage) {
+                if (!endpoint.includes('/auth/login') && !window.location.pathname.endsWith('/login.html')) {
                     window.location.href = '/static/pages/login.html';
                     return null;
                 }
@@ -34,7 +34,16 @@ const API = {
             // Handle other errors (including 401 from login)
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(errorText || `HTTP ${response.status}`);
+                let message = errorText;
+                try {
+                    const parsed = JSON.parse(errorText);
+                    if (parsed && parsed.error) {
+                        message = parsed.error;
+                    }
+                } catch (e) {
+                    // not JSON, use raw text as-is
+                }
+                throw new Error(message || `HTTP ${response.status}`);
             }
 
             // Return response if it has content

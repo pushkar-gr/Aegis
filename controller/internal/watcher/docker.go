@@ -3,30 +3,63 @@ package watcher
 import (
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/utils"
+	"Aegis/controller/proto"
 	"context"
 	"fmt"
 	"log"
 	"net"
+	"time"
 
 	"github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 )
 
+const (
+	baseRetryDelay = 2 * time.Second
+	maxRetryDelay  = 60 * time.Second
+	resetThreshold = 30 * time.Second
+)
+
 // StartDockerWatcher listens for container events and updates service IPs in realtime
-func StartDockerWatcher() {
+func StartDockerWatcher(agentCallTimeout time.Duration) {
+	delay := baseRetryDelay
+	for {
+		start := time.Now()
+		connected := runDockerWatcherOnce(agentCallTimeout)
+		ran := time.Since(start)
+
+		if ran > resetThreshold {
+			delay = baseRetryDelay
+		} else {
+			delay *= 2
+			if delay > maxRetryDelay {
+				delay = maxRetryDelay
+			}
+		}
+
+		if !connected {
+			log.Printf("[WARN] Docker watcher: retrying in %v (relying on DNS polling in the meantime)", delay)
+		} else {
+			log.Printf("[WARN] Docker watcher: event stream disconnected, reconnecting in %v", delay)
+		}
+		time.Sleep(delay)
+	}
+}
+
+func runDockerWatcherOnce(agentCallTimeout time.Duration) (connected bool) {
 	// Initialize Docker Client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		log.Printf("[WARN] Docker watcher: failed to create client: %v. Relying on DNS polling.", err)
-		return
+		log.Printf("[WARN] Docker watcher: failed to create client: %v", err)
+		return false
 	}
 	defer func() { _ = cli.Close() }()
 
 	// Verify connection
 	if _, err := cli.Ping(context.Background()); err != nil {
-		log.Printf("[WARN] Docker watcher: cannot connect to Docker socket: %v. Relying on DNS polling.", err)
-		return
+		log.Printf("[WARN] Docker watcher: cannot connect to Docker socket: %v", err)
+		return false
 	}
 
 	log.Println("[INFO] Docker watcher started. Listening for real-time container updates...")
@@ -44,15 +77,15 @@ func StartDockerWatcher() {
 		select {
 		case err := <-errChan:
 			log.Printf("[ERROR] Docker event listener failed: %v", err)
-			return
+			return true
 		case msg := <-msgChan:
-			handleContainerEvent(cli, msg)
+			handleContainerEvent(cli, msg, agentCallTimeout)
 		}
 	}
 }
 
 // handleContainerEvent hanles a container event by getting its hostname and checking with existing hostnames, if found it will udpate the ip
-func handleContainerEvent(cli *client.Client, msg events.Message) {
+func handleContainerEvent(cli *client.Client, msg events.Message, agentCallTimeout time.Duration) {
 	containerName := msg.Actor.Attributes["name"]
 	if containerName == "" {
 		return
@@ -100,9 +133,21 @@ func handleContainerEvent(cli *client.Client, msg events.Message) {
 		log.Printf("[INFO] Docker Event: Container '%s' started. Updating Service %d IP: %s:%d -> %s:%d",
 			containerName, serviceID, currentIPStr, currentPort, newIPStr, newPort)
 
-		_, err := repository.DB.Exec("UPDATE services SET ip = ?, port = ? WHERE id = ?", newIP, newPort, serviceID)
-		if err != nil {
+		if _, err := repository.DB.Exec("UPDATE services SET ip = ?, port = ? WHERE id = ?", newIP, newPort, serviceID); err != nil {
 			log.Printf("[ERROR] Docker watcher: failed to update DB: %v", err)
+			return
+		}
+
+		if newIP != currentIP {
+			changedIps := &proto.IpChangeList{
+				IpChanges: []*proto.IpChangeEvent{{OldIp: currentIP, NewIp: newIP}},
+			}
+			success, err := proto.SendChanedIpData(changedIps, agentCallTimeout)
+			if err != nil {
+				log.Printf("[ERROR] Docker watcher: failed to notify agent of IP change for service %d: %v", serviceID, err)
+			} else if !success {
+				log.Printf("[ERROR] Docker watcher: agent did not acknowledge IP change for service %d", serviceID)
+			}
 		}
 	}
 }

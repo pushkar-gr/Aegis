@@ -5,10 +5,12 @@ import (
 	oidcPkg "Aegis/controller/internal/oidc"
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/service"
+	"Aegis/controller/internal/utils"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -19,6 +21,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type stateEntry struct {
+	provider string
+	expiry   time.Time
+}
+
 // OIDCHandler handles OIDC authentication endpoints.
 type OIDCHandler struct {
 	oidcManager *oidcPkg.OIDCManager
@@ -26,7 +33,7 @@ type OIDCHandler struct {
 	userRepo    repository.UserRepository
 	roleRepo    repository.RoleRepository
 	stateMu     sync.Mutex
-	states      map[string]time.Time
+	states      map[string]stateEntry
 }
 
 // NewOIDCHandler creates a new OIDCHandler.
@@ -36,7 +43,7 @@ func NewOIDCHandler(oidcManager *oidcPkg.OIDCManager, authSvc service.AuthServic
 		authSvc:     authSvc,
 		userRepo:    userRepo,
 		roleRepo:    roleRepo,
-		states:      make(map[string]time.Time),
+		states:      make(map[string]stateEntry),
 	}
 }
 
@@ -75,13 +82,29 @@ func (h *OIDCHandler) Login(c *gin.Context) {
 	}
 
 	state := h.generateState()
-	h.stateMu.Lock()
-	h.states[state] = time.Now().Add(10 * time.Minute)
-	h.cleanExpiredStates()
-	h.stateMu.Unlock()
+	h.storeState(state, providerName)
 
 	authURL := provider.Config.AuthCodeURL(state)
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
+}
+
+func (h *OIDCHandler) storeState(state, providerName string) {
+	h.stateMu.Lock()
+	defer h.stateMu.Unlock()
+
+	h.states[state] = stateEntry{provider: providerName, expiry: time.Now().Add(10 * time.Minute)}
+	h.cleanExpiredStates()
+}
+
+func (h *OIDCHandler) consumeState(state string) (stateEntry, bool) {
+	h.stateMu.Lock()
+	defer h.stateMu.Unlock()
+
+	entry, ok := h.states[state]
+	if ok {
+		delete(h.states, state)
+	}
+	return entry, ok
 }
 
 // Callback handles the OAuth2 callback after provider authentication.
@@ -97,14 +120,8 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	h.stateMu.Lock()
-	expiry, ok := h.states[state]
-	if ok {
-		delete(h.states, state)
-	}
-	h.stateMu.Unlock()
-
-	if !ok || time.Now().After(expiry) {
+	entry, ok := h.consumeState(state)
+	if !ok || time.Now().After(entry.expiry) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or expired state"})
 		return
 	}
@@ -115,26 +132,27 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	var userInfo *oidcUserInfo
-	var providerName string
-	var err error
-
-	for name, provider := range h.oidcManager.Providers {
-		userInfo, err = h.exchangeCodeForUserInfo(c.Request.Context(), provider, code)
-		if err == nil {
-			providerName = name
-			break
-		}
-		log.Printf("[oidc] failed to exchange code with %s: %v", name, err)
+	provider, err := h.oidcManager.GetProvider(entry.provider)
+	if err != nil {
+		log.Printf("[oidc] callback failed: provider '%s' from state no longer configured", entry.provider)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid provider"})
+		return
 	}
+	providerName := entry.provider
 
-	if userInfo == nil {
-		log.Printf("[oidc] callback failed: could not exchange code with any provider")
+	userInfo, err := h.exchangeCodeForUserInfo(c.Request.Context(), provider, code)
+	if err != nil {
+		log.Printf("[oidc] failed to exchange code with %s: %v", providerName, err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication failed"})
 		return
 	}
 
-	provider, _ := h.oidcManager.GetProvider(providerName)
+	if userInfo.Email != "" && !userInfo.EmailVerified {
+		log.Printf("[oidc] login denied for subject '%s' via %s: email not verified", userInfo.Subject, providerName)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: email not verified"})
+		return
+	}
+
 	roleName := provider.MapClaimsToRole(userInfo.Email, userInfo.Groups)
 
 	if roleName == "" || roleName == "none" {
@@ -146,6 +164,10 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 	user, err := h.getOrCreateOIDCUser(userInfo, providerName, roleName)
 	if err != nil {
 		log.Printf("[oidc] failed to get or create user: %v", err)
+		if errors.Is(err, errAccountCollision) {
+			c.JSON(http.StatusConflict, gin.H{"error": "An account already exists with this email under a different login method"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
@@ -186,7 +208,7 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 		SameSite: http.SameSiteStrictMode,
 	})
 
-	refreshToken, err := generateSecureToken(32)
+	refreshToken, err := utils.GenerateSecureToken(32)
 	if err != nil {
 		log.Printf("[oidc] failed to generate refresh token: %v", err)
 	} else {
@@ -260,39 +282,39 @@ func (h *OIDCHandler) exchangeCodeForUserInfo(ctx context.Context, provider *oid
 		var githubUser struct {
 			ID    int64  `json:"id"`
 			Login string `json:"login"`
-			Email string `json:"email"`
 			Name  string `json:"name"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&githubUser); err != nil {
 			return nil, fmt.Errorf("failed to decode user info: %w", err)
 		}
 		userInfo.Subject = fmt.Sprintf("%d", githubUser.ID)
-		userInfo.Email = githubUser.Email
 		userInfo.Name = githubUser.Name
-		userInfo.EmailVerified = true
 
-		if userInfo.Email == "" {
-			emailResp, err := client.Get("https://api.github.com/user/emails")
-			if err == nil {
-				defer func() { _ = emailResp.Body.Close() }()
-				var emails []struct {
-					Email    string `json:"email"`
-					Primary  bool   `json:"primary"`
-					Verified bool   `json:"verified"`
-				}
-				if json.NewDecoder(emailResp.Body).Decode(&emails) == nil {
-					for _, e := range emails {
-						if e.Primary && e.Verified {
-							userInfo.Email = e.Email
-							break
-						}
-					}
-				}
+		emailResp, err := client.Get("https://api.github.com/user/emails")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get user emails: %w", err)
+		}
+		defer func() { _ = emailResp.Body.Close() }()
+		var emails []struct {
+			Email    string `json:"email"`
+			Primary  bool   `json:"primary"`
+			Verified bool   `json:"verified"`
+		}
+		if err := json.NewDecoder(emailResp.Body).Decode(&emails); err != nil {
+			return nil, fmt.Errorf("failed to decode user emails: %w", err)
+		}
+		for _, e := range emails {
+			if e.Primary && e.Verified {
+				userInfo.Email = e.Email
+				userInfo.EmailVerified = true
+				break
 			}
 		}
 	}
 	return userInfo, nil
 }
+
+var errAccountCollision = errors.New("account collision")
 
 // getOrCreateOIDCUser looks up an existing OIDC user by provider and subject ID,
 // updating their email if needed, or creates a new user with the mapped role on first login.
@@ -307,6 +329,9 @@ func (h *OIDCHandler) getOrCreateOIDCUser(userInfo *oidcUserInfo, provider, role
 		log.Printf("[oidc] found existing user '%s' from provider '%s'", user.Username, provider)
 		return user, nil
 	}
+	if !errors.Is(err, repository.ErrNotFound) {
+		return nil, fmt.Errorf("failed to look up user: %w", err)
+	}
 
 	roleID, err := h.roleRepo.GetIDByName(roleName)
 	if err != nil {
@@ -320,6 +345,14 @@ func (h *OIDCHandler) getOrCreateOIDCUser(userInfo *oidcUserInfo, provider, role
 
 	newUser, err := h.userRepo.CreateOIDCUser(username, provider, userInfo.Subject, userInfo.Email, roleID)
 	if err != nil {
+		if errors.Is(err, repository.ErrDuplicate) {
+			// Either the same identity completed a first login concurrently,
+			// or the username belongs to an account from another login method.
+			if existing, lookupErr := h.userRepo.GetByProviderAndID(provider, userInfo.Subject); lookupErr == nil {
+				return existing, nil
+			}
+			return nil, fmt.Errorf("%w: an account already exists for %q under a different login method", errAccountCollision, username)
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -338,18 +371,9 @@ func (h *OIDCHandler) generateState() string {
 // Must be called with h.stateMu held.
 func (h *OIDCHandler) cleanExpiredStates() {
 	now := time.Now()
-	for state, expiry := range h.states {
-		if now.After(expiry) {
+	for state, entry := range h.states {
+		if now.After(entry.expiry) {
 			delete(h.states, state)
 		}
 	}
-}
-
-// generateSecureToken creates a cryptographically random, URL-safe token of n bytes.
-func generateSecureToken(n int) (string, error) {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(b), nil
 }

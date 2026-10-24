@@ -5,7 +5,7 @@ import (
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/utils"
 	"crypto/rsa"
-	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -39,9 +39,22 @@ type CurrentUserInfo struct {
 
 // TokenResult is used for RefreshToken.
 type TokenResult struct {
-	TokenString string
-	ExpiresAt   time.Time
-	RoleName    string
+	TokenString   string
+	ExpiresAt     time.Time
+	RoleName      string
+	RefreshToken  string
+	RefreshExpiry time.Time
+}
+
+// dummyHash is used to mitigate timing attack during login.
+var dummyHash = mustDummyHash()
+
+func mustDummyHash() string {
+	h, err := utils.HashPassword("dummy-password-for-timing-safety")
+	if err != nil {
+		panic(fmt.Sprintf("failed to init dummy hash: %v", err))
+	}
+	return h
 }
 
 // AuthService handles authentication and token lifecycle.
@@ -66,26 +79,25 @@ func NewAuthService(userRepo repository.UserRepository, cfg AuthConfig) AuthServ
 
 func (s *authService) Login(username, password string) (*LoginResult, error) {
 	storedHash, isActive, err := s.userRepo.GetCredentials(username)
-	if err == sql.ErrNoRows {
-		utils.CheckPasswordHash(password, "$2a$12$DUMMYHASH0000000000000000000000000000000000000000")
-		return nil, fmt.Errorf("invalid credentials")
+	if errors.Is(err, repository.ErrNotFound) {
+		utils.CheckPasswordHash(password, dummyHash)
+		return nil, ErrInvalidCredentials
 	}
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
 	if !utils.CheckPasswordHash(password, storedHash) {
-		return nil, fmt.Errorf("invalid credentials")
+		return nil, ErrInvalidCredentials
 	}
 
 	if !isActive {
-		return nil, fmt.Errorf("account disabled")
+		return nil, ErrAccountDisabled
 	}
 
 	roleName, roleID, err := s.userRepo.GetRoleAndIDByUsername(username)
 	if err != nil {
-		log.Printf("[auth] failed to get role for user '%s': %v", username, err)
-		roleID = 0
+		return nil, fmt.Errorf("failed to get role for user %q: %w", username, err)
 	}
 
 	expiresAt := time.Now().Add(s.cfg.TokenLifetime)
@@ -133,19 +145,25 @@ func (s *authService) Login(username, password string) (*LoginResult, error) {
 func (s *authService) Logout(username string) error {
 	userID, err := s.userRepo.GetIDByUsername(username)
 	if err != nil {
-		return nil
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("failed to look up user: %w", err)
 	}
 	return s.userRepo.DeleteUserRefreshTokens(userID)
 }
 
 func (s *authService) UpdatePassword(username, oldPassword, newPassword string) error {
 	provider, err := s.userRepo.GetProvider(username)
-	if err == nil && provider != "local" {
-		return fmt.Errorf("password changes not allowed for SSO users")
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrInvalidCredentials
+		}
+		return fmt.Errorf("database error: %w", err)
 	}
 
-	if err := utils.ValidatePasswordComplexity(newPassword); err != nil {
-		return fmt.Errorf("password too weak: %w", err)
+	if provider != "local" {
+		return ErrSSOPasswordChange
 	}
 
 	storedHash, err := s.userRepo.GetPasswordHash(username)
@@ -154,7 +172,11 @@ func (s *authService) UpdatePassword(username, oldPassword, newPassword string) 
 	}
 
 	if !utils.CheckPasswordHash(oldPassword, storedHash) {
-		return fmt.Errorf("invalid credentials")
+		return ErrInvalidCredentials
+	}
+
+	if err := utils.ValidatePasswordComplexity(newPassword); err != nil {
+		return err
 	}
 
 	newHash, err := utils.HashPassword(newPassword)
@@ -167,7 +189,7 @@ func (s *authService) UpdatePassword(username, oldPassword, newPassword string) 
 		return fmt.Errorf("update error: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("user not found")
+		return ErrUserNotFound
 	}
 	return nil
 }
@@ -175,6 +197,9 @@ func (s *authService) UpdatePassword(username, oldPassword, newPassword string) 
 func (s *authService) GetCurrentUser(username string) (*CurrentUserInfo, error) {
 	roleName, roleID, err := s.userRepo.GetRoleAndIDByUsername(username)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrUserNotFound
+		}
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 	return &CurrentUserInfo{Username: username, Role: roleName, RoleId: roleID}, nil
@@ -183,16 +208,36 @@ func (s *authService) GetCurrentUser(username string) (*CurrentUserInfo, error) 
 func (s *authService) RefreshToken(token string) (*TokenResult, error) {
 	userID, err := s.userRepo.GetRefreshToken(token)
 	if err != nil {
-		return nil, fmt.Errorf("invalid or expired refresh token")
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrInvalidRefreshToken
+		}
+		return nil, fmt.Errorf("failed to look up refresh token: %w", err)
 	}
 
 	username, roleName, provider, roleID, isActive, err := s.userRepo.GetFullInfoByID(userID)
 	if err != nil {
-		return nil, fmt.Errorf("user not found")
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrInvalidRefreshToken
+		}
+		return nil, fmt.Errorf("failed to look up user: %w", err)
 	}
 
 	if !isActive {
-		return nil, fmt.Errorf("account disabled")
+		return nil, ErrAccountDisabled
+	}
+
+	if err := s.userRepo.DeleteRefreshToken(token); err != nil {
+		log.Printf("[auth] failed to delete used refresh token for user '%s': %v", username, err)
+	}
+
+	newRefreshToken, err := utils.GenerateSecureToken(32)
+	if err != nil {
+		return nil, fmt.Errorf("refresh token generation error: %w", err)
+	}
+
+	refreshExpiry := time.Now().Add(7 * 24 * time.Hour)
+	if err := s.userRepo.CreateRefreshToken(newRefreshToken, userID, refreshExpiry); err != nil {
+		return nil, fmt.Errorf("failed to store refresh token: %w", err)
 	}
 
 	expiresAt := time.Now().Add(s.cfg.TokenLifetime)
@@ -214,9 +259,11 @@ func (s *authService) RefreshToken(token string) (*TokenResult, error) {
 	}
 
 	return &TokenResult{
-		TokenString: tokenString,
-		ExpiresAt:   expiresAt,
-		RoleName:    roleName,
+		TokenString:   tokenString,
+		ExpiresAt:     expiresAt,
+		RoleName:      roleName,
+		RefreshToken:  newRefreshToken,
+		RefreshExpiry: refreshExpiry,
 	}, nil
 }
 

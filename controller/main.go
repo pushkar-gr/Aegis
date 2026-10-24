@@ -9,6 +9,7 @@ import (
 	"Aegis/controller/internal/repository"
 	"Aegis/controller/internal/router"
 	"Aegis/controller/internal/service"
+	"Aegis/controller/internal/utils"
 	"Aegis/controller/internal/watcher"
 	"Aegis/controller/proto"
 	"context"
@@ -23,6 +24,10 @@ import (
 
 func main() {
 	cfg := config.Load()
+
+	if err := utils.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("[ERROR] Invalid trusted proxy configuration: %v", err)
+	}
 
 	db := repository.InitDB(cfg.DBDir, cfg.MaxOpenConns, cfg.MaxIdleConns, cfg.ConnMaxLifetime)
 	defer func() {
@@ -61,9 +66,9 @@ func main() {
 	}
 
 	authSvc := service.NewAuthService(userRepo, authCfg)
-	userSvc := service.NewUserService(userRepo)
-	roleSvc := service.NewRoleService(roleRepo)
-	svcSvc := service.NewServiceService(svcRepo)
+	userSvc := service.NewUserService(userRepo, svcRepo)
+	roleSvc := service.NewRoleService(roleRepo, svcRepo)
+	svcSvc := service.NewServiceService(svcRepo, cfg.AgentCallTimeout)
 
 	authHandler := handler.NewAuthHandler(authSvc)
 	userHandler := handler.NewUserHandler(userSvc)
@@ -91,18 +96,20 @@ func main() {
 	}
 
 	authMW := middleware.JWTAuth([]byte(cfg.JwtKey), publicKey)
+	optionalAuthMW := middleware.OptionalJWTAuth([]byte(cfg.JwtKey), publicKey)
 	rootOnly := middleware.RequireRole(userRepo, "root")
 	adminOrRoot := middleware.RequireRole(userRepo, "admin", "root")
 
 	r := router.NewRouter(router.RouterConfig{
-		AuthHandler:    authHandler,
-		UserHandler:    userHandler,
-		RoleHandler:    roleHandler,
-		ServiceHandler: serviceHandler,
-		OIDCHandler:    oidcHandler,
-		AuthMiddleware: authMW,
-		RootOnly:       rootOnly,
-		AdminOrRoot:    adminOrRoot,
+		AuthHandler:            authHandler,
+		UserHandler:            userHandler,
+		RoleHandler:            roleHandler,
+		ServiceHandler:         serviceHandler,
+		OIDCHandler:            oidcHandler,
+		AuthMiddleware:         authMW,
+		OptionalAuthMiddleware: optionalAuthMW,
+		RootOnly:               rootOnly,
+		AdminOrRoot:            adminOrRoot,
 	})
 
 	err = proto.Init(cfg.AgentAddress, cfg.AgentCertFile, cfg.AgentKeyFile, cfg.AgentCAFile, cfg.AgentServerName)
@@ -112,9 +119,13 @@ func main() {
 	}
 
 	grpcMgr := grpcPkg.NewSessionManager(svcRepo, userRepo)
-	go grpcMgr.Start(grpcPkg.SessionConfig{IpUpdateInterval: cfg.IpUpdateInterval})
+	go grpcMgr.Start(grpcPkg.SessionConfig{
+		IpUpdateInterval:  cfg.IpUpdateInterval,
+		AgentCallTimeout:  cfg.AgentCallTimeout,
+		MonitorRetryDelay: cfg.MonitorRetryDelay,
+	})
 
-	go watcher.StartDockerWatcher()
+	go watcher.StartDockerWatcher(cfg.AgentCallTimeout)
 
 	go func() {
 		log.Printf("[INFO] Server initializing on port %s...", cfg.ServerPort)

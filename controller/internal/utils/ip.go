@@ -27,31 +27,74 @@ func Uint32ToIp(nn uint32) string {
 
 // GetClientIP extracts the real client IP from HTTP request headers.
 func GetClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			clientIP := strings.TrimSpace(ips[0])
+	// Fallback to RemoteAddr (strip port if present)
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ip = r.RemoteAddr
+	}
+
+	if isTrustedProxy(ip) {
+		// Check X-Forwarded-For header
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				clientIP := strings.TrimSpace(ips[0])
+				if net.ParseIP(clientIP) != nil {
+					return clientIP
+				}
+			}
+		}
+
+		// Check X-Real-IP header
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			clientIP := strings.TrimSpace(xri)
 			if net.ParseIP(clientIP) != nil {
 				return clientIP
 			}
 		}
 	}
 
-	// Check X-Real-IP header
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		clientIP := strings.TrimSpace(xri)
-		if net.ParseIP(clientIP) != nil {
-			return clientIP
+	return ip
+}
+
+var trustedProxyNets []*net.IPNet
+
+func SetTrustedProxies(entries []string) error {
+	nets := make([]*net.IPNet, 0, len(entries))
+	for _, e := range entries {
+		if _, n, err := net.ParseCIDR(e); err == nil {
+			nets = append(nets, n)
+			continue
+		}
+		ip := net.ParseIP(e)
+		if ip == nil {
+			return fmt.Errorf("invalid trusted proxy entry %q: not a valid IP or CIDR", e)
+		}
+		bits := 32
+		if ip.To4() == nil {
+			bits = 128
+		}
+		_, n, err := net.ParseCIDR(fmt.Sprintf("%s/%d", ip.String(), bits))
+		if err != nil {
+			return fmt.Errorf("invalid trusted proxy entry %q: %w", e, err)
+		}
+		nets = append(nets, n)
+	}
+	trustedProxyNets = nets
+	return nil
+}
+
+func isTrustedProxy(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, n := range trustedProxyNets {
+		if n.Contains(parsed) {
+			return true
 		}
 	}
-
-	// Fallback to RemoteAddr (strip port if present)
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return ip
+	return false
 }
 
 // ResolveHostname looks up the IP addresses for a given hostname

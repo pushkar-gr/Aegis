@@ -3,6 +3,7 @@ package repository
 import (
 	"Aegis/controller/internal/models"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -28,6 +29,7 @@ type ServiceRepository interface {
 	Create(name, hostname string, ip uint32, port uint16, description string) (int64, error)
 	Update(id int, name, hostname string, ip uint32, port uint16, description string) (int64, error)
 	Delete(id int) (int64, error)
+	Exists(id int) (bool, error)
 	GetIPPort(id int) (uint32, uint16, error)
 	GetServiceMap() (map[string]int, error)
 	GetActiveServiceUsers() (map[int][]int, error)
@@ -117,7 +119,7 @@ func (r *serviceRepo) GetAll() ([]models.Service, error) {
 func (r *serviceRepo) Create(name, hostname string, ip uint32, port uint16, description string) (int64, error) {
 	res, err := r.stmtCreate.Exec(name, hostname, ip, port, description)
 	if err != nil {
-		return 0, err
+		return 0, translateWriteError(err)
 	}
 	return res.LastInsertId()
 }
@@ -127,17 +129,53 @@ func (r *serviceRepo) Update(id int, name, hostname string, ip uint32, port uint
 		"UPDATE services SET name=?, hostname=?, ip=?, port=?, description=? WHERE id=?",
 		name, hostname, ip, port, description, id)
 	if err != nil {
-		return 0, err
+		return 0, translateWriteError(err)
 	}
 	return res.RowsAffected()
 }
 
 func (r *serviceRepo) Delete(id int) (int64, error) {
-	res, err := r.stmtDelete.Exec(id)
+	tx, err := r.db.Begin()
 	if err != nil {
 		return 0, err
 	}
-	return res.RowsAffected()
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec("DELETE FROM user_active_services WHERE service_id = ?", id); err != nil {
+		return 0, fmt.Errorf("failed to clear active sessions: %w", err)
+	}
+	if _, err := tx.Exec("DELETE FROM role_services WHERE service_id = ?", id); err != nil {
+		return 0, fmt.Errorf("failed to clear role links: %w", err)
+	}
+	if _, err := tx.Exec("DELETE FROM user_extra_services WHERE service_id = ?", id); err != nil {
+		return 0, fmt.Errorf("failed to clear user extra-service links: %w", err)
+	}
+
+	res, err := tx.Exec("DELETE FROM services WHERE id = ?", id)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return rows, nil
+}
+
+func (r *serviceRepo) Exists(id int) (bool, error) {
+	var exists int
+	err := r.db.QueryRow("SELECT 1 FROM services WHERE id = ?", id).Scan(&exists)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *serviceRepo) GetIPPort(id int) (uint32, uint16, error) {
@@ -293,7 +331,7 @@ func (r *serviceRepo) GetUserActiveServices(userID int) ([]models.ActiveService,
 func (r *serviceRepo) CheckUserServiceAccess(userID, roleID, serviceID int) (bool, error) {
 	var exists int
 	err := r.stmtCheckAccess.QueryRow(roleID, serviceID, userID, serviceID).Scan(&exists)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {

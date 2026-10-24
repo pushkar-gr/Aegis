@@ -3,6 +3,7 @@ package handler
 import (
 	oidcPkg "Aegis/controller/internal/oidc"
 	"Aegis/controller/internal/service"
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -146,7 +147,6 @@ func TestUpdatePasswordOIDCUser(t *testing.T) {
 	db, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	// OIDC user has provider != 'local'
 	if _, err := db.Exec(`INSERT INTO users (username, password, email, provider, provider_id, role_id, is_active) VALUES (?, '', ?, ?, ?, 2, 1)`,
 		"oidcuser", "oidcuser@example.com", "google", "google-123"); err != nil {
 		t.Fatalf("Failed to create OIDC test user: %v", err)
@@ -164,26 +164,18 @@ func TestUpdatePasswordOIDCUser(t *testing.T) {
 		c.Set("username", "oidcuser")
 	}, h.UpdatePassword)
 
-	// OIDC users should be blocked from changing password
-	// The request body doesn't matter since the check happens before password validation
+	body, _ := json.Marshal(map[string]string{
+		"old_password": "irrelevant",
+		"new_password": "NewPass456!",
+	})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/password", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/password", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
-	// Verify the OIDC user exists and has provider set
-	var provider string
-	if err := db.QueryRow("SELECT provider FROM users WHERE username = ?", "oidcuser").Scan(&provider); err != nil {
-		t.Fatalf("Failed to query OIDC user: %v", err)
-	}
-	if provider != "google" {
-		t.Errorf("Expected provider 'google', got '%s'", provider)
-	}
-
-	// The password update request should be rejected as forbidden for OIDC users
-	// (it returns 400 when body is nil/empty, or 403 when body is valid but user is SSO)
-	if w.Code != http.StatusBadRequest && w.Code != http.StatusForbidden {
-		t.Logf("Response status: %d, body: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusForbidden {
+		t.Errorf("Expected status %d for OIDC user password change, got %d. Body: %s",
+			http.StatusForbidden, w.Code, w.Body.String())
 	}
 }
 
