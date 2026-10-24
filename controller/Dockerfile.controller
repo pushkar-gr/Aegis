@@ -9,7 +9,7 @@ COPY . .
 RUN CGO_ENABLED=1 go build -o controller ./main.go
 
 # Run Stage
-FROM alpine:3.23.5
+FROM alpine:3.24.2
 WORKDIR /app
 RUN apk add --no-cache openssl ca-certificates
 ENV JWT_SECRET="$(run: openssl rand -base64 32)"
