@@ -29,12 +29,27 @@ func main() {
 		log.Fatalf("[ERROR] Invalid trusted proxy configuration: %v", err)
 	}
 
-	db := repository.InitDB(cfg.DBDir, cfg.MaxOpenConns, cfg.MaxIdleConns, cfg.ConnMaxLifetime)
+	db, err := repository.InitDB(cfg.DBDir, cfg.MaxOpenConns, cfg.MaxIdleConns, cfg.ConnMaxLifetime)
+	if err != nil {
+		log.Fatalf("[FATAL] Database initialization failed: %v", err)
+	}
 	defer func() {
 		if err := db.Close(); err != nil {
 			log.Printf("[ERROR] Error closing database: %v", err)
 		}
 	}()
+
+	generatedRootPassword, created, err := repository.EnsureRootUser(db, cfg.RootPassword)
+	if err != nil {
+		log.Fatalf("[FATAL] Failed to create initial root user: %v", err)
+	}
+	if created {
+		if generatedRootPassword != "" {
+			log.Printf("[INFO] Created initial user 'root' with generated password: %s (shown only once, change it after first login)", generatedRootPassword)
+		} else {
+			log.Printf("[INFO] Created initial user 'root' with the password from AEGIS_ROOT_PASSWORD")
+		}
+	}
 
 	userRepo, err := repository.NewUserRepository(db)
 	if err != nil {

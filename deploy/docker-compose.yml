@@ -13,6 +13,9 @@ services:
     volumes:
       - ./certs:/app/certs
       - ../controller/config.toml:/app/config.toml
+      - controller-data:/app/data
+    environment:
+      AEGIS_ROOT_PASSWORD: ${AEGIS_ROOT_PASSWORD:-}
     networks:
       private_net:
     command: >
@@ -120,6 +123,10 @@ services:
     networks:
       private_net:
     profiles: ["manual"]
+
+volumes:
+  controller-data:
+    name: aegis-controller-data
 
 networks:
   public_net:

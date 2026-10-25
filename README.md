@@ -13,14 +13,16 @@ Aegis is a distributed, kernel bypass firewall designed to enforce **Identity-Ba
 Designed for **Network Security**, Aegis bridges the gap between Identity Providers (IdP) and raw network enforcement. It transforms your network gateway into an identity aware enforcement point.
 
 ### Where to use it
-* **Critical Infrastructure:** Micro-segment sensitive assets like Databases, SSH Jump Hosts, and Internal Dashboards.
-* **Zero Trust Migration:** Replace static firewall rules (IP-whitelisting) with dynamic, ephemeral access based on user identity.
+
+- **Critical Infrastructure:** Micro-segment sensitive assets like Databases, SSH Jump Hosts, and Internal Dashboards.
+- **Zero Trust Migration:** Replace static firewall rules (IP-whitelisting) with dynamic, ephemeral access based on user identity.
 
 ### How it works
+
 1.  **Deploy:** Run the **Controller** centrally and the **Agent** on your network gateway (router/server).
 2.  **Configure:** Define protected Services (IP:Port) and User Roles via the Admin UI.
 3.  **Connect:** Users authenticate via the Web Portal and click to "activate" a service.
-4.  **Enforce:** The Agent instantly updates kernel-level eBPF maps to allow traffic *only* from that user to that service for till the user is active.
+4.  **Enforce:** The Agent instantly updates kernel-level eBPF maps to allow traffic _only_ from that user to that service for till the user is active.
 
 ## Architecture
 
@@ -35,27 +37,27 @@ There are two components, **Control Plane** (User Authentication and Policy) and
 
 ## Key Features
 
-* **Kernel Bypass Speed:** Uses **eBPF/XDP** (C) to filter packets at the network driver level, occurring before the OS handles memory allocation.
-* **Distributed Design:** Decouples the **Control Plane** (Go/gRPC) from the **Edge Data Plane** (Rust/libbpf-rs) for scalability.
-* **Granular Access Control:** Enforces strict `User IP -> Service IP:Port` pathways. No broad network access is granted.
-* **Automated Lifecycle:** The Edge Agent automatically revokes rules after 60 seconds of inactivity, preventing stale permissions.
+- **Kernel Bypass Speed:** Uses **eBPF/XDP** (C) to filter packets at the network driver level, occurring before the OS handles memory allocation.
+- **Distributed Design:** Decouples the **Control Plane** (Go/gRPC) from the **Edge Data Plane** (Rust/libbpf-rs) for scalability.
+- **Granular Access Control:** Enforces strict `User IP -> Service IP:Port` pathways. No broad network access is granted.
+- **Automated Lifecycle:** The Edge Agent automatically revokes rules after 60 seconds of inactivity, preventing stale permissions.
 
 ## Tech Stack
 
-* **Control Plane:** Go (Golang 1.25), gRPC, SQLite, OIDC/OAuth2 (Google, GitHub).
-* **Edge Agent:** Rust, libbpf-rs, Tokio, Tonic.
-* **Kernel Hook:** C (eBPF XDP).
+- **Control Plane:** Go (Golang 1.25), gRPC, SQLite, OIDC/OAuth2 (Google, GitHub).
+- **Edge Agent:** Rust, libbpf-rs, Tokio, Tonic.
+- **Kernel Hook:** C (eBPF XDP).
 
 ## Documentation & Setup
 
 Aegis is split into two components. Refer to their respective directories for detailed build and configuration instructions.
 
-> Default login: username `root`, password `root`.
+> On first start the controller creates a `root` user. Set `AEGIS_ROOT_PASSWORD` to choose its password; otherwise a random one is generated and printed once in the controller log (`docker logs aegis-controller`).
 
-| Component | Description | Docs |
-| :--- | :--- | :--- |
-| **Controller** | The central authority handling authentication (SSO), policy management, and distributing rules to agents. | [Controller Docs](./controller/README.md) |
-| **Agent** | The edge node daemon running on routers/servers. It attaches eBPF programs to network interfaces and enforces rules. | [Agent Docs](./agent/README.md) |
+| Component      | Description                                                                                                          | Docs                                      |
+| :------------- | :------------------------------------------------------------------------------------------------------------------- | :---------------------------------------- |
+| **Controller** | The central authority handling authentication (SSO), policy management, and distributing rules to agents.            | [Controller Docs](./controller/README.md) |
+| **Agent**      | The edge node daemon running on routers/servers. It attaches eBPF programs to network interfaces and enforces rules. | [Agent Docs](./agent/README.md)           |
 
 ## Quick Start (Docker Compose)
 
@@ -72,6 +74,7 @@ Aegis is optimized for extreme low latency environments and minimal footprint. R
 **Reproduce Benchmarks:**
 
 To run all comprehensive benchmarks (requires root for XDP hook):
+
 ```bash
 cd agent
 sudo -E cargo test -- --ignored --nocapture
@@ -86,21 +89,25 @@ sudo ./run_benchmarks.sh
 **Available Benchmarks:**
 
 1. **Attack Scenario** - Tests packet processing when all traffic is malicious (dropped)
+
    ```bash
    sudo -E cargo test benchmark_attack_scenario_dropped_packets -- --ignored --nocapture
    ```
 
 2. **Legitimate Traffic** - Tests packet processing when all traffic is authorized (accepted)
+
    ```bash
    sudo -E cargo test benchmark_legitimate_traffic_accepted_packets -- --ignored --nocapture
    ```
 
 3. **Mixed Traffic** - Tests realistic scenario with 50% legitimate and 50% attack traffic
+
    ```bash
    sudo -E cargo test benchmark_mixed_traffic -- --ignored --nocapture
    ```
 
 4. **Map Operations** - Benchmarks eBPF map insert/lookup/delete performance
+
    ```bash
    sudo -E cargo test benchmark_map_operations -- --ignored --nocapture
    ```
@@ -109,6 +116,7 @@ sudo ./run_benchmarks.sh
    ```bash
    sudo -E cargo test benchmark_scalability_varying_map_sizes -- --ignored --nocapture
    ```
+
 **Expected Result:**
 
 ```text
@@ -133,6 +141,7 @@ cargo build --release
 ```
 
 **Key Features:**
+
 - Random IP generation for realistic traffic simulation
 - Pre filled maps to stimulate real world scenarios
 - Latency measurements (nanoseconds per packet)
@@ -141,16 +150,20 @@ cargo build --release
 ## Future Goals & Improvements
 
 ### Advanced Networking & Discovery
-* **Dynamic Service Discovery:** Switch from static IP definitions to DNS based hostname resolution (`db-prod.local`), allowing integration with dynamic environments like Kubernetes and Docker Swarm.
-* **IPv6 Support:** eBPF/XDP data plane to handle IPv6 headers and routing.
+
+- **Dynamic Service Discovery:** Switch from static IP definitions to DNS based hostname resolution (`db-prod.local`), allowing integration with dynamic environments like Kubernetes and Docker Swarm.
+- **IPv6 Support:** eBPF/XDP data plane to handle IPv6 headers and routing.
 
 ### Enhanced Security Posture
-* **Egress Traffic Guard:** Implement Traffic Control (TC) BPF program to filter *outbound* connections. This prevents "Reverse Shell" attacks by making sure protected services cannot initiate unauthorized connections to Command and Control (C2) servers.
-* **Layer 7 Deep Packet Inspection (WAF):** Move beyond L3/L4 headers to inspect packet payloads for application layer threats (e.g., SQL Injection, Log4j payloads), combining firewalling with Intrusion Prevention (IPS).
+
+- **Egress Traffic Guard:** Implement Traffic Control (TC) BPF program to filter _outbound_ connections. This prevents "Reverse Shell" attacks by making sure protected services cannot initiate unauthorized connections to Command and Control (C2) servers.
+- **Layer 7 Deep Packet Inspection (WAF):** Move beyond L3/L4 headers to inspect packet payloads for application layer threats (e.g., SQL Injection, Log4j payloads), combining firewalling with Intrusion Prevention (IPS).
 
 ### Identity & Access Management (IAM)
-* **Context-Aware Access:** Add policy conditions beyond identity, such as device health (OS version, patch level) or geolocation.
+
+- **Context-Aware Access:** Add policy conditions beyond identity, such as device health (OS version, patch level) or geolocation.
 
 ### Enterprise Operations
-* **Fleet Management:** decouple the 1:1 Controller-Agent relationship to support a mesh of Edge Routers managed by a single High Availability Controller cluster.
-* **Observability Dashboard:** Add Prometheus/Grafana export endpoints to visualize real-time bandwidth usage, dropped packet counts, and active session trends across the network.
+
+- **Fleet Management:** decouple the 1:1 Controller-Agent relationship to support a mesh of Edge Routers managed by a single High Availability Controller cluster.
+- **Observability Dashboard:** Add Prometheus/Grafana export endpoints to visualize real-time bandwidth usage, dropped packet counts, and active session trends across the network.

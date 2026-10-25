@@ -46,6 +46,9 @@ type Config struct {
 	JwtPrivateKey    string
 	JwtPublicKey     string
 
+	// RootPassword is the password for the initial 'root' account.
+	RootPassword string
+
 	// OIDC settings
 	OIDCEnabled          bool
 	OIDCGoogleClientID   string
@@ -242,6 +245,8 @@ func LoadFromFile(path string) *Config {
 	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
 		cfg.JwtKey = jwtSecret
 	}
+
+	cfg.RootPassword = os.Getenv("AEGIS_ROOT_PASSWORD")
 
 	if cfg.JwtKey == "" || cfg.JwtKey == "CHANGE_ME" {
 		log.Fatal("[FATAL] auth.jwt_secret in config.toml must be set to a non-empty value and changed from the default placeholder")

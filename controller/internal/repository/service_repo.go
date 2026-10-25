@@ -224,7 +224,7 @@ func (r *serviceRepo) GetActiveServiceUsers() (map[int][]int, error) {
 }
 
 func (r *serviceRepo) InsertActiveService(userID, serviceID, timeLeft int) error {
-	_, err := r.stmtInsertActive.Exec(userID, serviceID, time.Now(), timeLeft)
+	_, err := r.stmtInsertActive.Exec(userID, serviceID, time.Now().UTC(), timeLeft)
 	return err
 }
 

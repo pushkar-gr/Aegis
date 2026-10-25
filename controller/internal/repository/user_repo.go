@@ -74,10 +74,10 @@ func NewUserRepository(db *sql.DB) (UserRepository, error) {
 	var err error
 
 	queries := map[**sql.Stmt]string{
-		&r.stmtGetCredentials:          "SELECT password, is_active FROM users WHERE username = ?",
+		&r.stmtGetCredentials:          "SELECT COALESCE(password, ''), is_active FROM users WHERE username = ?",
 		&r.stmtGetIDAndRole:            "SELECT id, role_id FROM users WHERE username = ?",
 		&r.stmtUpdatePassword:          "UPDATE users SET password = ? WHERE username = ?",
-		&r.stmtGetPasswordHash:         "SELECT password FROM users WHERE username = ?",
+		&r.stmtGetPasswordHash:         "SELECT COALESCE(password, '') FROM users WHERE username = ?",
 		&r.stmtGetAll:                  "SELECT id, username, role_id, is_active FROM users",
 		&r.stmtCreate:                  "INSERT INTO users (username, password, role_id) VALUES (?, ?, ?)",
 		&r.stmtDelete:                  "DELETE FROM users WHERE id = ?",
@@ -245,13 +245,13 @@ func (r *userRepo) RemoveExtraService(userID, serviceID int) error {
 }
 
 func (r *userRepo) CreateRefreshToken(token string, userID int, expiresAt time.Time) error {
-	_, err := r.stmtCreateRefreshToken.Exec(token, userID, expiresAt)
+	_, err := r.stmtCreateRefreshToken.Exec(token, userID, expiresAt.UTC())
 	return err
 }
 
 func (r *userRepo) GetRefreshToken(token string) (int, error) {
 	var userID int
-	err := r.stmtGetRefreshToken.QueryRow(token, time.Now()).Scan(&userID)
+	err := r.stmtGetRefreshToken.QueryRow(token, time.Now().UTC()).Scan(&userID)
 	return userID, err
 }
 
@@ -266,7 +266,7 @@ func (r *userRepo) DeleteUserRefreshTokens(userID int) error {
 }
 
 func (r *userRepo) CleanupExpiredRefreshTokens() error {
-	_, err := r.db.Exec("DELETE FROM refresh_tokens WHERE expires_at <= CURRENT_TIMESTAMP")
+	_, err := r.db.Exec("DELETE FROM refresh_tokens WHERE expires_at <= ?", time.Now().UTC())
 	return err
 }
 
