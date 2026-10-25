@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-sqlite3"
 )
 
 // versionTable records the applied schema version.
@@ -194,7 +196,10 @@ func openMigrationDB(dbPath string) (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 
 	var fk int
-	if err := db.QueryRow(`PRAGMA foreign_keys`).Scan(&fk); err != nil {
+	err = retryBusy(context.Background(), func() error {
+		return db.QueryRow(`PRAGMA foreign_keys`).Scan(&fk)
+	})
+	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("read foreign_keys pragma: %w", err)
 	}
@@ -575,4 +580,31 @@ func checkForeignKeys(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("foreign key violations after migration: %s", strings.Join(violations, ", "))
 	}
 	return nil
+}
+
+func isBusy(err error) bool {
+	var se sqlite3.Error
+	if errors.As(err, &se) && (se.Code == sqlite3.ErrBusy || se.Code == sqlite3.ErrLocked) {
+		return true
+	}
+	return strings.Contains(err.Error(), "database is locked")
+}
+
+func retryBusy(ctx context.Context, fn func() error) error {
+	deadline := time.Now().Add(15 * time.Second)
+	delay := 10 * time.Millisecond
+	for {
+		err := fn()
+		if err == nil || !isBusy(err) || time.Now().After(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+		if delay < 250*time.Millisecond {
+			delay *= 2
+		}
+	}
 }
