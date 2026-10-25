@@ -87,6 +87,11 @@ func (s *authService) Login(username, password string) (*LoginResult, error) {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
+	if storedHash == "" {
+		utils.CheckPasswordHash(password, dummyHash)
+		return nil, ErrInvalidCredentials
+	}
+
 	if !utils.CheckPasswordHash(password, storedHash) {
 		return nil, ErrInvalidCredentials
 	}

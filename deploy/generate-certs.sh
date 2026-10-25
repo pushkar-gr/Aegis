@@ -24,7 +24,7 @@ echo "-> Generating Agent Server Certificates..."
 openssl genrsa -out agent.key 2048
 
 # Create a temporary OpenSSL config for the Agent SANs
-cat > agent_ext.cnf <<EOF
+cat >agent_ext.cnf <<EOF
 authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
 keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
@@ -47,7 +47,7 @@ openssl x509 -req -in agent.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
 echo "-> Generating Controller mTLS Client Certificates..."
 openssl genrsa -out controller.key 2048
 
-cat > controller_ext.cnf <<EOF
+cat >controller_ext.cnf <<EOF
 authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
 keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
@@ -69,7 +69,7 @@ openssl x509 -req -in controller.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
 echo "-> Generating Controller Web HTTPS Certificates..."
 openssl genrsa -out server.key 2048
 
-cat > web_ext.cnf <<EOF
+cat >web_ext.cnf <<EOF
 authorityKeyIdentifier=keyid,issuer
 basicConstraints=CA:FALSE
 keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment

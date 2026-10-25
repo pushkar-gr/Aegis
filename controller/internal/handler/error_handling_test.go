@@ -247,3 +247,27 @@ func TestGetOrCreateOIDCUser(t *testing.T) {
 		}
 	})
 }
+
+func TestLoginSSOUserWithoutPassword(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	if _, err := db.Exec(`INSERT INTO users (username, password, role_id, provider, provider_id) VALUES (?, NULL, 2, 'github', '99')`, "ssouser@example.com"); err != nil {
+		t.Fatalf("Failed to create SSO user: %v", err)
+	}
+
+	userRepo, _ := createReposFromDB(t, db)
+	h := NewAuthHandler(service.NewAuthService(userRepo, service.AuthConfig{JWTKey: []byte("k"), TokenLifetime: time.Hour}))
+	r := gin.New()
+	r.POST("/api/auth/login", h.Login)
+
+	body, _ := json.Marshal(map[string]string{"username": "ssouser@example.com", "password": "anything"})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("Expected status %d, got %d. Body: %s", http.StatusUnauthorized, w.Code, w.Body.String())
+	}
+}

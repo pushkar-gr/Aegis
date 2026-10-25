@@ -267,3 +267,19 @@ func splitLines(s string) []string {
 	}
 	return lines
 }
+
+func TestLoadFromFileRootPasswordFromEnv(t *testing.T) {
+	path := writeTOML(t, `[auth]
+jwt_secret = "test-secret"
+`)
+
+	t.Setenv("AEGIS_ROOT_PASSWORD", "")
+	if cfg := LoadFromFile(path); cfg.RootPassword != "" {
+		t.Errorf("RootPassword: expected empty when env is unset, got %q", cfg.RootPassword)
+	}
+
+	t.Setenv("AEGIS_ROOT_PASSWORD", "from-env-Pass1!")
+	if cfg := LoadFromFile(path); cfg.RootPassword != "from-env-Pass1!" {
+		t.Errorf("RootPassword: got %q", cfg.RootPassword)
+	}
+}
