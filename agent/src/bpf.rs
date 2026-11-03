@@ -59,6 +59,10 @@ impl<'a> Bpf<'a> {
         rodata.CONTROLLER_PORT = config.controller_port.to_be();
         rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
         rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
+        rodata.TRAP_PORT = config.trap_port.to_be();
+        if let Some(trap_ip) = config.trap_ip {
+            rodata.TRAP_IP = u32::from(trap_ip).to_be();
+        }
 
         debug!("BPF configuration applied");
 

@@ -31,3 +31,8 @@ broadcast_channel_size = 16
 [grpc]
 # Port on which the gRPC server listens for controller connection.
 port = 50001
+
+[trap]
+enabled = true
+ip = "172.20.0.10"
+port = 9999

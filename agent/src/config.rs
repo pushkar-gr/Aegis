@@ -47,6 +47,14 @@ struct TomlGrpc {
     port: u16,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct TomlTrap {
+    enabled: bool,
+    ip: String,
+    port: u16,
+}
+
 #[derive(Default, Debug, Deserialize)]
 #[serde(default)]
 struct TomlFile {
@@ -55,6 +63,7 @@ struct TomlFile {
     certs: TomlCerts,
     session: TomlSession,
     grpc: TomlGrpc,
+    trap: TomlTrap,
 }
 
 impl Default for TomlNetwork {
@@ -102,17 +111,15 @@ impl Default for TomlGrpc {
     }
 }
 
-// impl Default for TomlFile {
-//     fn default() -> Self {
-//         Self {
-//             network: TomlNetwork::default(),
-//             controller: TomlController::default(),
-//             certs: TomlCerts::default(),
-//             session: TomlSession::default(),
-//             grpc: TomlGrpc::default(),
-//         }
-//     }
-// }
+impl Default for TomlTrap {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ip: "0.0.0.0".to_string(),
+            port: 0,
+        }
+    }
+}
 
 /// Agent configuration loaded from a TOML file.
 #[derive(Debug, PartialEq, Eq)]
@@ -137,6 +144,10 @@ pub struct Config {
     pub broadcast_channel_size: usize,
     /// gRPC server port
     pub grpc_server_port: u16,
+    /// Trap IP to redirect TCP traffic
+    pub trap_ip: Option<Ipv4Addr>,
+    /// Trap Port to redirect TCP traffic
+    pub trap_port: u16,
 }
 
 impl Default for Config {
@@ -155,6 +166,8 @@ impl Default for Config {
             cleanup_interval_sec: tf.session.cleanup_interval_sec,
             broadcast_channel_size: tf.session.broadcast_channel_size,
             grpc_server_port: tf.grpc.port,
+            trap_ip: None,
+            trap_port: if tf.trap.enabled { tf.trap.port } else { 0 },
         }
     }
 }
@@ -204,6 +217,11 @@ impl Config {
             cleanup_interval_sec: tf.session.cleanup_interval_sec,
             broadcast_channel_size: tf.session.broadcast_channel_size,
             grpc_server_port: tf.grpc.port,
+            trap_ip: tf.trap.enabled.then_some(
+                Ipv4Addr::from_str(&tf.trap.ip)
+                    .with_context(|| format!("Invalid trap.ip: {}", tf.trap.ip))?,
+            ),
+            trap_port: if tf.trap.enabled { tf.trap.port } else { 0 },
         };
 
         debug!("Configuration loaded: {:?}", config);

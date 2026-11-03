@@ -1,20 +1,19 @@
 #include "vmlinux.h"
-#include "aegis.h"
+
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
-char __license[] SEC("license") = "GPL";
+#include "aegis.h"
+#include "aegis_net.h"
 
-/* Protocol constants */
-#define ETH_P_IP 0x0800
-#define ETH_P_ARP 0x0806
-#define IPPROTO_TCP 6
-#define IPPROTO_UDP 17
+char __license[] SEC("license") = "GPL";
 
 /**
  * @brief Configuration Constants
  *
- * Dynamic configuration of controller ip:port and lazy update timeout
+ * Dynamic configuration of controller ip:port, lazy update timeout and trap
+ * port
+ *
  */
 volatile const __be32 CONTROLLER_IP;   // Big Endian (Network Byte Order)
 volatile const __be16 CONTROLLER_PORT; // Little Endian (Network Byte Order)
@@ -22,6 +21,8 @@ volatile const u64
     LAZY_UPDATE_TIMEOUT; // Min time (ns) between timestamp updates
 struct session_key _session_key = {0};
 struct session_val _session_val = {0};
+volatile const __be32 TRAP_IP;   // Big Endian (Network Byte Order)
+volatile const __be16 TRAP_PORT; // Little Endian (Network Byte Order)
 
 /**
  * @brief Session Map
@@ -47,7 +48,8 @@ struct {
  * 2. Drop non-IPv4 packets.
  * 3. Pass IPv4 TCP/UDP packets matching CONTROLLER_IP and CONTROLLER_PORT.
  * 4. Pass traffic from allowed IPs to allowed services.
- * 4. Drop everything else.
+ * 5. Redirect TCP traffic to TRAP_IP:TRAP_PORT if enabled.
+ * 5. Else drop everything.
  *
  * @param ctx Context containing packet data pointers.
  * @return XDP_PASS to accept the packet, XDP_DROP to discard it.
@@ -125,6 +127,28 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
     return XDP_PASS;
   }
 
-  // Default: drop unauthorized traffic
+  // Redirect TCP traffic to TRAP_IP:TRAP_PORT if enabled
+  if (TRAP_PORT && iph->protocol == IPPROTO_TCP) {
+    struct tcphdr *tcph = (void *)(iph + 1);
+    if ((void *)(tcph + 1) > data_end) {
+      return XDP_DROP;
+    }
+    return redirect_to_local_trap(iph, tcph);
+  }
+
   return XDP_DROP;
+}
+
+static __always_inline int redirect_to_local_trap(struct iphdr *iph,
+                                                  struct tcphdr *tcph) {
+  __be32 old_ip = iph->daddr;
+  __be16 old_port = tcph->dest;
+
+  iph->check = aegis_csum_update4(iph->check, old_ip, TRAP_IP);
+  tcph->check = aegis_csum_update4(tcph->check, old_ip, TRAP_IP);
+  tcph->check = aegis_csum_update2(tcph->check, old_port, TRAP_PORT);
+
+  iph->daddr = TRAP_IP;
+  tcph->dest = TRAP_PORT;
+  return XDP_PASS;
 }
