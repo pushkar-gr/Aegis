@@ -1,0 +1,3 @@
+[workspace]
+members = ["agent", "trap-server"]
+resolver = "2"

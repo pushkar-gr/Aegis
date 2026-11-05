@@ -1,0 +1,17 @@
+[package]
+name = "trap-server"
+version = "1.3.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "net",
+  "io-util",
+  "time",
+  "macros",
+  "sync",
+] }
+httparse = "1"
+percent-encoding = "2"
+libc = "0.2"
