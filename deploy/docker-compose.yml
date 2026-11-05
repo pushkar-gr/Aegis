@@ -29,8 +29,12 @@ services:
     container_name: aegis-agent
     hostname: gateway
     privileged: true
+    depends_on:
+      - controller
     environment:
       - RUST_LOG=debug
+      - LISTEN_ADDR=0.0.0.0:9999
+      - CONTROLLER_ADDR=controller:443
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN

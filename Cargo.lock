@@ -28,6 +28,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "aegis-trap-server"
+version = "1.3.0"
+dependencies = [
+ "httparse",
+ "libc",
+ "percent-encoding",
+ "tokio",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1631,16 +1641,6 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "trap-server"
-version = "1.3.0"
-dependencies = [
- "httparse",
- "libc",
- "percent-encoding",
- "tokio",
 ]
 
 [[package]]

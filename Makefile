@@ -1,14 +1,16 @@
 CONTROLLER_DIR := controller
 AGENT_DIR := agent
+TRAP_DIR := trap-server
 PROTO_SRC_DIR := proto
+LIB_RS_DIR := lib-rs
+TARGET_DIR := target
 BIN_DIR := bin
 PWD := $(shell pwd)
 GO_BIN := $(shell go env GOPATH)/bin
-
 DOCKER_COMPOSE_TEST := deploy/docker-compose.test-ip-change.yml
 DOCKER_COMPOSE_MAIN := deploy/docker-compose.yml
 
-.PHONY: all build build-go build-rust run clean proto deps-proto vmlinux ci ci-go ci-go-vuln ci-rust ci-rust-vuln ci-vuln verify-ebpf test test-go test-rust docker-build up down logs test-ip-up test-ip-steal test-ip-down
+.PHONY: all build build-go build-rust build-agent build-trap run clean proto deps-proto vmlinux ci ci-go ci-go-vuln ci-rust ci-rust-vuln ci-vuln verify-ebpf test test-go test-rust test-agent test-trap ci-agent ci-lib ci-trap docker-build up down logs test-ip-up test-ip-steal test-ip-down
 
 all: build
 
@@ -21,8 +23,11 @@ build-go:
 	cd $(CONTROLLER_DIR) && go build -o ../$(BIN_DIR)/controller ./main.go
 	@echo "Controller built: $(BIN_DIR)/controller"
 
+# Build all Rust binaries (Agent + Trap Server)
+build-rust: build-agent build-trap
+
 # Build the Agent binary
-build-rust:
+build-agent:
 	@echo "Building Agent (Rust)..."
 	@mkdir -p $(BIN_DIR)
 	@if ! command -v cargo >/dev/null 2>&1; then \
@@ -33,8 +38,20 @@ build-rust:
 		$(MAKE) vmlinux; \
 	fi
 	cd $(AGENT_DIR) && cargo build --release
-	cp $(AGENT_DIR)/target/release/aegis-agent $(BIN_DIR)/agent
+	cp $(TARGET_DIR)/release/aegis-agent $(BIN_DIR)/agent
 	@echo "Agent built: $(BIN_DIR)/agent"
+
+# Build the Trap Server binary
+build-trap:
+	@echo "Building Trap Server (Rust)..."
+	@mkdir -p $(BIN_DIR)
+	@if ! command -v cargo >/dev/null 2>&1; then \
+		echo "Error: cargo not found. Install Rust."; \
+		exit 1; \
+	fi
+	cd $(TRAP_DIR) && cargo build --release
+	cp $(TARGET_DIR)/release/aegis-trap-server $(BIN_DIR)/trap-server
+	@echo "Trap Server built: $(BIN_DIR)/trap-server"
 
 # Clean artifacts
 clean:
@@ -42,7 +59,7 @@ clean:
 	rm -rf $(BIN_DIR)
 	rm -f $(AGENT_DIR)/src/bpf/*.skel.rs
 	rm -f $(AGENT_DIR)/src/bpf/vmlinux.h
-	cd $(AGENT_DIR) && cargo clean
+	cargo clean
 
 # Run CI locally
 ci: ci-go ci-rust
@@ -77,33 +94,37 @@ ci-go-vuln:
 	@echo "[Vuln] Running govulncheck (informational, via Docker)..."
 	-docker run --rm --network host -v "$(PWD)/controller:/app" -w /app $(GO_IMAGE) go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-# Rust CI: Format, Build (Gen Skel), Clippy, BPF Verify, Test
-ci-rust: vmlinux
-	@echo "--- [CI] Starting Rust Agent Checks ---"
-	@rustup show
-	@echo "[Build] Building (Generates .skel.rs)..."
-	cd $(AGENT_DIR) && cargo build --locked --verbose
-	
-	@echo "[Format] Checking formatting..."
-	cd $(AGENT_DIR) && cargo fmt -- --check
-	
-	@echo "[Lint] Running Clippy..."
-	cd $(AGENT_DIR) && cargo clippy --locked -- -D warnings
-	
-	@echo "[Verify] Checking eBPF C-Source Safety (Clang)..."
-	$(MAKE) verify-ebpf
-	
-	@echo "[Test] Running Unit Tests..."
-	cd $(AGENT_DIR) && cargo test --locked --verbose
-	@echo "--- [CI] Rust Checks Passed ---"
+# Rust CI (all): Agent + Trap Server
+ci-rust: ci-agent ci-trap
+	@echo "--- [CI] All Rust Checks Passed ---"
 
-# Rust vulnerability scan.
+# Agent CI: Format, Build (Gen Skel), Clippy, BPF Verify, Test
+ci-agent: vmlinux
+	@echo "--- [CI] Starting Agent Checks ---"
+	@rustup show
+	cd $(AGENT_DIR) && cargo build --locked --verbose
+	cd $(AGENT_DIR) && cargo fmt -- --check
+	cd $(AGENT_DIR) && cargo clippy --locked -- -D warnings
+	$(MAKE) verify-ebpf
+	cd $(AGENT_DIR) && cargo test --locked --verbose
+	@echo "--- [CI] Agent Checks Passed ---"
+
+# Trap Server CI: Format, Clippy, Build, Test
+ci-trap:
+	@echo "--- [CI] Starting Trap Server Checks ---"
+	cd $(TRAP_DIR) && cargo fmt -- --check
+	cd $(TRAP_DIR) && cargo clippy --locked -- -D warnings
+	cd $(TRAP_DIR) && cargo build --locked --verbose
+	cd $(TRAP_DIR) && cargo test --locked --verbose
+	@echo "--- [CI] Trap Server Checks Passed ---"
+
+# Rust vulnerability scan (one root Cargo.lock covers every workspace member).
 ci-rust-vuln:
 	@echo "[Vuln] Running cargo-audit (informational)..."
 	@if ! cargo audit --version >/dev/null 2>&1; then \
 		cargo install cargo-audit --version $(CARGO_AUDIT_VERSION) --locked; \
 	fi
-	-cd $(AGENT_DIR) && cargo audit
+	-cargo audit
 
 # Helper to verify eBPF compilation (simulates CI verification step)
 verify-ebpf:
@@ -138,10 +159,18 @@ test-go:
 	@echo "Running Controller (Go) tests..."
 	cd $(CONTROLLER_DIR) && go test -v ./...
 
+# Run all Rust tests (shared lib + Agent + Trap Server)
+test-rust: test-agent test-trap
+
 # Run Rust tests (Agent)
-test-rust:
+test-agent:
 	@echo "Running Agent (Rust) tests..."
 	cd $(AGENT_DIR) && cargo test
+
+# Run Rust tests (Trap Server)
+test-trap:
+	@echo "Running Trap Server (Rust) tests..."
+	cd $(TRAP_DIR) && cargo test
 
 # Generate vmlinux.h from the running kernel into the Agent's source dir
 vmlinux:

@@ -30,10 +30,10 @@ RUN UPX_VER=4.2.4 && \
 RUN rustup component add rustfmt
 
 # Copy proto files to /proto
-COPY proto /proto
+COPY proto /app/proto
 
 # Set up agent workspace
-WORKDIR /app
+WORKDIR /app/agent
 COPY agent/Cargo.toml agent/Cargo.lock ./
 COPY agent/src ./src
 COPY agent/build.rs ./build.rs
@@ -45,6 +45,15 @@ RUN bpftool btf dump file /sys/kernel/btf/vmlinux format c > src/bpf/vmlinux.h
 RUN cargo build --release
 RUN upx --best --lzma target/release/aegis-agent
 
+# Set up trap-server workspace
+WORKDIR /app/trap-server
+COPY trap-server/Cargo.toml trap-server/Cargo.lock ./
+COPY trap-server/src ./src
+
+# Build the binary
+RUN cargo build --release
+RUN upx --best --lzma target/release/aegis-trap-server
+
 # Run Stage
 FROM debian:bookworm-slim
 WORKDIR /app
@@ -55,8 +64,11 @@ RUN apt-get update && apt-get install -y \
     zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/aegis-agent .
+COPY --from=builder /app/agent/target/release/aegis-agent .
+COPY --from=builder /app/trap-server/target/release/aegis-trap-server .
 COPY agent/config.toml ./
+COPY agent/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 RUN size=$(stat -c%s ./aegis-agent) && \
     echo "Final Binary Size: $((size/1024))KB" && \
@@ -64,4 +76,4 @@ RUN size=$(stat -c%s ./aegis-agent) && \
         echo "Error: Binary exceeds 5MB limit!"; exit 1; \
     fi
 
-CMD ["./aegis-agent"]
+CMD ["./entrypoint.sh"]

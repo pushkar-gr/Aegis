@@ -63,7 +63,7 @@ jobs:
           sudo apt-get install -y \
             clang llvm libbpf-dev libelf-dev pkg-config \
             linux-tools-common build-essential protobuf-compiler
-      
+
       - name: Install bpftool (static binary, kernel-independent)
         run: |
           BPFTOOL_VERSION=v7.5.0
@@ -72,7 +72,7 @@ jobs:
           sudo mv bpftool /usr/local/bin/bpftool
           sudo chmod +x /usr/local/bin/bpftool
           bpftool version
-      
+
       - name: Generate vmlinux.h
         run: |
           echo "Generating vmlinux.h from CI runner kernel..."
@@ -84,7 +84,7 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: agent
+          key: agent
 
       - name: Check Formatting
         run: cargo fmt -- --check
@@ -100,23 +100,68 @@ jobs:
         run: |
           echo "Compiling C source for verification..."
           clang -g -O2 -target bpf -D__TARGET_ARCH_x86 -c src/bpf/aegis.bpf.c -o aegis_verify.o
-          
+
           echo "Attempting to load into kernel to trigger Verifier..."
           sudo bpftool prog load aegis_verify.o /sys/fs/bpf/aegis_check type xdp
-          
+
           echo "Success: Kernel Verifier accepted the program!"
           sudo rm /sys/fs/bpf/aegis_check
 
       - name: Run Unit Tests
         run: cargo test --locked --verbose
 
+  # RUST TRAP SERVER
+  trap-server-ci:
+    name: Rust Trap Server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./trap-server
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install stable --profile minimal -c clippy -c rustfmt --no-self-update
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: trap-server
+
+      - name: Check Formatting
+        run: cargo fmt -- --check
+
+      - name: Linting (Clippy)
+        run: cargo clippy --locked -- -D warnings
+
+      - name: Build
+        run: cargo build --locked --verbose
+
+      - name: Run Unit Tests
+        run: cargo test --locked --verbose
+
+  rust-ci:
+    name: Rust CI (all)
+    needs: [agent-ci, trap-server-ci]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any Rust job failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+
+      - name: All Rust jobs passed
+        run: echo "agent, shared lib and trap-server checks passed"
+
   # NFRA CONFIGURATION
   integration-ci:
     name: Infra Configuration Check
-    needs: [controller-ci, agent-ci]
+    needs: [controller-ci, rust-ci]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      
+
       - name: Validate Docker Compose
         run: docker compose -f deploy/docker-compose.yml config
