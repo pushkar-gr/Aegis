@@ -2,7 +2,6 @@
 #[rustfmt::skip]
 pub mod agent_skel;
 
-use crate::config::Config;
 use agent_skel::{
     AegisSkel, AegisSkelBuilder,
     types::{session_key, session_val},
@@ -10,22 +9,26 @@ use agent_skel::{
 use anyhow::{Context, Result, anyhow};
 use bytemuck::{Pod, Zeroable};
 use libbpf_rs::{
-    Link, MapCore, MapFlags,
+    Link, MapCore, MapFlags, TC_EGRESS, TcHook, TcHookBuilder,
     skel::{OpenSkel, SkelBuilder},
 };
 use nix::time::{ClockId, clock_gettime};
-use std::{fs, path::Path};
+use std::{fs, os::fd::AsFd, path::Path};
 use tracing::{debug, error, info, warn};
+
+use crate::config::Config;
 
 // Pin paths
 const BPF_FS_PATH: &str = "/sys/fs/bpf/aegis";
 const MAP_PIN_PATH: &str = "/sys/fs/bpf/aegis/session";
 const LINK_PIN_PATH: &str = "/sys/fs/bpf/aegis/xdp_link";
 
-/// BPF program manager - handles loading and interacting with the XDP firewall..
+/// BPF program manager: handles loading and interacting with the XDP firewall..
 pub struct Bpf<'a> {
     skel: AegisSkel<'a>,
-    _link: Link,
+    link: Link,
+    egress_hook: TcHook,
+    cleaned_up: bool,
 }
 
 unsafe impl Zeroable for session_key {}
@@ -87,7 +90,22 @@ impl<'a> Bpf<'a> {
 
         link.pin(LINK_PIN_PATH).context("Failed to pin XDP link")?;
 
-        Ok(Self { skel, _link: link })
+        let mut tc_builder = TcHookBuilder::new(skel.progs.tc_trap_egress.as_fd());
+        tc_builder
+            .ifindex(interface_index)
+            .replace(true)
+            .handle(1)
+            .priority(1);
+        let mut egress_hook = tc_builder.hook(TC_EGRESS);
+        egress_hook.create()?;
+        egress_hook.attach()?;
+
+        Ok(Self {
+            skel,
+            link,
+            egress_hook,
+            cleaned_up: false,
+        })
     }
 
     /// Adds a firewall rule to allow traffic for a specific session.
@@ -416,6 +434,46 @@ impl<'a> Bpf<'a> {
                 // Return a fallback value to prevent panic
                 0
             }
+        }
+    }
+
+    /// Removes instances installed in the kernel by detaching XDP link and TC hook.
+    pub fn cleanup(&mut self, detach_xdp: bool) -> Result<()> {
+        if self.cleaned_up {
+            return Ok(());
+        }
+        self.cleaned_up = true;
+
+        let mut first_err: Option<anyhow::Error> = None;
+
+        if let Err(e) = self.egress_hook.detach() {
+            warn!("Failed to detach TC egress filter: {}", e);
+            first_err.get_or_insert(anyhow!(e));
+        }
+        if let Err(e) = self.egress_hook.destroy() {
+            warn!("Failed to destroy TC egress hook: {}", e);
+            first_err.get_or_insert(anyhow!(e));
+        }
+
+        if detach_xdp && let Err(e) = self.link.unpin() {
+            warn!("Failed to unpin XDP link: {}", e);
+            first_err.get_or_insert(anyhow!(e));
+        }
+
+        match first_err {
+            Some(e) => Err(e),
+            None => {
+                info!("BPF cleanup done (xdp detached: {})", detach_xdp);
+                Ok(())
+            }
+        }
+    }
+}
+
+impl<'a> Drop for Bpf<'a> {
+    fn drop(&mut self) {
+        if let Err(e) = self.cleanup(true) {
+            warn!("BPF cleanup on drop failed: {}", e);
         }
     }
 }

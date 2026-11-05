@@ -6,6 +6,13 @@
 #define ETH_P_ARP 0x0806
 #define IPPROTO_TCP 6
 #define IPPROTO_UDP 17
+#define TC_ACT_OK 0
+#define ETH_HLEN 14
+#define IP_CSUM_OFF (ETH_HLEN + offsetof(struct iphdr, check))
+#define IP_SADDR_OFF (ETH_HLEN + offsetof(struct iphdr, saddr))
+#define TCP_OFF (ETH_HLEN + sizeof(struct iphdr))
+#define TCP_CSUM_OFF (TCP_OFF + offsetof(struct tcphdr, check))
+#define TCP_SPORT_OFF (TCP_OFF + offsetof(struct tcphdr, source))
 
 /**
  * @brief Redirect TCP traffic to trap endpoint

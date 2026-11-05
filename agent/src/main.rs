@@ -3,7 +3,7 @@
 //! User-space loader for the Aegis eBPF firewall.
 //!
 //! Responsibilities:
-//! - Load and attach XDP program to network interface
+//! - Load and attach XDP and TC program to network interface
 //! - Parse configuration from `config.toml`
 //! - Run gRPC server for session management
 //!
@@ -20,13 +20,19 @@ mod config;
 mod grpc_server;
 mod hostname_to_ip;
 
-use crate::grpc_server::session::{Session, SessionList};
-use crate::{bpf::Bpf, config::Config, grpc_server::start_grpc_server};
 use anyhow::{Context, Result};
 use nix::net::if_::if_nametoindex;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
-use tokio::sync::{Mutex, broadcast};
+use tokio::{
+    signal::unix::{SignalKind, signal},
+    sync::{Mutex, broadcast},
+};
 use tracing::{debug, error, info, warn};
+
+use crate::{
+    grpc_server::session::{Session, SessionList},
+    {bpf::Bpf, config::Config, grpc_server::start_grpc_server},
+};
 
 /// Main entry point - initializes the agent and starts serving requests.
 #[tokio::main]
@@ -80,9 +86,18 @@ async fn main() -> Result<()> {
         loop {
             interval.tick().await;
             debug!("Running periodic eBPF rule cleanup...");
-            match bpf_cleanup.lock() {
-                Ok(bpf) => {
-                    match bpf.cleanup_ebpf_rules(rule_timeout_ns) {
+            let bpf = bpf_cleanup.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                let bpf = bpf.lock().unwrap_or_else(|p| p.into_inner());
+                (
+                    bpf.cleanup_ebpf_rules(rule_timeout_ns),
+                    bpf.list_rules(rule_timeout_ns),
+                )
+            })
+            .await;
+            match result {
+                Ok((cleanup_result, list_result)) => {
+                    match cleanup_result {
                         Ok(count) => {
                             if count > 0 {
                                 debug!("Cleaned up {} stale rules", count);
@@ -92,7 +107,7 @@ async fn main() -> Result<()> {
                             error!("Failed to cleanup stale rules: {}", e);
                         }
                     }
-                    match bpf.list_rules(rule_timeout_ns) {
+                    match list_result {
                         Ok(rules) => {
                             let proto_sessions: Vec<Session> = rules
                                 .into_iter()
@@ -117,7 +132,7 @@ async fn main() -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    error!("Failed to acquire BPF lock for cleanup: {}", e);
+                    error!("Failed to create spawn_blocking thread: {}", e);
                 }
             }
         }
@@ -152,14 +167,36 @@ async fn main() -> Result<()> {
         },
     ));
 
-    start_grpc_server(
+    let server = start_grpc_server(
         &config,
         server_addr,
         modify_rule_handler,
         update_ip_handler,
         monitor_tx,
-    )
-    .await?;
+    );
 
-    Ok(())
+    let result: Result<()> = tokio::select! {
+        res = server => res,
+        sig = wait_for_shutdown() => {
+            info!("Received {}, shutting down", sig?);
+            Ok(())
+        }
+    };
+
+    {
+        let mut bpf = bpf.lock().unwrap_or_else(|p| p.into_inner());
+        if let Err(e) = bpf.cleanup(true) {
+            error!("BPF cleanup failed: {:#}", e);
+        }
+    }
+
+    result
+}
+
+async fn wait_for_shutdown() -> Result<&'static str> {
+    let mut sigterm = signal(SignalKind::terminate())?;
+    Ok(tokio::select! {
+        r = tokio::signal::ctrl_c() => {r?; "SIGINT"}
+        _ = sigterm.recv() => "SIGTERM",
+    })
 }

@@ -2,6 +2,7 @@
 
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_tracing.h>
 
 #include "aegis.h"
 #include "aegis_net.h"
@@ -36,6 +37,19 @@ struct {
   __type(key, session_key);
   __type(value, session_val);
 } session SEC(".maps");
+
+/**
+ * @brief Reversal Map
+ *
+ * BPF_MAP_TYPE_LRU_HASH: Least Recently Used eviction.
+ * Stores original destination ip:port before redirecting to trap endpoint.
+ */
+struct {
+  __uint(type, BPF_MAP_TYPE_LRU_HASH);
+  __uint(max_entries, 10240);
+  __type(key, trap_reversal_key);
+  __type(value, trap_reversal_val);
+} reversal_map SEC(".maps");
 
 /**
  * @brief XDP Drop Program
@@ -82,6 +96,9 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
 
   // Verify header within packet bounds
   if ((void *)(iph + 1) > data_end) {
+    return XDP_DROP;
+  }
+  if (iph->ihl != 5) {
     return XDP_DROP;
   }
 
@@ -139,8 +156,82 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
   return XDP_DROP;
 }
 
+/**
+ * @brief TC egress program: restores the original server address on trap
+ * replies.
+ *
+ */
+SEC("tc") int tc_trap_egress(struct __sk_buff *skb) {
+  void *data_end = (void *)(long)skb->data_end;
+  void *data = (void *)(long)skb->data;
+  if (!TRAP_PORT) {
+    return TC_ACT_OK;
+  }
+
+  struct ethhdr *eth = data;
+  if ((void *)(eth + 1) > data_end) {
+    return TC_ACT_OK;
+  }
+  if (eth->h_proto != bpf_htons(ETH_P_IP)) {
+    return TC_ACT_OK;
+  }
+
+  struct iphdr *iph = (void *)(eth + 1);
+  if ((void *)(iph + 1) > data_end) {
+    return TC_ACT_OK;
+  }
+  if (iph->protocol != IPPROTO_TCP || iph->ihl != 5) {
+    return TC_ACT_OK;
+  }
+
+  struct tcphdr *tcph = (void *)(iph + 1);
+  if ((void *)(tcph + 1) > data_end) {
+    return TC_ACT_OK;
+  }
+
+  if (iph->saddr != TRAP_IP || tcph->source != TRAP_PORT) {
+    return TC_ACT_OK;
+  }
+
+  struct trap_reversal_key rkey = {};
+  rkey.src_ip = iph->daddr;
+  rkey.src_port = tcph->dest;
+  struct trap_reversal_val *rval = bpf_map_lookup_elem(&reversal_map, &rkey);
+  if (!rval) {
+    return TC_ACT_OK;
+  }
+
+  __be32 old_ip = iph->saddr;
+  __be16 old_port = tcph->source;
+  __be32 new_ip = rval->orig_dest_ip;
+  __be16 new_port = rval->orig_dest_port;
+
+  bpf_l4_csum_replace(skb, TCP_CSUM_OFF, old_ip, new_ip,
+                      BPF_F_PSEUDO_HDR | sizeof(new_ip));
+  bpf_l4_csum_replace(skb, TCP_CSUM_OFF, old_port, new_port, sizeof(new_port));
+  bpf_l3_csum_replace(skb, IP_CSUM_OFF, old_ip, new_ip, sizeof(new_ip));
+
+  bpf_skb_store_bytes(skb, IP_SADDR_OFF, &new_ip, sizeof(new_ip), 0);
+  bpf_skb_store_bytes(skb, TCP_SPORT_OFF, &new_port, sizeof(new_port), 0);
+  return TC_ACT_OK;
+}
+
+/**
+ * @brief Diverts one unauthorized TCP packet to the local trap listener.
+ * 1. Stores the original destination in `reversal_map`.
+ * 2. Changes destination address and port to TRAP_IP:TRAP_PORT.
+ * 3. Updates the IP and TCP checksums incrementally.
+ */
 static __always_inline int redirect_to_local_trap(struct iphdr *iph,
                                                   struct tcphdr *tcph) {
+  struct trap_reversal_key rkey = {};
+  rkey.src_ip = iph->saddr;
+  rkey.src_port = tcph->source;
+  struct trap_reversal_val rval = {};
+  rval.orig_dest_ip = iph->daddr;
+  rval.orig_dest_port = tcph->dest;
+  bpf_map_update_elem(&reversal_map, &rkey, &rval, BPF_ANY);
+
   __be32 old_ip = iph->daddr;
   __be16 old_port = tcph->dest;
 
