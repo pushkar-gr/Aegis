@@ -34,7 +34,7 @@ services:
     environment:
       - RUST_LOG=debug
       - LISTEN_ADDR=0.0.0.0:9999
-      - CONTROLLER_ADDR=controller:443
+      - CONTROLLER_ADDR=https://controller:443
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN

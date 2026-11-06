@@ -38,7 +38,7 @@ static WARNED: AtomicBool = AtomicBool::new(false);
 async fn main() -> std::io::Result<()> {
     let listen = env::var("LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:9999".into());
     let controller: Arc<str> = env::var("CONTROLLER_ADDR")
-        .expect("set CONTROLLER_ADDR=ip:port")
+        .expect("set CONTROLLER_ADDR=http://ip:port")
         .into();
 
     let listener = TcpListener::bind(&listen).await?;
@@ -112,7 +112,7 @@ async fn classify(stream: &mut TcpStream, controller: &str) -> Option<String> {
                 let encoded = utf8_percent_encode(&original, NON_ALPHANUMERIC);
                 return Some(format!(
                     "HTTP/1.1 302 Found\r\n\
-                     Location: http://{controller}/redirect?url={encoded}\r\n\
+                     Location: {controller}/redirect?url={encoded}\r\n\
                      Content-Length: 0\r\n\
                      Connection: close\r\n\r\n"
                 ));
