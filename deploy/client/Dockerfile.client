@@ -1,0 +1,17 @@
+FROM alpine:3.23.5
+
+RUN apk add --no-cache \
+    bash \
+    bind-tools \
+    chromium \
+    iproute2 \
+    novnc \
+    openbox \
+    websockify \
+    x11vnc \
+    xvfb
+
+COPY start-client.sh /usr/local/bin/start-client.sh
+RUN chmod +x /usr/local/bin/start-client.sh
+
+CMD ["/usr/local/bin/start-client.sh"]
