@@ -12,7 +12,6 @@ RUN CGO_ENABLED=1 go build -o controller ./main.go
 FROM alpine:3.24.3
 WORKDIR /app
 RUN apk add --no-cache openssl ca-certificates
-ENV JWT_SECRET="$(run: openssl rand -base64 32)"
 COPY --from=builder /app/controller .
 COPY static ./static
 CMD ["./controller"]

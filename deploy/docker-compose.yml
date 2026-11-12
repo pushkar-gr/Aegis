@@ -16,6 +16,7 @@ services:
       - controller-data:/app/data
     environment:
       AEGIS_ROOT_PASSWORD: ${AEGIS_ROOT_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
     networks:
       private_net:
     command: >

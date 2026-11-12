@@ -242,7 +242,7 @@ func LoadFromFile(path string) *Config {
 
 	cfg := buildConfig(tf)
 
-	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
+	if jwtSecret := os.Getenv("JWT_SECRET"); len(jwtSecret) >= 32 {
 		cfg.JwtKey = jwtSecret
 	}
 
