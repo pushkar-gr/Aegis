@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"Aegis/controller/internal/utils"
-	"crypto/rsa"
 	"log"
 	"net/http"
 
@@ -13,7 +12,7 @@ import (
 const UsernameKey = "username"
 
 // JWTAuth validates the JWT token cookie and sets the username in Gin context.
-func JWTAuth(jwtKey []byte, publicKey *rsa.PublicKey) gin.HandlerFunc {
+func JWTAuth(verify utils.TokenVerifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cookie, err := c.Cookie("token")
 		if err != nil {
@@ -21,42 +20,24 @@ func JWTAuth(jwtKey []byte, publicKey *rsa.PublicKey) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication cookie missing"})
 			return
 		}
-
-		var username string
-		if publicKey != nil {
-			username, err = utils.GetUsernameFromTokenRS256(cookie, publicKey)
-		} else {
-			username, err = utils.GetUsernameFromToken(cookie, jwtKey)
-		}
-
+		username, err := verify(cookie)
 		if err != nil {
 			log.Printf("[middleware] auth failed: token invalid - %v", err)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			return
 		}
-
 		c.Set(UsernameKey, username)
 		c.Next()
 	}
 }
 
 // OptionalJWTAuth is like JWTAuth but does not aborts the request.
-func OptionalJWTAuth(jwtKey []byte, publicKey *rsa.PublicKey) gin.HandlerFunc {
+func OptionalJWTAuth(verify utils.TokenVerifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cookie, err := c.Cookie("token")
-		if err != nil {
-			c.Next()
-			return
-		}
-
-		var username string
-		if publicKey != nil {
-			username, err = utils.GetUsernameFromTokenRS256(cookie, publicKey)
-		} else {
-			username, err = utils.GetUsernameFromToken(cookie, jwtKey)
-		}
-		if err == nil {
-			c.Set(UsernameKey, username)
+		if cookie, err := c.Cookie("token"); err == nil {
+			if username, err := verify(cookie); err == nil {
+				c.Set(UsernameKey, username)
+			}
 		}
 		c.Next()
 	}

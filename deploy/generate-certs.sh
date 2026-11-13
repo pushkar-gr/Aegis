@@ -91,5 +91,12 @@ openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
 # Clean up
 rm *.csr *_ext.cnf ca.srl
 
+cd .. && mkdir -p keys
+echo "-> Generating JWT signing key..."
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out keys/jwt_private.pem
+chmod 600 keys/jwt_private.pem
+
 echo "All certificates generated successfully in $CERT_DIR!"
-ls -la
+
+cd certs && ls -la
+cd ../keys && ls -la

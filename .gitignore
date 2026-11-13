@@ -1,3 +1,4 @@
 deploy/certs/
+deploy/keys/
 bin/
 target/

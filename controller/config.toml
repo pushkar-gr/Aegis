@@ -24,10 +24,10 @@ retry_delay = "5s"
 ip_update_interval = "60s"
 
 [auth]
+jwt_algorithm = "RS256"
 jwt_secret = "CHANGE_ME"
 jwt_token_lifetime = "60s"
 jwt_private_key = "keys/jwt_private.pem"
-jwt_public_key = "keys/jwt_public.pem"
 
 [oidc]
 enabled = false

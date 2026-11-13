@@ -15,6 +15,7 @@ import (
 
 // AuthConfig holds JWT signing configuration.
 type AuthConfig struct {
+	JwtAlgorithm  string
 	JWTKey        []byte
 	PrivateKey    *rsa.PrivateKey
 	PublicKey     *rsa.PublicKey
@@ -74,6 +75,9 @@ type authService struct {
 
 // NewAuthService creates a new AuthService.
 func NewAuthService(userRepo repository.UserRepository, cfg AuthConfig) AuthService {
+	if cfg.JwtAlgorithm == "RS256" && cfg.PrivateKey == nil {
+		panic("auth: RS256 configured without a private key")
+	}
 	return &authService{userRepo: userRepo, cfg: cfg}
 }
 
@@ -273,8 +277,12 @@ func (s *authService) RefreshToken(token string) (*TokenResult, error) {
 }
 
 func (s *authService) GenerateAccessToken(claims *models.Claims) (string, error) {
-	if s.cfg.PrivateKey != nil {
+	switch s.cfg.JwtAlgorithm {
+	case "RS256":
 		return utils.GenerateTokenRS256(claims, s.cfg.PrivateKey)
+	case "HS256":
+		return utils.GenerateTokenHS256(claims, s.cfg.JWTKey)
+	default:
+		return "", fmt.Errorf("unsupported JWT algorithm %q", s.cfg.JwtAlgorithm)
 	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.cfg.JWTKey)
 }

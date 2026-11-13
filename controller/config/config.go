@@ -41,10 +41,10 @@ type Config struct {
 	ConnMaxLifetime time.Duration
 
 	// Authentication settings
+	JwtAlgorithm     string
 	JwtKey           string
 	JwtTokenLifetime time.Duration
 	JwtPrivateKey    string
-	JwtPublicKey     string
 
 	// RootPassword is the password for the initial 'root' account.
 	RootPassword string
@@ -93,10 +93,10 @@ type tomlMonitor struct {
 
 // [auth] section of config.toml.
 type tomlAuth struct {
+	JwtAlgorithm     string `toml:"jwt_algorithm"`
 	JwtSecret        string `toml:"jwt_secret"`
 	JwtTokenLifetime string `toml:"jwt_token_lifetime"`
 	JwtPrivateKey    string `toml:"jwt_private_key"`
-	JwtPublicKey     string `toml:"jwt_public_key"`
 }
 
 // [oidc] section of config.toml.
@@ -148,10 +148,10 @@ func defaults() tomlFile {
 			IpUpdateInterval: "60s",
 		},
 		Auth: tomlAuth{
+			JwtAlgorithm:     "RS256",
 			JwtSecret:        "CHANGE_ME",
 			JwtTokenLifetime: "60s",
 			JwtPrivateKey:    "keys/jwt_private.pem",
-			JwtPublicKey:     "keys/jwt_public.pem",
 		},
 		OIDC: tomlOIDC{
 			Enabled:          false,
@@ -204,10 +204,10 @@ func buildConfig(tf tomlFile) *Config {
 		AgentCallTimeout:     parseDuration(tf.Agent.CallTimeout, defaultDurations.AgentCallTimeout),
 		MonitorRetryDelay:    parseDuration(tf.Monitor.RetryDelay, defaultDurations.MonitorRetryDelay),
 		IpUpdateInterval:     parseDuration(tf.Monitor.IpUpdateInterval, defaultDurations.IpUpdateInterval),
+		JwtAlgorithm:         tf.Auth.JwtAlgorithm,
 		JwtKey:               tf.Auth.JwtSecret,
 		JwtTokenLifetime:     parseDuration(tf.Auth.JwtTokenLifetime, defaultDurations.JwtTokenLifetime),
 		JwtPrivateKey:        tf.Auth.JwtPrivateKey,
-		JwtPublicKey:         tf.Auth.JwtPublicKey,
 		OIDCEnabled:          tf.OIDC.Enabled,
 		OIDCGoogleClientID:   tf.OIDC.GoogleClientID,
 		OIDCGoogleSecret:     tf.OIDC.GoogleSecret,
@@ -248,8 +248,14 @@ func LoadFromFile(path string) *Config {
 
 	cfg.RootPassword = os.Getenv("AEGIS_ROOT_PASSWORD")
 
-	if cfg.JwtKey == "" || cfg.JwtKey == "CHANGE_ME" {
-		log.Fatal("[FATAL] auth.jwt_secret in config.toml must be set to a non-empty value and changed from the default placeholder")
+	switch cfg.JwtAlgorithm {
+	case "RS256":
+	case "HS256":
+		if len(cfg.JwtKey) < 32 || cfg.JwtKey == "CHANGE_ME" {
+			log.Fatal("[FATAL] auth.jwt_algorithm=HS256 requires jwt_secret (or JWT_SECRET) of at least 32 characters, not the placeholder")
+		}
+	default:
+		log.Fatalf("[FATAL] auth.jwt_algorithm must be \"HS256\" or \"RS256\", got %q", cfg.JwtAlgorithm)
 	}
 
 	return cfg

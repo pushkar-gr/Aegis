@@ -13,10 +13,6 @@ import (
 	"Aegis/controller/internal/watcher"
 	"Aegis/controller/proto"
 	"context"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -64,21 +60,25 @@ func main() {
 		log.Fatalf("[ERROR] Failed to create service repository: %v", err)
 	}
 
-	privateKey, publicKey, err := loadRSAKeys(cfg.JwtPrivateKey, cfg.JwtPublicKey)
-	if err != nil {
-		log.Printf("[WARN] Failed to load RSA keys: %v. RS256 signing will not be available.", err)
-		privateKey = nil
-		publicKey = nil
-	} else {
-		log.Printf("[INFO] RSA keys loaded successfully for JWT RS256 signing")
-	}
-
 	authCfg := service.AuthConfig{
+		JwtAlgorithm:  cfg.JwtAlgorithm,
 		JWTKey:        []byte(cfg.JwtKey),
-		PrivateKey:    privateKey,
-		PublicKey:     publicKey,
 		TokenLifetime: cfg.JwtTokenLifetime,
 	}
+
+	var verifyToken utils.TokenVerifier
+	if cfg.JwtAlgorithm == "RS256" {
+		key, err := utils.LoadRSAPrivateKey(cfg.JwtPrivateKey)
+		if err != nil {
+			log.Fatalf("[FATAL] auth.jwt_algorithm=RS256 but key load failed: %v", err)
+		}
+		authCfg.PrivateKey = key
+		authCfg.PublicKey = &key.PublicKey
+		verifyToken = utils.NewRSAVerifier(authCfg.PublicKey)
+	} else {
+		verifyToken = utils.NewHMACVerifier(authCfg.JWTKey)
+	}
+	log.Printf("[INFO] JWT signing algorithm: %s", cfg.JwtAlgorithm)
 
 	authSvc := service.NewAuthService(userRepo, authCfg)
 	userSvc := service.NewUserService(userRepo, svcRepo)
@@ -110,8 +110,8 @@ func main() {
 		}
 	}
 
-	authMW := middleware.JWTAuth([]byte(cfg.JwtKey), publicKey)
-	optionalAuthMW := middleware.OptionalJWTAuth([]byte(cfg.JwtKey), publicKey)
+	authMW := middleware.JWTAuth(verifyToken)
+	optionalAuthMW := middleware.OptionalJWTAuth(verifyToken)
 	rootOnly := middleware.RequireRole(userRepo, "root")
 	adminOrRoot := middleware.RequireRole(userRepo, "admin", "root")
 
@@ -153,43 +153,4 @@ func main() {
 	signal.Notify(quit, os.Interrupt)
 	<-quit
 	log.Println("[INFO] Interrupt signal received. Shutting down server...")
-}
-
-func loadRSAKeys(privateKeyPath, publicKeyPath string) (*rsa.PrivateKey, *rsa.PublicKey, error) {
-	privateKeyPEM, err := os.ReadFile(privateKeyPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read private key: %w", err)
-	}
-
-	block, _ := pem.Decode(privateKeyPEM)
-	if block == nil {
-		return nil, nil, fmt.Errorf("failed to decode PEM block containing private key")
-	}
-
-	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse private key: %w", err)
-	}
-
-	publicKeyPEM, err := os.ReadFile(publicKeyPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read public key: %w", err)
-	}
-
-	block, _ = pem.Decode(publicKeyPEM)
-	if block == nil {
-		return nil, nil, fmt.Errorf("failed to decode PEM block containing public key")
-	}
-
-	publicKeyInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse public key: %w", err)
-	}
-
-	publicKey, ok := publicKeyInterface.(*rsa.PublicKey)
-	if !ok {
-		return nil, nil, fmt.Errorf("not an RSA public key")
-	}
-
-	return privateKey, publicKey, nil
 }

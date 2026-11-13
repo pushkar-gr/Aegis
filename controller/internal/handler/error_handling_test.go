@@ -39,7 +39,7 @@ func TestUpdatePasswordWeakPasswordReportsReason(t *testing.T) {
 	}
 
 	userRepo, _ := createReposFromDB(t, db)
-	h := NewAuthHandler(service.NewAuthService(userRepo, service.AuthConfig{JWTKey: []byte("k"), TokenLifetime: time.Hour}))
+	h := NewAuthHandler(service.NewAuthService(userRepo, service.AuthConfig{JwtAlgorithm: "HS256", JWTKey: []byte("k"), TokenLifetime: time.Hour}))
 
 	r := gin.New()
 	r.POST("/api/auth/password", func(c *gin.Context) {
@@ -94,7 +94,7 @@ func TestRefreshTokenDisabledAccount(t *testing.T) {
 		t.Fatalf("Failed to create refresh token: %v", err)
 	}
 
-	h := NewAuthHandler(service.NewAuthService(userRepo, service.AuthConfig{JWTKey: []byte("k"), TokenLifetime: time.Hour}))
+	h := NewAuthHandler(service.NewAuthService(userRepo, service.AuthConfig{JwtAlgorithm: "HS256", JWTKey: []byte("k"), TokenLifetime: time.Hour}))
 	r := gin.New()
 	r.POST("/api/auth/refresh", h.RefreshToken)
 
@@ -257,7 +257,7 @@ func TestLoginSSOUserWithoutPassword(t *testing.T) {
 	}
 
 	userRepo, _ := createReposFromDB(t, db)
-	h := NewAuthHandler(service.NewAuthService(userRepo, service.AuthConfig{JWTKey: []byte("k"), TokenLifetime: time.Hour}))
+	h := NewAuthHandler(service.NewAuthService(userRepo, service.AuthConfig{JwtAlgorithm: "HS256", JWTKey: []byte("k"), TokenLifetime: time.Hour}))
 	r := gin.New()
 	r.POST("/api/auth/login", h.Login)
 

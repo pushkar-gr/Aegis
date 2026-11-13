@@ -11,12 +11,13 @@ services:
     cap_add:
       - NET_ADMIN
     volumes:
-      - ./certs:/app/certs
-      - ../controller/config.toml:/app/config.toml
+      - ./certs:/app/certs:ro
+      - ./keys:/app/keys:ro
+      - ../controller/config.toml:/app/config.toml:ro
       - controller-data:/app/data
     environment:
       AEGIS_ROOT_PASSWORD: ${AEGIS_ROOT_PASSWORD:-}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:-}
     networks:
       private_net:
     command: >
@@ -40,8 +41,8 @@ services:
     volumes:
       - /sys/fs/bpf:/sys/fs/bpf
       - /sys/kernel/debug:/sys/kernel/debug
-      - ./certs:/app/certs
-      - ../agent/config.toml:/app/config.toml
+      - ./certs:/app/certs:ro
+      - ../agent/config.toml:/app/config.toml:ro
     networks:
       public_net:
         ipv4_address: 172.20.0.10
