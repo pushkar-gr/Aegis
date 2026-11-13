@@ -225,12 +225,6 @@
             }
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
         function renderRoles() {
             const container = document.getElementById('rolesContainer');
             const userRole = getUserRole();
@@ -369,7 +363,7 @@
 
             const availableServices = allServices.filter(s => !assignedIds.includes(s.id));
             availableSelect.innerHTML = '<option value="">Select Service...</option>' + 
-                availableServices.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.hostname})</option>`).join('');
+                availableServices.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.hostname)})</option>`).join('');
         }
 
         function openAddModal() {

@@ -336,7 +336,7 @@
                 
                 const roleSelect = document.getElementById('roleId');
                 roleSelect.innerHTML = '<option value="">Select a role</option>' +
-                    roles.map(role => `<option value="${role.id}">${role.name}</option>`).join('');
+                roles.map(role => `<option value="${role.id}">${escapeHtml(role.name)}</option>`).join('');
                 
                 renderUsers(users);
             } catch (error) {
@@ -369,12 +369,6 @@
             }
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
         function getRoleName(roleId) {
             const role = roles.find(r => r.id === roleId);
             return role ? escapeHtml(role.name) : `ID: ${roleId}`;
@@ -394,7 +388,7 @@
                     <td class="px-6 py-4">
                         <div class="flex items-center gap-3">
                             <div class="w-8 h-8 rounded-full bg-surface-highlight flex items-center justify-center text-primary font-bold text-xs border border-white/5 uppercase">
-                                ${user.username.substring(0, 2)}
+                                ${escapeHtml(user.username.substring(0, 2))}
                             </div>
                             <p class="font-medium text-white text-sm">${escapeHtml(user.username)}</p>
                         </div>

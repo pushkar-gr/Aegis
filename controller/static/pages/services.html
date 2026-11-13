@@ -279,12 +279,6 @@
             }
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
         function renderServices(list) {
             const tbody = document.getElementById('servicesTableBody');
             
