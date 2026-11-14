@@ -22,7 +22,7 @@ function createProfileDropdown() {
 
   return `
         <div class="relative" id="profileDropdown">
-            <button onclick="toggleProfileMenu()" class="flex items-center space-x-2 text-white hover:text-gray-300">
+            <button data-click="toggleProfileMenu" class="flex items-center space-x-2 text-white hover:text-gray-300">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
                 </svg>
@@ -33,7 +33,7 @@ function createProfileDropdown() {
             </button>
             <div id="profileMenu" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
                 <a href="/static/pages/reset-password.html" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Reset Password</a>
-                <button onclick="handleLogout()" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign Out</button>
+                <button data-click="handleLogout" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign Out</button>
             </div>
         </div>
     `;
@@ -178,3 +178,8 @@ function createLoadingSpinner() {
 function confirmDialog(message) {
   return confirm(message);
 }
+
+Object.assign(Actions, {
+    toggleProfileMenu: () => toggleProfileMenu(),
+    handleLogout: () => handleLogout(),
+});
