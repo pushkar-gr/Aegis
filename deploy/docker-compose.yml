@@ -11,7 +11,11 @@ services:
     cap_add:
       - NET_ADMIN
     volumes:
-      - ./certs:/app/certs:ro
+      - ./certs/server.crt:/app/certs/server.crt:ro
+      - ./certs/server.key:/app/certs/server.key:ro
+      - ./certs/controller.pem:/app/certs/controller.pem:ro
+      - ./certs/controller.key:/app/certs/controller.key:ro
+      - ./certs/ca.pem:/app/certs/ca.pem:ro
       - ./keys:/app/keys:ro
       - ../controller/config.toml:/app/config.toml:ro
       - controller-data:/app/data
@@ -41,7 +45,9 @@ services:
     volumes:
       - /sys/fs/bpf:/sys/fs/bpf
       - /sys/kernel/debug:/sys/kernel/debug
-      - ./certs:/app/certs:ro
+      - ./certs/agent.pem:/app/certs/agent.pem:ro
+      - ./certs/agent.key:/app/certs/agent.key:ro
+      - ./certs/ca.pem:/app/certs/ca.pem:ro
       - ../agent/config.toml:/app/config.toml:ro
     networks:
       public_net:
