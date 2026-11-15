@@ -3,7 +3,10 @@ package router
 import (
 	"Aegis/controller/internal/handler"
 	internalMiddleware "Aegis/controller/internal/middleware"
+	"context"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,6 +22,7 @@ type RouterConfig struct {
 	OptionalAuthMiddleware gin.HandlerFunc
 	RootOnly               gin.HandlerFunc
 	AdminOrRoot            gin.HandlerFunc
+	HealthCheck            func(ctx context.Context) error
 }
 
 // NewRouter builds and returns the configured Gin router.
@@ -27,9 +31,22 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(internalMiddleware.SecurityHeaders())
 
-	r.StaticFS("/static", http.Dir("static"))
+	r.StaticFS("/static", gin.Dir("static", false))
 	r.GET("/", func(c *gin.Context) {
 		c.File("static/pages/login.html")
+	})
+
+	r.GET("/healthz", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if cfg.HealthCheck != nil {
+			if err := cfg.HealthCheck(ctx); err != nil {
+				log.Printf("[health] check failed: %v", err)
+				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unavailable"})
+				return
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	api := r.Group("/api")

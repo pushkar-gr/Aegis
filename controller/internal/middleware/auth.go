@@ -42,21 +42,3 @@ func OptionalJWTAuth(verify utils.TokenVerifier) gin.HandlerFunc {
 		c.Next()
 	}
 }
-
-// SecurityHeaders adds security HTTP headers to all responses.
-func SecurityHeaders() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Header("X-Frame-Options", "DENY")
-		c.Header("X-Content-Type-Options", "nosniff")
-		c.Header("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
-		c.Header("Content-Security-Policy",
-			"default-src 'self'; "+
-				"script-src 'self'; "+
-				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
-				"font-src https://fonts.gstatic.com; "+
-				"img-src 'self' data: https://lh3.googleusercontent.com; "+
-				"connect-src 'self'; object-src 'none'; base-uri 'none'; "+
-				"form-action 'self'; frame-ancestors 'none'")
-		c.Next()
-	}
-}
