@@ -10,16 +10,26 @@ on:
     paths-ignore:
       - '**.md'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # GO CONTROLLER
   controller-ci:
     name: Go Controller CI
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
-        working-directory: ./controller 
+        working-directory: ./controller
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@v7
@@ -31,16 +41,37 @@ jobs:
       - name: Verify go.sum is in sync
         run: go mod verify && go mod tidy -diff
 
-      - name: Install Lint & Tools
-        run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
-          go install golang.org/x/vuln/cmd/govulncheck@v1.5.0
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
 
       - name: Lint (golangci-lint)
         run: golangci-lint run
 
-      - name: Test
-        run: go test -v ./...
+      - name: Test (race detector + coverage)
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Coverage report
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}')
+          {
+            echo "### Go coverage"
+            echo "Total statement coverage: **${total}**"
+            echo
+            echo "Lowest-covered functions:"
+            echo '```'
+            go tool cover -func=coverage.out | grep -v '^total:' | sort -k3 -n | head -10
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: |
+            controller/coverage.out
+            controller/coverage.html
+          retention-days: 14
 
       - name: Build Binary
         run: go build -o bin/aegis-controller .
@@ -49,13 +80,14 @@ jobs:
   agent-ci:
     name: Rust Agent & BPF Safety
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: ./agent
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Install System Deps
         run: |
@@ -63,16 +95,24 @@ jobs:
           sudo apt-get install -y \
             clang llvm libbpf-dev libelf-dev pkg-config \
             linux-tools-common build-essential protobuf-compiler
-      
-      - name: Install bpftool (static binary, kernel-independent)
+
+      - name: Install bpftool (pinned and checksum-verified)
+        env:
+          BPFTOOL_VERSION: v7.5.0
+          BPFTOOL_SHA256: "6b81db78c797e63f13e644ceb2064e5236afaf904bbaaa367785170819768f0a"
         run: |
-          BPFTOOL_VERSION=v7.5.0
-          curl -sL "https://github.com/libbpf/bpftool/releases/download/${BPFTOOL_VERSION}/bpftool-${BPFTOOL_VERSION}-amd64.tar.gz" \
-            | tar -xz
-          sudo mv bpftool /usr/local/bin/bpftool
-          sudo chmod +x /usr/local/bin/bpftool
+          set -euo pipefail
+          case "$BPFTOOL_SHA256" in
+            *PASTE*) echo "::error::Set BPFTOOL_SHA256 in .github/workflows/ci.yml"; exit 1 ;;
+          esac
+          url="https://github.com/libbpf/bpftool/releases/download/${BPFTOOL_VERSION}/bpftool-${BPFTOOL_VERSION}-amd64.tar.gz"
+          curl -fsSL --retry 3 -o bpftool.tar.gz "$url"
+          echo "${BPFTOOL_SHA256}  bpftool.tar.gz" | sha256sum -c -
+          tar -xzf bpftool.tar.gz bpftool
+          sudo install -m 0755 bpftool /usr/local/bin/bpftool
+          rm -f bpftool.tar.gz bpftool
           bpftool version
-      
+
       - name: Generate vmlinux.h
         run: |
           echo "Generating vmlinux.h from CI runner kernel..."
@@ -95,28 +135,44 @@ jobs:
       - name: Build Agent
         run: cargo build --locked --verbose
 
-      - name: Verify eBPF Safety (Dry Run)
-        continue-on-error: true
+      - name: Verify eBPF program loads (kernel verifier)
         run: |
-          echo "Compiling C source for verification..."
+          set -euo pipefail
+          pin=/sys/fs/bpf/aegis_check
+          trap 'sudo rm -f "$pin"' EXIT
+
           clang -g -O2 -target bpf -D__TARGET_ARCH_x86 -c src/bpf/aegis.bpf.c -o aegis_verify.o
-          
-          echo "Attempting to load into kernel to trigger Verifier..."
-          sudo bpftool prog load aegis_verify.o /sys/fs/bpf/aegis_check type xdp
-          
-          echo "Success: Kernel Verifier accepted the program!"
-          sudo rm /sys/fs/bpf/aegis_check
+
+          mountpoint -q /sys/fs/bpf || sudo mount -t bpf bpf /sys/fs/bpf
+          sudo rm -f "$pin"
+
+          sudo bpftool -d prog load aegis_verify.o "$pin" type xdp
+          echo "Kernel verifier accepted the program"
 
       - name: Run Unit Tests
         run: cargo test --locked --verbose
 
-  # NFRA CONFIGURATION
-  integration-ci:
-    name: Infra Configuration Check
+  images:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build controller image
+        run: docker build -f controller/Dockerfile.controller -t aegis-controller:ci controller
+
+      - name: Build agent image
+        run: docker build -f agent/Dockerfile.agent -t aegis-agent:ci .
+
+  e2e:
+    name: End-to-end (docker compose)
     needs: [controller-ci, agent-ci]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      
+
       - name: Validate Docker Compose
         run: docker compose -f deploy/docker-compose.yml config
