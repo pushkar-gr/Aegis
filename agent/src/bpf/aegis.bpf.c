@@ -84,6 +84,10 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
     return XDP_DROP;
   }
 
+  if (iph->frag_off & bpf_htons(0x3FFF)) {
+    return XDP_DROP;
+  }
+
   __be16 dst_port = 0;
 
   // Parse transport layer (TCP/UDP)
