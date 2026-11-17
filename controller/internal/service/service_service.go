@@ -55,7 +55,11 @@ func resolveHostnameAndPort(hostnameWithPort string) (uint32, uint16, error) {
 		resolvedIP = ips[0]
 	}
 
-	ipUint32 := utils.IpToUint32(resolvedIP)
+	ipUint32, err := utils.IpToUint32(resolvedIP)
+	if err != nil {
+		return 0, 0, fmt.Errorf("%w %q: unable to parse ip: %w", ErrInvalidHostname, resolvedIP, err)
+	}
+
 	portNum, err := net.LookupPort("tcp", portStr)
 	if err != nil {
 		return 0, 0, fmt.Errorf("%w: port %q must be a valid TCP port number (1-65535): %w", ErrInvalidHostname, portStr, err)
@@ -144,7 +148,12 @@ func (s *serviceService) SelectActiveService(userID, roleID, serviceID int, clie
 		return fmt.Errorf("failed to look up service address: %w", err)
 	}
 
-	success, err := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), true, s.agentTimeout)
+	ipStr, err := utils.IpToUint32(clientIP)
+	if err != nil {
+		return fmt.Errorf("unable to parse ip %q: %w", clientIP, err)
+	}
+
+	success, err := proto.SendSessionData(ipStr, dstIP, uint32(dstPort), true, s.agentTimeout)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrAgentUnavailable, err)
 	}
@@ -160,7 +169,12 @@ func (s *serviceService) DeselectActiveService(userID, svcID int, clientIP strin
 	if err != nil {
 		log.Printf("[dashboard] deselect: service %d has no IP/port config, skipping remote deprovision: %v", svcID, err)
 	} else {
-		success, sendErr := proto.SendSessionData(utils.IpToUint32(clientIP), dstIP, uint32(dstPort), false, s.agentTimeout)
+		ipStr, err := utils.IpToUint32(clientIP)
+		if err != nil {
+			return fmt.Errorf("unable to parse ip %q: %w", clientIP, err)
+		}
+
+		success, sendErr := proto.SendSessionData(ipStr, dstIP, uint32(dstPort), false, s.agentTimeout)
 		if sendErr != nil {
 			log.Printf("[dashboard] deselect: failed to notify remote for user %d / service %d: %v", userID, svcID, sendErr)
 		} else if !success {

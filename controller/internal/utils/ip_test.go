@@ -82,33 +82,40 @@ func TestIpToUint32(t *testing.T) {
 		name     string
 		ip       string
 		expected uint32
+		wantErr  bool
 	}{
 		{
 			name:     "Convert 127.0.0.1",
 			ip:       "127.0.0.1",
 			expected: 2130706433, // 0x7F000001
+			wantErr:  false,
 		},
 		{
 			name:     "Convert 192.168.1.1",
 			ip:       "192.168.1.1",
 			expected: 3232235777, // 0xC0A80101
+			wantErr:  false,
 		},
 		{
 			name:     "Convert 0.0.0.0",
 			ip:       "0.0.0.0",
 			expected: 0,
+			wantErr:  false,
 		},
 		{
 			name:     "Invalid IP",
 			ip:       "invalid",
 			expected: 0,
+			wantErr:  true,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IpToUint32(tt.ip)
-			if result != tt.expected {
+			result, err := IpToUint32(tt.ip)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if !tt.wantErr && result != tt.expected {
 				t.Errorf("Expected %d, got %d", tt.expected, result)
 			}
 		})

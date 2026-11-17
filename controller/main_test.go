@@ -113,7 +113,10 @@ func TestIPConversion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := utils.IpToUint32(tt.ipStr)
+			got, err := utils.IpToUint32(tt.ipStr)
+			if err != nil {
+				t.Errorf("IpToUint32(%s) = %v, want 0x%08X", tt.ipStr, err, tt.wantIP)
+			}
 			if got != tt.wantIP {
 				t.Errorf("IpToUint32(%s) = 0x%08X, want 0x%08X", tt.ipStr, got, tt.wantIP)
 			}
