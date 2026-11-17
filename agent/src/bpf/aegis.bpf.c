@@ -1,4 +1,5 @@
 #include "vmlinux.h"
+
 #include "aegis.h"
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
@@ -86,14 +87,15 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
   __be16 dst_port = 0;
 
   // Parse transport layer (TCP/UDP)
+  int iph_len = iph->ihl * 4;
   if (iph->protocol == IPPROTO_TCP) {
-    struct tcphdr *tcph = (void *)(iph + 1);
+    struct tcphdr *tcph = (void *)(iph) + iph_len;
     if ((void *)(tcph + 1) > data_end) {
       return XDP_DROP;
     }
     dst_port = tcph->dest;
   } else if (iph->protocol == IPPROTO_UDP) {
-    struct udphdr *udph = (void *)(iph + 1);
+    struct udphdr *udph = (void *)(iph);
     if ((void *)(udph + 1) > data_end) {
       return XDP_DROP;
     }
