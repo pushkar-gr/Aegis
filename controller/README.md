@@ -86,8 +86,7 @@ All settings are loaded from a TOML configuration file (default: `config.toml` i
 | -------------------- | ---------------------- | ----------------------------------------------------------- |
 | `jwt_secret`         | `CHANGE_ME`            | Secret used to sign JWT access tokens. **Must be changed.** |
 | `jwt_token_lifetime` | `60s`                  | Access token lifetime (Go duration string).                 |
-| `jwt_private_key`    | `keys/jwt_private.pem` | RSA/EC private key for asymmetric JWT signing (optional).   |
-| `jwt_public_key`     | `keys/jwt_public.pem`  | Corresponding public key (optional).                        |
+| `jwt_private_key`    | `keys/jwt_private.pem` | RSA private key for asymmetric JWT signing (optional).      |
 
 #### `[oidc]`
 

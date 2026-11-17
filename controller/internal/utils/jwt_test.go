@@ -20,7 +20,7 @@ func TestGetUsernameFromToken(t *testing.T) {
 		Username: testUsername,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
-			Issuer:    "go-auth-system",
+			Issuer:    models.TokenIssuer,
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -34,7 +34,7 @@ func TestGetUsernameFromToken(t *testing.T) {
 		Username: testUsername,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
-			Issuer:    "go-auth-system",
+			Issuer:    models.TokenIssuer,
 		},
 	}
 	expiredToken := jwt.NewWithClaims(jwt.SigningMethodHS256, expiredClaims)
@@ -130,6 +130,7 @@ func TestGetUsernameFromTokenWithDifferentClaims(t *testing.T) {
 		Username: "minimaluser",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			Issuer:    models.TokenIssuer,
 		},
 	}
 	minimalToken := jwt.NewWithClaims(jwt.SigningMethodHS256, minimalClaims)
@@ -149,36 +150,35 @@ func TestGetUsernameFromTokenWithDifferentClaims(t *testing.T) {
 
 func TestGetUsernameFromTokenSigningMethods(t *testing.T) {
 	testKey := []byte("test-secret-key")
-	testUsername := "testuser"
-	expirationTime := time.Now().Add(5 * time.Minute)
 	claims := &models.Claims{
-		Username: testUsername,
+		Username: "testuser",
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			Issuer:    models.TokenIssuer,
 		},
 	}
 
-	// Test different HMAC signing methods (should all work)
-	signingMethods := []jwt.SigningMethod{
-		jwt.SigningMethodHS256,
-		jwt.SigningMethodHS384,
-		jwt.SigningMethodHS512,
+	tests := []struct {
+		method  jwt.SigningMethod
+		wantErr bool
+	}{
+		{jwt.SigningMethodHS256, false},
+		{jwt.SigningMethodHS384, true},
+		{jwt.SigningMethodHS512, true},
 	}
 
-	for _, method := range signingMethods {
-		t.Run(method.Alg(), func(t *testing.T) {
-			token := jwt.NewWithClaims(method, claims)
-			tokenString, err := token.SignedString(testKey)
+	for _, tt := range tests {
+		t.Run(tt.method.Alg(), func(t *testing.T) {
+			tokenString, err := jwt.NewWithClaims(tt.method, claims).SignedString(testKey)
 			if err != nil {
-				t.Fatalf("Failed to create token with %s: %v", method.Alg(), err)
+				t.Fatalf("Failed to create token: %v", err)
 			}
-
 			username, err := GetUsernameFromToken(tokenString, testKey)
-			if err != nil {
-				t.Errorf("Failed to parse token with %s: %v", method.Alg(), err)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr = %v", err, tt.wantErr)
 			}
-			if username != testUsername {
-				t.Errorf("Expected username %s, got %s", testUsername, username)
+			if !tt.wantErr && username != "testuser" {
+				t.Errorf("Expected username testuser, got %q", username)
 			}
 		})
 	}
@@ -348,5 +348,48 @@ func TestGetUsernameFromTokenRS256WrongKey(t *testing.T) {
 	_, err = GetUsernameFromTokenRS256(tokenString, &otherKey.PublicKey)
 	if err == nil {
 		t.Error("Expected error when verifying with wrong public key, but got none")
+	}
+}
+
+func TestGetUsernameFromTokenRejectsBadClaims(t *testing.T) {
+	key := []byte("test-secret-key")
+	exp := jwt.NewNumericDate(time.Now().Add(5 * time.Minute))
+
+	tests := []struct {
+		name   string
+		claims jwt.RegisteredClaims
+	}{
+		{"wrong issuer", jwt.RegisteredClaims{ExpiresAt: exp, Issuer: "someone-else"}},
+		{"missing issuer", jwt.RegisteredClaims{ExpiresAt: exp}},
+		{"missing exp", jwt.RegisteredClaims{Issuer: models.TokenIssuer}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tok, err := jwt.NewWithClaims(jwt.SigningMethodHS256,
+				&models.Claims{Username: "u", RegisteredClaims: tt.claims}).SignedString(key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := GetUsernameFromToken(tok, key); err == nil {
+				t.Error("expected error, got none")
+			}
+		})
+	}
+}
+
+func TestGetUsernameFromTokenRS256RejectsOtherRSAVariants(t *testing.T) {
+	priv := generateTestRSAKey(t)
+	tok, err := jwt.NewWithClaims(jwt.SigningMethodRS384, &models.Claims{
+		Username: "u",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
+			Issuer:    models.TokenIssuer,
+		},
+	}).SignedString(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GetUsernameFromTokenRS256(tok, &priv.PublicKey); err == nil {
+		t.Error("RS384 token should be rejected when RS256 is required")
 	}
 }

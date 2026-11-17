@@ -171,7 +171,12 @@ func (m *SessionManager) syncHostnameIPs() {
 			resolvedIP = ips[0]
 		}
 
-		newIpInt := utils.IpToUint32(resolvedIP)
+		newIpInt, err := utils.IpToUint32(resolvedIP)
+		if err != nil {
+			log.Printf("[ERROR] updateHostnames: unable to parse ip %s: %v", resolvedIP, err)
+			continue
+		}
+
 		portNum, err := net.LookupPort("tcp", port)
 		if err != nil {
 			log.Printf("[WARN] updateHostnames: invalid port %s for service ID %d: %v", port, s.ID, err)

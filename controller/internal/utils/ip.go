@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -9,13 +10,16 @@ import (
 )
 
 // IpToUint32 converts IP string to uint32 representation.
-func IpToUint32(ipStr string) uint32 {
+func IpToUint32(ipStr string) (uint32, error) {
 	ip := net.ParseIP(ipStr)
 	if ip == nil {
-		return 0
+		return 0, fmt.Errorf("invalid ip: %s", ipStr)
 	}
 	ip4 := ip.To4()
-	return binary.BigEndian.Uint32(ip4)
+	if ip4 == nil {
+		return 0, errors.New("IPv6 not supported")
+	}
+	return binary.BigEndian.Uint32(ip4), nil
 }
 
 // Uint32ToIp converts uint32 to IP string representation.

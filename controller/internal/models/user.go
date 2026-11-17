@@ -2,6 +2,8 @@ package models
 
 import "github.com/golang-jwt/jwt/v5"
 
+const TokenIssuer = "aegis-controller"
+
 // User represents a system user entity, containing authentication credentials and an assigned role.
 type User struct {
 	Id         int    `json:"id"`

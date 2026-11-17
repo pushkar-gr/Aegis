@@ -23,6 +23,7 @@ func newAuthTestRouter(t *testing.T) (*AuthHandler, func()) {
 	t.Helper()
 	userRepo, _, _, cleanup := setupTestRepos(t)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JwtAlgorithm:  "HS256",
 		JWTKey:        []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
@@ -42,6 +43,7 @@ func TestLogin(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JwtAlgorithm:  "HS256",
 		JWTKey:        []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
@@ -104,6 +106,7 @@ func TestLoginInactiveUser(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JwtAlgorithm:  "HS256",
 		JWTKey:        []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
@@ -178,6 +181,7 @@ func TestUpdatePassword(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JwtAlgorithm:  "HS256",
 		JWTKey:        []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
@@ -239,6 +243,7 @@ func TestGetCurrentUser(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JwtAlgorithm:  "HS256",
 		JWTKey:        []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
@@ -308,6 +313,7 @@ func TestRefreshToken(t *testing.T) {
 	}
 
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JwtAlgorithm:  "HS256",
 		JWTKey:        []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})

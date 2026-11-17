@@ -118,7 +118,11 @@ func handleContainerEvent(cli *client.Client, msg events.Message, agentCallTimeo
 	}
 
 	// Convert new IP to uint32
-	newIP := utils.IpToUint32(newIPStr)
+	newIP, err := utils.IpToUint32(newIPStr)
+	if err != nil {
+		log.Printf("[ERROR] Docker watcher: unable to parse ip %s: %v", newIPStr, err)
+		return
+	}
 
 	// Parse port
 	portNum, err := net.LookupPort("tcp", servicePort)

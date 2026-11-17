@@ -11,11 +11,23 @@ services:
     cap_add:
       - NET_ADMIN
     volumes:
-      - ./certs:/app/certs
-      - ../controller/config.toml:/app/config.toml
+      - ./certs/server.crt:/app/certs/server.crt:ro
+      - ./certs/server.key:/app/certs/server.key:ro
+      - ./certs/controller.pem:/app/certs/controller.pem:ro
+      - ./certs/controller.key:/app/certs/controller.key:ro
+      - ./certs/ca.pem:/app/certs/ca.pem:ro
+      - ./keys:/app/keys:ro
+      - ../controller/config.toml:/app/config.toml:ro
       - controller-data:/app/data
     environment:
       AEGIS_ROOT_PASSWORD: ${AEGIS_ROOT_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-check-certificate -O /dev/null https://127.0.0.1:443/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
     networks:
       private_net:
     command: >
@@ -39,8 +51,10 @@ services:
     volumes:
       - /sys/fs/bpf:/sys/fs/bpf
       - /sys/kernel/debug:/sys/kernel/debug
-      - ./certs:/app/certs
-      - ../agent/config.toml:/app/config.toml
+      - ./certs/agent.pem:/app/certs/agent.pem:ro
+      - ./certs/agent.key:/app/certs/agent.key:ro
+      - ./certs/ca.pem:/app/certs/ca.pem:ro
+      - ../agent/config.toml:/app/config.toml:ro
     networks:
       public_net:
         ipv4_address: 172.20.0.10

@@ -21,6 +21,7 @@ func TestListOIDCProviders(t *testing.T) {
 	userRepo, roleRepo := createReposFromDB(t, db)
 
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JwtAlgorithm:  "HS256",
 		JWTKey:        []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
@@ -97,6 +98,7 @@ func TestOIDCCallbackMissingState(t *testing.T) {
 
 	userRepo, roleRepo := createReposFromDB(t, db)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JwtAlgorithm:  "HS256",
 		JWTKey:        []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
@@ -154,6 +156,7 @@ func TestUpdatePasswordOIDCUser(t *testing.T) {
 
 	userRepo, _ := createReposFromDB(t, db)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
+		JwtAlgorithm:  "HS256",
 		JWTKey:        []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
@@ -185,7 +188,7 @@ func TestOIDCLogin(t *testing.T) {
 
 	userRepo, roleRepo := createReposFromDB(t, db)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
-		JWTKey:        []byte("test-secret-key"),
+		JwtAlgorithm: "HS256", JWTKey: []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
 
@@ -255,7 +258,7 @@ func TestOIDCCallbackInvalidState(t *testing.T) {
 
 	userRepo, roleRepo := createReposFromDB(t, db)
 	authSvc := service.NewAuthService(userRepo, service.AuthConfig{
-		JWTKey:        []byte("test-secret-key"),
+		JwtAlgorithm: "HS256", JWTKey: []byte("test-secret-key"),
 		TokenLifetime: time.Hour,
 	})
 
