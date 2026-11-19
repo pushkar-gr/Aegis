@@ -58,6 +58,8 @@ impl<'a> Bpf<'a> {
 
         rodata.CONTROLLER_PORT = config.controller_port.to_be();
         rodata.CONTROLLER_IP = u32::from(config.controller_ip).to_be();
+        rodata.DNS_PORT = config.dns_port.to_be();
+        rodata.DNS_IP = u32::from(config.dns_ip).to_be();
         rodata.LAZY_UPDATE_TIMEOUT = config.lazy_update_timeout;
 
         debug!("BPF configuration applied");

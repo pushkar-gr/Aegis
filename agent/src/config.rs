@@ -47,6 +47,14 @@ struct TomlGrpc {
     port: u16,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct TomlDnsService {
+    enabled: bool,
+    ip: String,
+    port: u16,
+}
+
 #[derive(Default, Debug, Deserialize)]
 #[serde(default)]
 struct TomlFile {
@@ -55,6 +63,7 @@ struct TomlFile {
     certs: TomlCerts,
     session: TomlSession,
     grpc: TomlGrpc,
+    dns_service: TomlDnsService,
 }
 
 impl Default for TomlNetwork {
@@ -102,6 +111,16 @@ impl Default for TomlGrpc {
     }
 }
 
+impl Default for TomlDnsService {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ip: "172.21.0.2".to_string(),
+            port: 53,
+        }
+    }
+}
+
 // impl Default for TomlFile {
 //     fn default() -> Self {
 //         Self {
@@ -137,12 +156,17 @@ pub struct Config {
     pub broadcast_channel_size: usize,
     /// gRPC server port
     pub grpc_server_port: u16,
+    /// internal dns service ip
+    pub dns_ip: Ipv4Addr,
+    /// internal dns service port
+    pub dns_port: u16,
 }
 
 impl Default for Config {
     fn default() -> Self {
         let tf = TomlFile::default();
         let controller_ip = Ipv4Addr::from_str(&tf.controller.ip).unwrap();
+        let dns_ip = Ipv4Addr::from_str(&tf.dns_service.ip).unwrap();
         Self {
             iface_name: tf.network.iface,
             controller_ip,
@@ -155,6 +179,8 @@ impl Default for Config {
             cleanup_interval_sec: tf.session.cleanup_interval_sec,
             broadcast_channel_size: tf.session.broadcast_channel_size,
             grpc_server_port: tf.grpc.port,
+            dns_ip,
+            dns_port: tf.dns_service.port,
         }
     }
 }
@@ -192,6 +218,13 @@ impl Config {
                 .with_context(|| format!("Invalid controller.ip: {}", tf.controller.ip))?
         };
 
+        let dns_ip = if tf.dns_service.enabled {
+            Ipv4Addr::from_str(&tf.dns_service.ip)
+                .with_context(|| format!("Invalid dns_service.ip: {}", tf.dns_service.ip))?
+        } else {
+            Ipv4Addr::UNSPECIFIED
+        };
+
         let config = Self {
             iface_name: tf.network.iface,
             controller_ip,
@@ -204,6 +237,12 @@ impl Config {
             cleanup_interval_sec: tf.session.cleanup_interval_sec,
             broadcast_channel_size: tf.session.broadcast_channel_size,
             grpc_server_port: tf.grpc.port,
+            dns_ip,
+            dns_port: if tf.dns_service.enabled {
+                tf.dns_service.port
+            } else {
+                0
+            },
         };
 
         debug!("Configuration loaded: {:?}", config);

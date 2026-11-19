@@ -15,10 +15,12 @@ char __license[] SEC("license") = "GPL";
 /**
  * @brief Configuration Constants
  *
- * Dynamic configuration of controller ip:port and lazy update timeout
+ * Dynamic configuration of controller and DNS ip:port and lazy update timeout
  */
 volatile const __be32 CONTROLLER_IP;   // Big Endian (Network Byte Order)
 volatile const __be16 CONTROLLER_PORT; // Little Endian (Network Byte Order)
+volatile const __be32 DNS_IP;          // Big Endian (Network Byte Order)
+volatile const __be16 DNS_PORT;        // Little Endian (Network Byte Order)
 volatile const u64
     LAZY_UPDATE_TIMEOUT; // Min time (ns) between timestamp updates
 struct session_key _session_key = {0};
@@ -110,7 +112,7 @@ SEC("xdp") int xdp_drop_prog(struct xdp_md *ctx) {
   }
 
   // Allow traffic to controller or DNS
-  if (dst_port == 53 ||
+  if ((DNS_PORT && dst_port == DNS_PORT && iph->daddr == DNS_IP) ||
       (dst_port == CONTROLLER_PORT && iph->daddr == CONTROLLER_IP)) {
     return XDP_PASS;
   }
