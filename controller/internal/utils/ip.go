@@ -41,11 +41,15 @@ func GetClientIP(r *http.Request) string {
 		// Check X-Forwarded-For header
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			ips := strings.Split(xff, ",")
-			if len(ips) > 0 {
-				clientIP := strings.TrimSpace(ips[0])
-				if net.ParseIP(clientIP) != nil {
-					return clientIP
+			for i := len(ips) - 1; i >= 0; i-- {
+				candidate := strings.TrimSpace(ips[i])
+				if net.ParseIP(candidate) == nil {
+					continue
 				}
+				if isTrustedProxy(candidate) {
+					continue
+				}
+				return candidate
 			}
 		}
 
