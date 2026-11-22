@@ -10,7 +10,6 @@ import (
 
 const (
 	// HashingCost defines the computational complexity (logarithmic) for bcrypt.
-	// Cost 12 is currently considered secure against brute-force attacks on modern hardware.
 	HashingCost = 12
 	// BcryptMaxBytes is the hard limit for password length in bcrypt (72 bytes).
 	BcryptMaxBytes = 72
@@ -29,11 +28,9 @@ func (e *PasswordPolicyError) Error() string {
 	return "password too weak: " + e.Reason
 }
 
-// HashPassword generates a secure bcrypt hash of the provided plain-text password.
-// It returns an error if the password length exceeds the bcrypt maximum.
+// HashPassword generates a secure bcrypt hash of the provided plain text password.
+// Returns an error if the password length exceeds the bcrypt maximum.
 func HashPassword(password string) (string, error) {
-	// Bcrypt has a limitation where it truncates passwords longer than 72 bytes.
-	// We explicitly reject them to prevent users from thinking their long password is fully used.
 	if len(password) > BcryptMaxBytes {
 		return "", fmt.Errorf("%w of %d bytes", ErrPasswordTooLong, BcryptMaxBytes)
 	}
@@ -46,7 +43,7 @@ func HashPassword(password string) (string, error) {
 }
 
 // CheckPasswordHash securely compares a plain-text password with a bcrypt hash.
-// It returns true only if the password matches the hash.
+// Returns true only if the password matches the hash.
 func CheckPasswordHash(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil

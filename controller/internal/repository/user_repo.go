@@ -2,7 +2,9 @@ package repository
 
 import (
 	"Aegis/controller/internal/models"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -245,18 +247,18 @@ func (r *userRepo) RemoveExtraService(userID, serviceID int) error {
 }
 
 func (r *userRepo) CreateRefreshToken(token string, userID int, expiresAt time.Time) error {
-	_, err := r.stmtCreateRefreshToken.Exec(token, userID, expiresAt.UTC())
+	_, err := r.stmtCreateRefreshToken.Exec(hashRefreshToken(token), userID, expiresAt.UTC())
 	return err
 }
 
 func (r *userRepo) GetRefreshToken(token string) (int, error) {
 	var userID int
-	err := r.stmtGetRefreshToken.QueryRow(token, time.Now().UTC()).Scan(&userID)
+	err := r.stmtGetRefreshToken.QueryRow(hashRefreshToken(token), time.Now().UTC()).Scan(&userID)
 	return userID, err
 }
 
 func (r *userRepo) DeleteRefreshToken(token string) error {
-	_, err := r.stmtDeleteRefreshToken.Exec(token)
+	_, err := r.stmtDeleteRefreshToken.Exec(hashRefreshToken(token))
 	return err
 }
 
@@ -328,4 +330,9 @@ func (r *userRepo) GetRoleAndIDByUsername(username string) (string, int, error) 
 	var roleID int
 	err := r.stmtGetRoleAndID.QueryRow(username).Scan(&roleName, &roleID)
 	return roleName, roleID, err
+}
+
+func hashRefreshToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
