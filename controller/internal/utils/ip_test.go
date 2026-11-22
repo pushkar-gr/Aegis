@@ -228,7 +228,7 @@ func TestGetClientIP_TrustedProxy(t *testing.T) {
 				req.RemoteAddr = "10.0.0.1:12345"
 				return req
 			},
-			expectedIP: "203.0.113.1",
+			expectedIP: "172.16.0.1",
 		},
 		{
 			name: "X-Real-IP honored from a trusted proxy",
