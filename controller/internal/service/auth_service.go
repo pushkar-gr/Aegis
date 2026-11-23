@@ -7,7 +7,6 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -215,28 +214,20 @@ func (s *authService) GetCurrentUser(username string) (*CurrentUserInfo, error) 
 }
 
 func (s *authService) RefreshToken(token string) (*TokenResult, error) {
-	userID, err := s.userRepo.GetRefreshToken(token)
+	userID, err := s.userRepo.DeleteRefreshTokenWithAccountCheck(token)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, ErrInvalidRefreshToken
 		}
-		return nil, fmt.Errorf("failed to look up refresh token: %w", err)
+		return nil, fmt.Errorf("failed to delete refresh token with account check: %w", err)
 	}
 
-	username, roleName, provider, roleID, isActive, err := s.userRepo.GetFullInfoByID(userID)
+	username, roleName, provider, roleID, _, err := s.userRepo.GetFullInfoByID(userID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, ErrInvalidRefreshToken
 		}
 		return nil, fmt.Errorf("failed to look up user: %w", err)
-	}
-
-	if !isActive {
-		return nil, ErrAccountDisabled
-	}
-
-	if err := s.userRepo.DeleteRefreshToken(token); err != nil {
-		log.Printf("[auth] failed to delete used refresh token for user '%s': %v", username, err)
 	}
 
 	newRefreshToken, err := utils.GenerateSecureToken(32)

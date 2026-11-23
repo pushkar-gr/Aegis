@@ -32,6 +32,7 @@ type UserRepository interface {
 	GetRefreshToken(token string) (userID int, err error)
 	DeleteRefreshToken(token string) error
 	DeleteUserRefreshTokens(userID int) error
+	DeleteRefreshTokenWithAccountCheck(token string) (userID int, err error)
 	CleanupExpiredRefreshTokens() error
 	GetByProviderAndID(provider, providerID string) (*models.User, error)
 	CreateOIDCUser(username, provider, providerID, email string, roleID int) (*models.User, error)
@@ -43,31 +44,32 @@ type UserRepository interface {
 }
 
 type userRepo struct {
-	db                          *sql.DB
-	stmtGetCredentials          *sql.Stmt
-	stmtGetIDAndRole            *sql.Stmt
-	stmtUpdatePassword          *sql.Stmt
-	stmtGetPasswordHash         *sql.Stmt
-	stmtGetAll                  *sql.Stmt
-	stmtCreate                  *sql.Stmt
-	stmtDelete                  *sql.Stmt
-	stmtGetRoleNameByUserID     *sql.Stmt
-	stmtGetRoleNameByUsername   *sql.Stmt
-	stmtGetRoleNameByRoleId     *sql.Stmt
-	stmtUpdateRole              *sql.Stmt
-	stmtResetPassword           *sql.Stmt
-	stmtGetExtraServices        *sql.Stmt
-	stmtAddExtraService         *sql.Stmt
-	stmtRemoveExtraService      *sql.Stmt
-	stmtCreateRefreshToken      *sql.Stmt
-	stmtGetRefreshToken         *sql.Stmt
-	stmtDeleteRefreshToken      *sql.Stmt
-	stmtDeleteUserRefreshTokens *sql.Stmt
-	stmtGetByProviderAndID      *sql.Stmt
-	stmtGetFullInfoByID         *sql.Stmt
-	stmtGetIDByUsername         *sql.Stmt
-	stmtGetProvider             *sql.Stmt
-	stmtGetRoleAndID            *sql.Stmt
+	db                                     *sql.DB
+	stmtGetCredentials                     *sql.Stmt
+	stmtGetIDAndRole                       *sql.Stmt
+	stmtUpdatePassword                     *sql.Stmt
+	stmtGetPasswordHash                    *sql.Stmt
+	stmtGetAll                             *sql.Stmt
+	stmtCreate                             *sql.Stmt
+	stmtDelete                             *sql.Stmt
+	stmtGetRoleNameByUserID                *sql.Stmt
+	stmtGetRoleNameByUsername              *sql.Stmt
+	stmtGetRoleNameByRoleId                *sql.Stmt
+	stmtUpdateRole                         *sql.Stmt
+	stmtResetPassword                      *sql.Stmt
+	stmtGetExtraServices                   *sql.Stmt
+	stmtAddExtraService                    *sql.Stmt
+	stmtRemoveExtraService                 *sql.Stmt
+	stmtCreateRefreshToken                 *sql.Stmt
+	stmtGetRefreshToken                    *sql.Stmt
+	stmtDeleteRefreshToken                 *sql.Stmt
+	stmtDeleteUserRefreshTokens            *sql.Stmt
+	stmtDeleteRefreshTokenWithAccountCheck *sql.Stmt
+	stmtGetByProviderAndID                 *sql.Stmt
+	stmtGetFullInfoByID                    *sql.Stmt
+	stmtGetIDByUsername                    *sql.Stmt
+	stmtGetProvider                        *sql.Stmt
+	stmtGetRoleAndID                       *sql.Stmt
 }
 
 // NewUserRepository prepares all statements and returns a UserRepository.
@@ -76,30 +78,31 @@ func NewUserRepository(db *sql.DB) (UserRepository, error) {
 	var err error
 
 	queries := map[**sql.Stmt]string{
-		&r.stmtGetCredentials:          "SELECT COALESCE(password, ''), is_active FROM users WHERE username = ?",
-		&r.stmtGetIDAndRole:            "SELECT id, role_id FROM users WHERE username = ?",
-		&r.stmtUpdatePassword:          "UPDATE users SET password = ? WHERE username = ?",
-		&r.stmtGetPasswordHash:         "SELECT COALESCE(password, '') FROM users WHERE username = ?",
-		&r.stmtGetAll:                  "SELECT id, username, role_id, is_active FROM users",
-		&r.stmtCreate:                  "INSERT INTO users (username, password, role_id) VALUES (?, ?, ?)",
-		&r.stmtDelete:                  "DELETE FROM users WHERE id = ?",
-		&r.stmtGetRoleNameByUserID:     "SELECT r.name FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.id = ?",
-		&r.stmtGetRoleNameByUsername:   "SELECT r.name FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.username = ?",
-		&r.stmtGetRoleNameByRoleId:     "SELECT name FROM roles WHERE id = ?",
-		&r.stmtUpdateRole:              "UPDATE users SET role_id = ? WHERE id = ?",
-		&r.stmtResetPassword:           "UPDATE users SET password = ? WHERE id = ?",
-		&r.stmtGetExtraServices:        "SELECT s.id, s.name, s.hostname, s.ip, s.port, s.description, s.created_at FROM services s JOIN user_extra_services ues ON s.id = ues.service_id WHERE ues.user_id = ?",
-		&r.stmtAddExtraService:         "INSERT OR IGNORE INTO user_extra_services (user_id, service_id) VALUES (?, ?)",
-		&r.stmtRemoveExtraService:      "DELETE FROM user_extra_services WHERE user_id = ? AND service_id = ?",
-		&r.stmtCreateRefreshToken:      "INSERT INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
-		&r.stmtGetRefreshToken:         "SELECT user_id FROM refresh_tokens WHERE token = ? AND expires_at > ?",
-		&r.stmtDeleteRefreshToken:      "DELETE FROM refresh_tokens WHERE token = ?",
-		&r.stmtDeleteUserRefreshTokens: "DELETE FROM refresh_tokens WHERE user_id = ?",
-		&r.stmtGetByProviderAndID:      "SELECT id, username, role_id, is_active, provider, provider_id FROM users WHERE provider = ? AND provider_id = ?",
-		&r.stmtGetFullInfoByID:         "SELECT u.username, r.name, r.id, u.is_active, COALESCE(u.provider, 'local') FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.id = ?",
-		&r.stmtGetIDByUsername:         "SELECT id FROM users WHERE username = ?",
-		&r.stmtGetProvider:             "SELECT COALESCE(provider, 'local') FROM users WHERE username = ?",
-		&r.stmtGetRoleAndID:            "SELECT r.name, r.id FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.username = ?",
+		&r.stmtGetCredentials:                     "SELECT COALESCE(password, ''), is_active FROM users WHERE username = ?",
+		&r.stmtGetIDAndRole:                       "SELECT id, role_id FROM users WHERE username = ?",
+		&r.stmtUpdatePassword:                     "UPDATE users SET password = ? WHERE username = ?",
+		&r.stmtGetPasswordHash:                    "SELECT COALESCE(password, '') FROM users WHERE username = ?",
+		&r.stmtGetAll:                             "SELECT id, username, role_id, is_active FROM users",
+		&r.stmtCreate:                             "INSERT INTO users (username, password, role_id) VALUES (?, ?, ?)",
+		&r.stmtDelete:                             "DELETE FROM users WHERE id = ?",
+		&r.stmtGetRoleNameByUserID:                "SELECT r.name FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.id = ?",
+		&r.stmtGetRoleNameByUsername:              "SELECT r.name FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.username = ?",
+		&r.stmtGetRoleNameByRoleId:                "SELECT name FROM roles WHERE id = ?",
+		&r.stmtUpdateRole:                         "UPDATE users SET role_id = ? WHERE id = ?",
+		&r.stmtResetPassword:                      "UPDATE users SET password = ? WHERE id = ?",
+		&r.stmtGetExtraServices:                   "SELECT s.id, s.name, s.hostname, s.ip, s.port, s.description, s.created_at FROM services s JOIN user_extra_services ues ON s.id = ues.service_id WHERE ues.user_id = ?",
+		&r.stmtAddExtraService:                    "INSERT OR IGNORE INTO user_extra_services (user_id, service_id) VALUES (?, ?)",
+		&r.stmtRemoveExtraService:                 "DELETE FROM user_extra_services WHERE user_id = ? AND service_id = ?",
+		&r.stmtCreateRefreshToken:                 "INSERT INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)",
+		&r.stmtGetRefreshToken:                    "SELECT user_id FROM refresh_tokens WHERE token = ? AND expires_at > ?",
+		&r.stmtDeleteRefreshToken:                 "DELETE FROM refresh_tokens WHERE token = ?",
+		&r.stmtDeleteUserRefreshTokens:            "DELETE FROM refresh_tokens WHERE user_id = ?",
+		&r.stmtDeleteRefreshTokenWithAccountCheck: "DELETE FROM refresh_tokens WHERE token = ? AND expires_at > ? AND user_id IN (SELECT id FROM users WHERE is_active = true) RETURNING user_id",
+		&r.stmtGetByProviderAndID:                 "SELECT id, username, role_id, is_active, provider, provider_id FROM users WHERE provider = ? AND provider_id = ?",
+		&r.stmtGetFullInfoByID:                    "SELECT u.username, r.name, r.id, u.is_active, COALESCE(u.provider, 'local') FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.id = ?",
+		&r.stmtGetIDByUsername:                    "SELECT id FROM users WHERE username = ?",
+		&r.stmtGetProvider:                        "SELECT COALESCE(provider, 'local') FROM users WHERE username = ?",
+		&r.stmtGetRoleAndID:                       "SELECT r.name, r.id FROM users u INNER JOIN roles r ON u.role_id = r.id WHERE u.username = ?",
 	}
 
 	for stmt, query := range queries {
@@ -265,6 +268,12 @@ func (r *userRepo) DeleteRefreshToken(token string) error {
 func (r *userRepo) DeleteUserRefreshTokens(userID int) error {
 	_, err := r.stmtDeleteUserRefreshTokens.Exec(userID)
 	return err
+}
+
+func (r *userRepo) DeleteRefreshTokenWithAccountCheck(token string) (int, error) {
+	var userID int
+	err := r.stmtDeleteRefreshTokenWithAccountCheck.QueryRow(hashRefreshToken(token), time.Now().UTC()).Scan(&userID)
+	return userID, err
 }
 
 func (r *userRepo) CleanupExpiredRefreshTokens() error {
